@@ -63,9 +63,20 @@ fnm default lts-latest
    6E: F(1), G(3), A(5)
    ```
 
+## 次のタスク: ルートキー選択機能
+
+**実装プランは `PLAN-root-key.md` を参照。** このファイルを読んでから作業を開始すること。
+
+要点:
+- `buildFretMap` / `generatePositions` は変更不要（既にルート非依存）
+- `src/utils/noteSpelling.ts` を新規作成（エンハーモニック処理の核心）
+- `MODES` → `MODE_TEMPLATES` に置換、`resolveMode(rootName, template)` で動的生成
+- 全コンポーネントからハードコード "C" を除去
+- 13キー選択 UI を追加（F#/G♭ 両対応）
+
 ## 今後の開発予定 (優先度順)
 
-1. C以外のルート対応 (エンハーモニック処理が最大の技術課題)
+1. ~~C以外のルート対応~~ → `PLAN-root-key.md` に詳細プランあり
 2. コード進行連動表示 (BPM/タイミング制御で自動切替)
 3. コード進行プリセット (II-V-I, Blues, Rhythm Changes)
 4. ポジション間移動ガイド (共通音ハイライト)
@@ -75,4 +86,5 @@ fnm default lts-latest
 ## 参照ドキュメント
 
 - `HANDOFF.md` — コアアルゴリズム詳細、失敗パターン、データ構造
+- `PLAN-root-key.md` — ルートキー選択機能の実装プラン（次のタスク）
 - `berklee-positions-v2.jsx` — 移行元の Artifact コード (参照用)
