@@ -1,0 +1,2 @@
+public/drums/**/*.wav !text !filter !merge !diff
+public/bass/**/*.wav !text !filter !merge !diff
