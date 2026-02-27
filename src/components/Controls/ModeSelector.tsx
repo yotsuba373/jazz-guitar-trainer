@@ -1,17 +1,18 @@
-import type { Mode } from '../../types';
+import type { ModeTemplate, RootName } from '../../types';
 import { MODE_COLORS } from '../../constants';
 
 interface ModeSelectorProps {
-  modes: Mode[];
+  templates: ModeTemplate[];
   modeIdx: number;
+  rootName: RootName;
   onModeChange: (index: number) => void;
 }
 
-export function ModeSelector({ modes, modeIdx, onModeChange }: ModeSelectorProps) {
+export function ModeSelector({ templates, modeIdx, rootName, onModeChange }: ModeSelectorProps) {
   return (
     <div className="mb-3">
       <div className="flex flex-wrap gap-1">
-        {modes.map((m, i) => {
+        {templates.map((m, i) => {
           const active = modeIdx === i;
           const c = MODE_COLORS[m.key];
           return (
@@ -23,7 +24,7 @@ export function ModeSelector({ modes, modeIdx, onModeChange }: ModeSelectorProps
                 color: active ? '#FFF' : c,
                 fontWeight: active ? 700 : 400,
               }}
-            >C {m.name}</button>
+            >{rootName} {m.name}</button>
           );
         })}
       </div>
