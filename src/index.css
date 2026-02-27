@@ -1,0 +1,40 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Fira+Code:wght@400;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  /* Position colors (Pos 1-7) */
+  --color-pos-1: #E74C3C;
+  --color-pos-2: #E67E22;
+  --color-pos-3: #F1C40F;
+  --color-pos-4: #27AE60;
+  --color-pos-5: #2980B9;
+  --color-pos-6: #8E44AD;
+  --color-pos-7: #16A085;
+
+  /* App background palette */
+  --color-bg-root: #0f0f0f;
+  --color-bg-panel: #1a1a1a;
+  --color-bg-svg: #161616;
+  --color-bg-card: #181818;
+  --color-bg-card-active: #222222;
+  --color-bg-code: #141414;
+  --color-bg-btn: #1a1a1a;
+  --color-bg-btn-active: #3a3a3a;
+
+  /* Border colors */
+  --color-border-default: #444;
+  --color-border-dim: #555;
+  --color-border-faint: #222;
+
+  /* Text colors */
+  --color-text-primary: #DDD;
+  --color-text-secondary: #777;
+  --color-text-muted: #666;
+  --color-text-dim: #555;
+  --color-text-faint: #444;
+  --color-text-btn: #CCC;
+  --color-text-label: #999;
+
+  /* Fonts */
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+}
