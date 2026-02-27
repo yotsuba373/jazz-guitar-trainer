@@ -4,12 +4,19 @@ export type FretNote = [string, number, number];
 /** Notes on a single string within a position */
 export type StringNotes = FretNote[] | null;
 
+/** One octave instance of a position on the fretboard */
+export interface PositionInstance {
+  strings: StringNotes[];
+  fretMin: number;
+  fretMax: number;
+}
+
 /** A fretboard position (one of the 7 Berklee positions) */
 export interface Position {
   id: number;
   bPair: string;
   range: string;
-  strings: StringNotes[];
+  instances: PositionInstance[];
 }
 
 /** Degree map: note name -> scale degree string */

@@ -63,21 +63,23 @@ export function Fretboard({ visible, selPosId, dim, showCT, ctSet, getLabel, roo
           const c = POS_COLORS[pos.id - 1];
           return (
             <g key={pos.id} opacity={(!dim || selPosId === pos.id) ? 1 : 0.07}>
-              {pos.strings.map((notes, sIdx) =>
-                notes && notes.map(([n, f]) => (
-                  <FretboardNote
-                    key={`${pos.id}-${sIdx}-${f}`}
-                    posId={pos.id}
-                    stringIndex={sIdx}
-                    noteName={n}
-                    fret={f}
-                    posColor={c}
-                    isRoot={n === rootNote}
-                    isCT={showCT && ctSet.has(n)}
-                    showCT={showCT}
-                    label={getLabel(n)}
-                  />
-                ))
+              {pos.instances.map((inst, iIdx) =>
+                inst.strings.map((notes, sIdx) =>
+                  notes && notes.map(([n, f]) => (
+                    <FretboardNote
+                      key={`${pos.id}-${iIdx}-${sIdx}-${f}`}
+                      posId={pos.id}
+                      stringIndex={sIdx}
+                      noteName={n}
+                      fret={f}
+                      posColor={c}
+                      isRoot={n === rootNote}
+                      isCT={showCT && ctSet.has(n)}
+                      showCT={showCT}
+                      label={getLabel(n)}
+                    />
+                  ))
+                )
               )}
             </g>
           );
