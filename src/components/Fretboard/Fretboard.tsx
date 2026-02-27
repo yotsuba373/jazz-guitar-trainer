@@ -9,9 +9,10 @@ interface FretboardProps {
   showCT: boolean;
   ctSet: Set<string>;
   getLabel: (nn: string) => string;
+  rootNote: string;
 }
 
-export function Fretboard({ visible, selPosId, dim, showCT, ctSet, getLabel }: FretboardProps) {
+export function Fretboard({ visible, selPosId, dim, showCT, ctSet, getLabel, rootNote }: FretboardProps) {
   return (
     <div className="overflow-x-auto mb-[14px]">
       <svg width={SVG_WIDTH} height={SVG_HEIGHT}
@@ -71,7 +72,7 @@ export function Fretboard({ visible, selPosId, dim, showCT, ctSet, getLabel }: F
                     noteName={n}
                     fret={f}
                     posColor={c}
-                    isRoot={n === 'C'}
+                    isRoot={n === rootNote}
                     isCT={showCT && ctSet.has(n)}
                     showCT={showCT}
                     label={getLabel(n)}

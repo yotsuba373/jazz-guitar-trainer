@@ -32,3 +32,18 @@ export type FretMap = FretNote[][];
 
 /** Label display mode */
 export type LabelMode = 'note' | 'degree';
+
+/** Selectable root key names */
+export type RootName =
+  | 'C' | 'D♭' | 'D' | 'E♭' | 'E' | 'F'
+  | 'G♭' | 'G' | 'A♭' | 'A' | 'B♭' | 'B';
+
+/** Root-agnostic mode template (static data) */
+export interface ModeTemplate {
+  key: string;
+  name: string;
+  semi: number[];
+  chordSub: string;
+  chordDegreesIdx: number[];
+  chordQuality: string;
+}

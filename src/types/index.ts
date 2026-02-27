@@ -6,4 +6,6 @@ export type {
   Mode,
   FretMap,
   LabelMode,
+  RootName,
+  ModeTemplate,
 } from './music';

@@ -7,9 +7,10 @@ interface PositionDetailProps {
   showCT: boolean;
   ctSet: Set<string>;
   getLabel: (nn: string) => string;
+  rootNote: string;
 }
 
-export function PositionDetail({ position, mode, showCT, ctSet, getLabel }: PositionDetailProps) {
+export function PositionDetail({ position, mode, showCT, ctSet, getLabel, rootNote }: PositionDetailProps) {
   const posColor = POS_COLORS[position.id - 1];
   const deg = mode.degrees;
 
@@ -17,7 +18,7 @@ export function PositionDetail({ position, mode, showCT, ctSet, getLabel }: Posi
     <div className="bg-bg-panel rounded-lg p-[14px] mb-[14px]"
       style={{ borderLeft: `4px solid ${posColor}` }}>
       <div className="text-[15px] font-bold mb-1.5" style={{ color: posColor }}>
-        C {mode.name} — Position {position.id}
+        {rootNote} {mode.name} — Position {position.id}
       </div>
       <div className="text-[10px] text-text-dim mb-2">
         fret {position.range} ｜ B弦: {position.bPair}
@@ -32,7 +33,7 @@ export function PositionDetail({ position, mode, showCT, ctSet, getLabel }: Posi
               <span className="inline-block w-4" style={{ fontWeight: is2 ? 700 : 400 }}>{sl}</span>
               |{notes.map(([n, f]) => {
                 const lbl = getLabel(n);
-                const isRoot = n === 'C';
+                const isRoot = n === rootNote;
                 const isCT = showCT && ctSet.has(n);
                 const m = isRoot ? '●' : (isCT ? '◆' : ' ');
                 return `--${String(f).padStart(2)}(${lbl.padEnd(2)})${m}`;
