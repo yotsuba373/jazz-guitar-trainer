@@ -1,4 +1,4 @@
-import type { Position, PositionInstance, RootName, ChordSlot, Progression } from '../types';
+import type { Position, PositionInstance, RootName, SongKey, ChordSlot, Progression } from '../types';
 import { ROOTS, MODE_TEMPLATES } from '../constants';
 import { resolveMode } from './noteSpelling';
 import { buildFretMap, generatePositions } from './fretboard';
@@ -135,12 +135,21 @@ const MAJOR_SEMI_TO_DEG: Record<number, number> = {
 export function suggestMode(
   chordRoot: RootName,
   quality: string,
-  songKey?: RootName,
+  songKey?: SongKey,
 ): number {
   const fallback = (QUALITY_TO_MODES[quality] ?? [])[0] ?? 0;
   if (!songKey) return fallback;
 
-  const keySemi = ROOTS.find(r => r.name === songKey)?.semitone;
+  // Minor key → convert to relative major (root + 3 semitones)
+  let effectiveRoot = songKey.root;
+  if (songKey.minor) {
+    const rootSemi = ROOTS.find(r => r.name === songKey.root)?.semitone;
+    if (rootSemi == null) return fallback;
+    const majorSemi = (rootSemi + 3) % 12;
+    effectiveRoot = ROOTS.find(r => r.semitone === majorSemi)?.name ?? songKey.root;
+  }
+
+  const keySemi = ROOTS.find(r => r.name === effectiveRoot)?.semitone;
   const chordSemi = ROOTS.find(r => r.name === chordRoot)?.semitone;
   if (keySemi == null || chordSemi == null) return fallback;
 
@@ -168,7 +177,7 @@ export interface EffectiveChord {
  */
 export function computeEffectiveSelections(
   chords: ChordSlot[],
-  songKey?: RootName,
+  songKey?: SongKey,
 ): EffectiveChord[] {
   const results: EffectiveChord[] = [];
 
@@ -222,7 +231,7 @@ export function buildChordSlot(
   symbol: string,
   parsed: { rootName: RootName; quality: string },
   prevPosId?: number,
-  songKey?: RootName,
+  songKey?: SongKey,
 ): ChordSlot {
   return {
     symbol: normalizeChordSymbol(symbol, parsed),
@@ -243,7 +252,14 @@ export function loadProgressions(): Progression[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [...PRESET_PROGRESSIONS];
-    return JSON.parse(raw) as Progression[];
+    const progs = JSON.parse(raw) as Progression[];
+    // Migrate old format: songKey was RootName string, now SongKey object
+    for (const p of progs) {
+      if (typeof p.songKey === 'string') {
+        p.songKey = { root: p.songKey as RootName, minor: false };
+      }
+    }
+    return progs;
   } catch {
     return [...PRESET_PROGRESSIONS];
   }
@@ -252,7 +268,7 @@ export function loadProgressions(): Progression[] {
 export const PRESET_PROGRESSIONS: Progression[] = [
   {
     name: 'II-V-I in C',
-    songKey: 'C',
+    songKey: { root: 'C', minor: false },
     chords: [
       { symbol: 'Dm7', rootName: 'D', quality: 'm7', modeIdx: 1, posId: 1, posConfirmed: false, modeConfirmed: false },
       { symbol: 'G7', rootName: 'G', quality: '7', modeIdx: 4, posId: 1, posConfirmed: false, modeConfirmed: false },
@@ -261,7 +277,7 @@ export const PRESET_PROGRESSIONS: Progression[] = [
   },
   {
     name: 'II-V-I in F',
-    songKey: 'F',
+    songKey: { root: 'F', minor: false },
     chords: [
       { symbol: 'Gm7', rootName: 'G', quality: 'm7', modeIdx: 1, posId: 1, posConfirmed: false, modeConfirmed: false },
       { symbol: 'C7', rootName: 'C', quality: '7', modeIdx: 4, posId: 1, posConfirmed: false, modeConfirmed: false },
@@ -270,7 +286,7 @@ export const PRESET_PROGRESSIONS: Progression[] = [
   },
   {
     name: 'II-V-I in B♭',
-    songKey: 'B♭',
+    songKey: { root: 'B♭', minor: false },
     chords: [
       { symbol: 'Cm7', rootName: 'C', quality: 'm7', modeIdx: 1, posId: 1, posConfirmed: false, modeConfirmed: false },
       { symbol: 'F7', rootName: 'F', quality: '7', modeIdx: 4, posId: 1, posConfirmed: false, modeConfirmed: false },

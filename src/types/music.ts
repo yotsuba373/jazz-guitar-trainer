@@ -66,9 +66,15 @@ export interface ChordSlot {
   modeConfirmed?: boolean; // true = user explicitly chose this mode
 }
 
+/** Song key with major/minor quality */
+export interface SongKey {
+  root: RootName;
+  minor: boolean;
+}
+
 /** A saveable chord progression */
 export interface Progression {
   name: string;
-  songKey?: RootName;   // song key for smart mode suggestion
+  songKey?: SongKey;    // song key for smart mode suggestion
   chords: ChordSlot[];
 }

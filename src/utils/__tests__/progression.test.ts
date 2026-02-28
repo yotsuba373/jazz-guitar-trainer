@@ -165,7 +165,7 @@ describe('buildChordSlot', () => {
   });
 
   it('uses suggestMode when songKey is provided', () => {
-    const slot = buildChordSlot('Dm7', { rootName: 'D', quality: 'm7' }, 1, 'C');
+    const slot = buildChordSlot('Dm7', { rootName: 'D', quality: 'm7' }, 1, { root: 'C', minor: false });
     expect(slot.modeIdx).toBe(1); // Dorian (II of C)
   });
 });
@@ -198,35 +198,35 @@ describe('normalizeChordSymbol', () => {
 
 describe('suggestMode', () => {
   it('Dm7 in key of C → Dorian (1)', () => {
-    expect(suggestMode('D', 'm7', 'C')).toBe(1);
+    expect(suggestMode('D', 'm7', { root: 'C', minor: false })).toBe(1);
   });
 
   it('G7 in key of C → Mixolydian (4)', () => {
-    expect(suggestMode('G', '7', 'C')).toBe(4);
+    expect(suggestMode('G', '7', { root: 'C', minor: false })).toBe(4);
   });
 
   it('Em7 in key of C → Phrygian (2)', () => {
-    expect(suggestMode('E', 'm7', 'C')).toBe(2);
+    expect(suggestMode('E', 'm7', { root: 'C', minor: false })).toBe(2);
   });
 
   it('Am7 in key of C → Aeolian (5)', () => {
-    expect(suggestMode('A', 'm7', 'C')).toBe(5);
+    expect(suggestMode('A', 'm7', { root: 'C', minor: false })).toBe(5);
   });
 
   it('Bm7♭5 in key of C → Locrian (6)', () => {
-    expect(suggestMode('B', 'm7♭5', 'C')).toBe(6);
+    expect(suggestMode('B', 'm7♭5', { root: 'C', minor: false })).toBe(6);
   });
 
   it('CM7 in key of C → Ionian (0)', () => {
-    expect(suggestMode('C', 'maj7', 'C')).toBe(0);
+    expect(suggestMode('C', 'maj7', { root: 'C', minor: false })).toBe(0);
   });
 
   it('FM7 in key of C → Lydian (3)', () => {
-    expect(suggestMode('F', 'maj7', 'C')).toBe(3);
+    expect(suggestMode('F', 'maj7', { root: 'C', minor: false })).toBe(3);
   });
 
   it('non-diatonic: B♭7 in key of C → fallback Mixolydian (4)', () => {
-    expect(suggestMode('B♭', '7', 'C')).toBe(4);
+    expect(suggestMode('B♭', '7', { root: 'C', minor: false })).toBe(4);
   });
 
   it('no songKey → fallback to QUALITY_TO_MODES first', () => {
@@ -235,9 +235,37 @@ describe('suggestMode', () => {
   });
 
   it('II-V-I in F: Gm7→Dorian, C7→Mixolydian, FM7→Ionian', () => {
-    expect(suggestMode('G', 'm7', 'F')).toBe(1);  // Dorian
-    expect(suggestMode('C', '7', 'F')).toBe(4);    // Mixolydian
-    expect(suggestMode('F', 'maj7', 'F')).toBe(0); // Ionian
+    expect(suggestMode('G', 'm7', { root: 'F', minor: false })).toBe(1);  // Dorian
+    expect(suggestMode('C', '7', { root: 'F', minor: false })).toBe(4);    // Mixolydian
+    expect(suggestMode('F', 'maj7', { root: 'F', minor: false })).toBe(0); // Ionian
+  });
+
+  it('minor key: Am → relative major C, Am7→Aeolian (5)', () => {
+    expect(suggestMode('A', 'm7', { root: 'A', minor: true })).toBe(5);
+  });
+
+  it('minor key: Dm7 in Am → Dorian (1)', () => {
+    expect(suggestMode('D', 'm7', { root: 'A', minor: true })).toBe(1);
+  });
+
+  it('minor key: Em7 in Am → Phrygian (2)', () => {
+    expect(suggestMode('E', 'm7', { root: 'A', minor: true })).toBe(2);
+  });
+
+  it('minor key: CM7 in Am → Ionian (0)', () => {
+    expect(suggestMode('C', 'maj7', { root: 'A', minor: true })).toBe(0);
+  });
+
+  it('minor key: FM7 in Am → Lydian (3)', () => {
+    expect(suggestMode('F', 'maj7', { root: 'A', minor: true })).toBe(3);
+  });
+
+  it('minor key: G7 in Am → Mixolydian (4)', () => {
+    expect(suggestMode('G', '7', { root: 'A', minor: true })).toBe(4);
+  });
+
+  it('minor key: Bm7♭5 in Am → Locrian (6)', () => {
+    expect(suggestMode('B', 'm7♭5', { root: 'A', minor: true })).toBe(6);
   });
 });
 
@@ -251,7 +279,7 @@ describe('computeEffectiveSelections', () => {
       { symbol: 'F7', rootName: 'F' as const, quality: '7', modeIdx: 4, posId: 1, posConfirmed: false, modeConfirmed: false },
       { symbol: 'B♭M7', rootName: 'B♭' as const, quality: 'maj7', modeIdx: 0, posId: 1, posConfirmed: false, modeConfirmed: false },
     ];
-    const eff = computeEffectiveSelections(chords, 'B♭');
+    const eff = computeEffectiveSelections(chords, { root: 'B♭', minor: false });
 
     // All 3 should have resolved effective posId (not the stored posId=1)
     expect(eff.length).toBe(3);
@@ -272,7 +300,7 @@ describe('computeEffectiveSelections', () => {
       { symbol: 'Dm7', rootName: 'D' as const, quality: 'm7', modeIdx: 1, posId: 3, posConfirmed: true, modeConfirmed: true },
       { symbol: 'G7', rootName: 'G' as const, quality: '7', modeIdx: 4, posId: 5, posConfirmed: true, modeConfirmed: true },
     ];
-    const eff = computeEffectiveSelections(chords, 'C');
+    const eff = computeEffectiveSelections(chords, { root: 'C', minor: false });
     expect(eff[0]).toEqual({ modeIdx: 1, posId: 3 });
     expect(eff[1]).toEqual({ modeIdx: 4, posId: 5 });
   });
@@ -281,7 +309,7 @@ describe('computeEffectiveSelections', () => {
     const chords = [
       { symbol: 'Dm7', rootName: 'D' as const, quality: 'm7', modeIdx: 5, posId: 1, posConfirmed: false, modeConfirmed: false },
     ];
-    const eff = computeEffectiveSelections(chords, 'C');
+    const eff = computeEffectiveSelections(chords, { root: 'C', minor: false });
     // D in key of C → Dorian (1), not stored Aeolian (5)
     expect(eff[0].modeIdx).toBe(1);
   });
