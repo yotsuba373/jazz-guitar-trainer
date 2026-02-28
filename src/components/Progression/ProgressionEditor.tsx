@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import type { Progression, ChordSlot } from '../../types';
-import { parseChordSymbol, buildChordSlot, PRESET_PROGRESSIONS } from '../../utils';
+import type { Progression, ChordSlot, RootName } from '../../types';
+import { ROOTS } from '../../constants';
+import { parseChordSymbol, buildChordSlot, suggestMode, PRESET_PROGRESSIONS } from '../../utils';
 
 interface ProgressionEditorProps {
   progressions: Progression[];
@@ -17,6 +18,7 @@ export function ProgressionEditor({
 }: ProgressionEditorProps) {
   const prog = progressions[activeProgIdx] ?? { name: '', chords: [] };
   const [name, setName] = useState(prog.name);
+  const [songKey, setSongKey] = useState<RootName | undefined>(prog.songKey);
   const [chords, setChords] = useState<ChordSlot[]>([...prog.chords]);
   const [input, setInput] = useState('');
   const [error, setError] = useState('');
@@ -26,12 +28,12 @@ export function ProgressionEditor({
     if (!trimmed) return;
     const parsed = parseChordSymbol(trimmed);
     if (!parsed) {
-      setError(`"${trimmed}" は対応外のコードです (maj7/m7/7/m7♭5 のみ)`);
+      setError(`"${trimmed}" は対応外のコードです (M7/m7/7/m7♭5 のみ)`);
       return;
     }
     setError('');
     const prevPosId = chords.length > 0 ? chords[chords.length - 1].posId : 1;
-    setChords([...chords, buildChordSlot(trimmed, parsed, prevPosId)]);
+    setChords([...chords, buildChordSlot(trimmed, parsed, prevPosId, songKey)]);
     setInput('');
   }
 
@@ -48,7 +50,7 @@ export function ProgressionEditor({
   }
 
   function handleSave() {
-    const updated: Progression = { name: name || 'Untitled', chords };
+    const updated: Progression = { name: name || 'Untitled', songKey, chords };
     const copy = [...progressions];
     if (activeProgIdx < copy.length) {
       copy[activeProgIdx] = updated;
@@ -63,6 +65,7 @@ export function ProgressionEditor({
     onSave(copy);
     onSelectProg(copy.length - 1);
     setName('New');
+    setSongKey(undefined);
     setChords([]);
   }
 
@@ -73,12 +76,23 @@ export function ProgressionEditor({
     onSave(copy);
     onSelectProg(newIdx);
     setName(copy[newIdx].name);
+    setSongKey(copy[newIdx].songKey);
     setChords([...copy[newIdx].chords]);
   }
 
   function handleLoadPreset(preset: Progression) {
     setName(preset.name);
+    setSongKey(preset.songKey);
     setChords([...preset.chords]);
+  }
+
+  function handleSongKeyChange(key: RootName | undefined) {
+    setSongKey(key);
+    // Re-suggest modes for unconfirmed chords
+    setChords(chords.map(c => {
+      if (c.modeConfirmed) return c;
+      return { ...c, modeIdx: suggestMode(c.rootName, c.quality, key) };
+    }));
   }
 
   function handleSelectProg(idx: number) {
@@ -87,6 +101,7 @@ export function ProgressionEditor({
     onSelectProg(idx);
     const p = progressions[idx];
     setName(p.name);
+    setSongKey(p.songKey);
     setChords([...p.chords]);
   }
 
@@ -131,8 +146,8 @@ export function ProgressionEditor({
         ))}
       </div>
 
-      {/* Name input */}
-      <div className="mb-2">
+      {/* Name + Key input */}
+      <div className="flex items-center gap-2 mb-2">
         <input
           type="text"
           value={name}
@@ -140,6 +155,17 @@ export function ProgressionEditor({
           placeholder="進行名"
           className="bg-[#111] border border-[#444] rounded text-[11px] text-text-primary font-mono px-2 py-1 w-48"
         />
+        <span className="text-[9px] text-text-dim">Key:</span>
+        <select
+          value={songKey ?? ''}
+          onChange={e => handleSongKeyChange(e.target.value ? e.target.value as RootName : undefined)}
+          className="bg-[#111] border border-[#444] rounded text-[11px] text-text-primary font-mono px-1.5 py-1 cursor-pointer"
+        >
+          <option value="">未設定</option>
+          {ROOTS.map(r => (
+            <option key={r.name} value={r.name}>{r.name}</option>
+          ))}
+        </select>
       </div>
 
       {/* Chord list */}

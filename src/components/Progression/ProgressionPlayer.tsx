@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import type { Progression, Position } from '../../types';
 import { MODE_TEMPLATES, POS_COLORS, MODE_COLORS } from '../../constants';
 import {
-  QUALITY_TO_MODES, rankPositionsByProximity,
+  QUALITY_TO_MODES, rankPositionsByProximity, computeEffectiveSelections,
   resolveMode, buildFretMap, generatePositions,
 } from '../../utils';
 
@@ -13,36 +13,45 @@ interface ProgressionPlayerProps {
   onChordSelect: (idx: number) => void;
   onModeChange: (chordIdx: number, modeIdx: number) => void;
   onPosChange: (chordIdx: number, posId: number) => void;
+  onReset: () => void;
 }
 
 const btnBase = 'rounded cursor-pointer text-[10px] font-mono px-2 py-[3px]';
 
 export function ProgressionPlayer({
   progression, activeChordIdx, allPos,
-  onChordSelect, onModeChange, onPosChange,
+  onChordSelect, onModeChange, onPosChange, onReset,
 }: ProgressionPlayerProps) {
   const chords = progression.chords;
   const activeChord = chords[activeChordIdx];
 
-  // Resolve previous chord's position from its OWN mode/root (not current allPos)
-  const prevChord = activeChordIdx > 0 ? chords[activeChordIdx - 1] : null;
+  // Compute effective mode/pos for all chords (resolves auto-suggestion chain)
+  const effectiveAll = useMemo(
+    () => computeEffectiveSelections(chords, progression.songKey),
+    [chords, progression.songKey],
+  );
+
+  const activeEff = effectiveAll[activeChordIdx];
+  const effectiveModeIdx = activeEff?.modeIdx ?? 0;
+  const effectivePosId = activeEff?.posId ?? 1;
+  const isPosConfirmed = activeChord?.posConfirmed ?? false;
+  const isModeConfirmed = activeChord?.modeConfirmed ?? false;
+
+  // Rank positions for the active chord using effective prev position
   const prevPos = useMemo(() => {
-    if (!prevChord || !QUALITY_TO_MODES[prevChord.quality]) return null;
-    const prevMode = resolveMode(prevChord.rootName, MODE_TEMPLATES[prevChord.modeIdx]);
+    if (activeChordIdx === 0) return null;
+    const prevChord = chords[activeChordIdx - 1];
+    const prevEff = effectiveAll[activeChordIdx - 1];
+    if (!prevChord || !prevEff || !QUALITY_TO_MODES[prevChord.quality]) return null;
+    const prevMode = resolveMode(prevChord.rootName, MODE_TEMPLATES[prevEff.modeIdx]);
     const prevFretMap = buildFretMap(prevMode.semi, prevMode.notes);
     const prevAllPos = generatePositions(prevFretMap, prevMode.notes);
-    return prevAllPos.find(p => p.id === prevChord.posId) ?? null;
-  }, [prevChord?.rootName, prevChord?.modeIdx, prevChord?.posId, prevChord?.quality]);
+    return prevAllPos.find(p => p.id === prevEff.posId) ?? null;
+  }, [activeChordIdx, chords, effectiveAll]);
 
   const rankedPosIds = activeChord
     ? rankPositionsByProximity(allPos, prevPos)
     : [];
-
-  // Effective posId: confirmed uses stored value, otherwise auto-suggest top ranked
-  const effectivePosId = activeChord
-    ? (activeChord.posConfirmed ? activeChord.posId : (rankedPosIds[0] ?? 1))
-    : 1;
-  const isConfirmed = activeChord?.posConfirmed ?? false;
 
   const compatibleModes = activeChord
     ? QUALITY_TO_MODES[activeChord.quality] ?? []
@@ -55,6 +64,7 @@ export function ProgressionPlayer({
         {chords.map((c, i) => {
           const active = i === activeChordIdx;
           const supported = QUALITY_TO_MODES[c.quality] != null;
+          const eff = effectiveAll[i];
           return (
             <button
               key={i}
@@ -68,10 +78,10 @@ export function ProgressionPlayer({
               }}
             >
               <div className="text-[12px] font-bold">{c.symbol}</div>
-              {supported && (
+              {supported && eff && (
                 <div className="text-[8px] mt-0.5" style={{ color: '#777' }}>
-                  {MODE_TEMPLATES[c.modeIdx]?.name ?? '?'} · P{i === activeChordIdx ? effectivePosId : c.posId}
-                  {i === activeChordIdx && !isConfirmed && ' ?'}
+                  {MODE_TEMPLATES[eff.modeIdx]?.name ?? '?'} · P{eff.posId}
+                  {active && (!isPosConfirmed || !isModeConfirmed) && ' ?'}
                 </div>
               )}
               {!supported && (
@@ -87,18 +97,22 @@ export function ProgressionPlayer({
         <div className="flex flex-wrap items-start gap-3">
           {/* Mode selection */}
           <div>
-            <div className="text-[9px] text-text-dim mb-0.5">モード</div>
+            <div className="text-[9px] text-text-dim mb-0.5">
+              モード{!isModeConfirmed && ' — 自動提案中'}
+            </div>
             <div className="flex gap-1">
               {compatibleModes.map(mi => {
                 const tmpl = MODE_TEMPLATES[mi];
-                const active = activeChord.modeIdx === mi;
+                const active = effectiveModeIdx === mi;
                 const color = MODE_COLORS[tmpl.key];
                 return (
                   <button key={mi} onClick={() => onModeChange(activeChordIdx, mi)}
                     className={btnBase}
                     style={{
                       border: `1px solid ${color}`,
-                      background: active ? color : '#1a1a1a',
+                      background: active
+                        ? (isModeConfirmed ? color : color + '60')
+                        : '#1a1a1a',
                       color: active ? '#FFF' : color,
                       fontWeight: active ? 700 : 400,
                     }}>
@@ -112,7 +126,7 @@ export function ProgressionPlayer({
           {/* Position selection */}
           <div>
             <div className="text-[9px] text-text-dim mb-0.5">
-              ポジション (近接順){!isConfirmed && ' — 自動提案中'}
+              ポジション (近接順){!isPosConfirmed && ' — 自動提案中'}
             </div>
             <div className="flex gap-1">
               {rankedPosIds.map(posId => {
@@ -124,7 +138,7 @@ export function ProgressionPlayer({
                     style={{
                       border: `1px solid ${color}`,
                       background: selected
-                        ? (isConfirmed ? color : color + '60')
+                        ? (isPosConfirmed ? color : color + '60')
                         : '#1a1a1a',
                       color: selected ? '#FFF' : color,
                       fontWeight: selected ? 700 : 400,
@@ -138,9 +152,15 @@ export function ProgressionPlayer({
         </div>
       )}
 
-      {/* Keyboard hint */}
-      <div className="text-[9px] text-text-dim mt-2">
-        ← → キーでコード移動
+      {/* Keyboard hint + reset */}
+      <div className="flex items-center gap-3 mt-2">
+        <span className="text-[9px] text-text-dim">← → キーでコード移動</span>
+        {chords.some(c => c.posConfirmed || c.modeConfirmed) && (
+          <button onClick={onReset} className={btnBase}
+            style={{ border: '1px solid #666', background: '#1a1a1a', color: '#999' }}>
+            選択リセット
+          </button>
+        )}
       </div>
     </div>
   );

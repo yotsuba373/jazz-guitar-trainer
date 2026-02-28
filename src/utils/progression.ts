@@ -1,5 +1,7 @@
 import type { Position, PositionInstance, RootName, ChordSlot, Progression } from '../types';
-import { ROOTS } from '../constants';
+import { ROOTS, MODE_TEMPLATES } from '../constants';
+import { resolveMode } from './noteSpelling';
+import { buildFretMap, generatePositions } from './fretboard';
 
 /** Map chord quality → compatible MODE_TEMPLATES indices */
 export const QUALITY_TO_MODES: Record<string, number[]> = {
@@ -26,6 +28,7 @@ ROOT_LOOKUP['A#'] = 'B♭';
 
 // Quality patterns ordered so longer patterns match first
 const QUALITY_PATTERNS: [RegExp, string][] = [
+  [/^M7$/, 'maj7'],
   [/^maj7$/, 'maj7'],
   [/^m7♭5$/, 'm7♭5'],
   [/^m7b5$/, 'm7♭5'],
@@ -72,7 +75,7 @@ export function parseChordSymbol(
 export function rankPositionsByProximity(
   allPos: Position[],
   prevPos: Position | null,
-  count = 3,
+  count = 7,
 ): number[] {
   if (!prevPos) {
     return allPos.slice(0, count).map(p => p.id);
@@ -100,23 +103,135 @@ function minInstanceDistance(a: Position, b: Position): number {
   return min === Infinity ? 0 : min;
 }
 
+const QUALITY_DISPLAY: Record<string, string> = {
+  'maj7': 'M7',
+  'm7': 'm7',
+  '7': '7',
+  'm7♭5': 'm7♭5',
+};
+
+/**
+ * Normalize a chord symbol for display: root in Unicode + quality in standard form.
+ * e.g. "Dbmaj7" → "D♭M7", "CM7" → "CM7", "Dm7" → "Dm7"
+ */
+export function normalizeChordSymbol(
+  _symbol: string,
+  parsed: { rootName: RootName; quality: string },
+): string {
+  return parsed.rootName + (QUALITY_DISPLAY[parsed.quality] ?? parsed.quality);
+}
+
+/** Major scale semitone → degree index mapping */
+const MAJOR_SEMI_TO_DEG: Record<number, number> = {
+  0: 0, 2: 1, 4: 2, 5: 3, 7: 4, 9: 5, 11: 6,
+};
+
+/**
+ * Suggest the best mode for a chord based on the song key.
+ * Uses diatonic analysis: if the chord root is a scale degree of the key,
+ * pick the mode that corresponds to that degree.
+ * Falls back to QUALITY_TO_MODES[0] for non-diatonic chords or when no key is set.
+ */
+export function suggestMode(
+  chordRoot: RootName,
+  quality: string,
+  songKey?: RootName,
+): number {
+  const fallback = (QUALITY_TO_MODES[quality] ?? [])[0] ?? 0;
+  if (!songKey) return fallback;
+
+  const keySemi = ROOTS.find(r => r.name === songKey)?.semitone;
+  const chordSemi = ROOTS.find(r => r.name === chordRoot)?.semitone;
+  if (keySemi == null || chordSemi == null) return fallback;
+
+  const interval = (chordSemi - keySemi + 12) % 12;
+  const degIdx = MAJOR_SEMI_TO_DEG[interval];
+  if (degIdx == null) return fallback; // non-diatonic interval
+
+  // Check if this degree's mode matches the chord quality
+  const tmpl = MODE_TEMPLATES[degIdx];
+  if (tmpl && tmpl.chordQuality === quality) return degIdx;
+
+  return fallback;
+}
+
+/** Effective mode and position for a chord after resolving auto-suggestions */
+export interface EffectiveChord {
+  modeIdx: number;
+  posId: number;
+}
+
+/**
+ * Compute effective modeIdx and posId for every chord in a progression,
+ * resolving the auto-suggestion chain: each unconfirmed chord's position
+ * is ranked against the effective (not stored) position of the previous chord.
+ */
+export function computeEffectiveSelections(
+  chords: ChordSlot[],
+  songKey?: RootName,
+): EffectiveChord[] {
+  const results: EffectiveChord[] = [];
+
+  for (let i = 0; i < chords.length; i++) {
+    const c = chords[i];
+
+    if (!QUALITY_TO_MODES[c.quality]) {
+      results.push({ modeIdx: c.modeIdx, posId: c.posId });
+      continue;
+    }
+
+    const modeIdx = c.modeConfirmed
+      ? c.modeIdx
+      : suggestMode(c.rootName, c.quality, songKey);
+
+    let posId: number;
+    if (c.posConfirmed) {
+      posId = c.posId;
+    } else {
+      const mode = resolveMode(c.rootName, MODE_TEMPLATES[modeIdx]);
+      const fretMap = buildFretMap(mode.semi, mode.notes);
+      const curAllPos = generatePositions(fretMap, mode.notes);
+
+      let prevPos: Position | null = null;
+      if (i > 0) {
+        const prevChord = chords[i - 1];
+        const prevEff = results[i - 1];
+        if (QUALITY_TO_MODES[prevChord.quality]) {
+          const prevMode = resolveMode(prevChord.rootName, MODE_TEMPLATES[prevEff.modeIdx]);
+          const prevFretMap = buildFretMap(prevMode.semi, prevMode.notes);
+          const prevAllPos = generatePositions(prevFretMap, prevMode.notes);
+          prevPos = prevAllPos.find(p => p.id === prevEff.posId) ?? null;
+        }
+      }
+
+      const ranked = rankPositionsByProximity(curAllPos, prevPos);
+      posId = ranked[0] ?? 1;
+    }
+
+    results.push({ modeIdx, posId });
+  }
+
+  return results;
+}
+
 /**
  * Build a default ChordSlot from a parsed chord symbol.
- * modeIdx defaults to the first compatible mode, posId defaults to 1.
+ * modeIdx defaults to suggestMode result, posId defaults to 1.
  */
 export function buildChordSlot(
   symbol: string,
   parsed: { rootName: RootName; quality: string },
   prevPosId?: number,
+  songKey?: RootName,
 ): ChordSlot {
-  const modes = QUALITY_TO_MODES[parsed.quality] ?? [];
   return {
-    symbol,
+    symbol: normalizeChordSymbol(symbol, parsed),
     rootName: parsed.rootName,
     quality: parsed.quality,
-    modeIdx: modes[0] ?? 0,
+    modeIdx: suggestMode(parsed.rootName, parsed.quality, songKey),
     posId: prevPosId ?? 1,
     posConfirmed: false,
+    modeConfirmed: false,
   };
 }
 
@@ -137,26 +252,29 @@ export function loadProgressions(): Progression[] {
 export const PRESET_PROGRESSIONS: Progression[] = [
   {
     name: 'II-V-I in C',
+    songKey: 'C',
     chords: [
-      { symbol: 'Dm7', rootName: 'D', quality: 'm7', modeIdx: 1, posId: 1, posConfirmed: false },
-      { symbol: 'G7', rootName: 'G', quality: '7', modeIdx: 4, posId: 1, posConfirmed: false },
-      { symbol: 'Cmaj7', rootName: 'C', quality: 'maj7', modeIdx: 0, posId: 1, posConfirmed: false },
+      { symbol: 'Dm7', rootName: 'D', quality: 'm7', modeIdx: 1, posId: 1, posConfirmed: false, modeConfirmed: false },
+      { symbol: 'G7', rootName: 'G', quality: '7', modeIdx: 4, posId: 1, posConfirmed: false, modeConfirmed: false },
+      { symbol: 'CM7', rootName: 'C', quality: 'maj7', modeIdx: 0, posId: 1, posConfirmed: false, modeConfirmed: false },
     ],
   },
   {
     name: 'II-V-I in F',
+    songKey: 'F',
     chords: [
-      { symbol: 'Gm7', rootName: 'G', quality: 'm7', modeIdx: 1, posId: 1, posConfirmed: false },
-      { symbol: 'C7', rootName: 'C', quality: '7', modeIdx: 4, posId: 1, posConfirmed: false },
-      { symbol: 'Fmaj7', rootName: 'F', quality: 'maj7', modeIdx: 0, posId: 1, posConfirmed: false },
+      { symbol: 'Gm7', rootName: 'G', quality: 'm7', modeIdx: 1, posId: 1, posConfirmed: false, modeConfirmed: false },
+      { symbol: 'C7', rootName: 'C', quality: '7', modeIdx: 4, posId: 1, posConfirmed: false, modeConfirmed: false },
+      { symbol: 'FM7', rootName: 'F', quality: 'maj7', modeIdx: 0, posId: 1, posConfirmed: false, modeConfirmed: false },
     ],
   },
   {
     name: 'II-V-I in B♭',
+    songKey: 'B♭',
     chords: [
-      { symbol: 'Cm7', rootName: 'C', quality: 'm7', modeIdx: 1, posId: 1, posConfirmed: false },
-      { symbol: 'F7', rootName: 'F', quality: '7', modeIdx: 4, posId: 1, posConfirmed: false },
-      { symbol: 'B♭maj7', rootName: 'B♭', quality: 'maj7', modeIdx: 0, posId: 1, posConfirmed: false },
+      { symbol: 'Cm7', rootName: 'C', quality: 'm7', modeIdx: 1, posId: 1, posConfirmed: false, modeConfirmed: false },
+      { symbol: 'F7', rootName: 'F', quality: '7', modeIdx: 4, posId: 1, posConfirmed: false, modeConfirmed: false },
+      { symbol: 'B♭M7', rootName: 'B♭', quality: 'maj7', modeIdx: 0, posId: 1, posConfirmed: false, modeConfirmed: false },
     ],
   },
 ];
