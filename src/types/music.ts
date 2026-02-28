@@ -57,16 +57,18 @@ export interface ModeTemplate {
 
 /** A single chord slot in a progression */
 export interface ChordSlot {
-  symbol: string;       // display name (e.g. "Dm7", "G7", "Cmaj7")
+  symbol: string;       // display name (e.g. "Dm7", "G7", "CM7")
   rootName: RootName;
   quality: string;      // matches MODE_TEMPLATES.chordQuality
   modeIdx: number;      // user-selected mode index
   posId: number;        // position id (auto-suggested or user-selected)
   posConfirmed: boolean; // true = user explicitly chose this position
+  modeConfirmed?: boolean; // true = user explicitly chose this mode
 }
 
 /** A saveable chord progression */
 export interface Progression {
   name: string;
+  songKey?: RootName;   // song key for smart mode suggestion
   chords: ChordSlot[];
 }

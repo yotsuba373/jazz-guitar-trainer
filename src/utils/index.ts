@@ -3,6 +3,9 @@ export { spellScale, buildDegreeMap, resolveMode } from './noteSpelling';
 export {
   QUALITY_TO_MODES,
   parseChordSymbol,
+  normalizeChordSymbol,
+  suggestMode,
+  computeEffectiveSelections,
   rankPositionsByProximity,
   buildChordSlot,
   saveProgressions,

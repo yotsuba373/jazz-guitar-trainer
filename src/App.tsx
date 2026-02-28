@@ -1,11 +1,10 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import type { LabelMode, RootName, Progression } from './types';
 import { MODE_TEMPLATES, ROOTS, MODE_COLORS } from './constants';
-import type { Position } from './types';
 import {
   buildFretMap, generatePositions, resolveMode,
   loadProgressions, saveProgressions, QUALITY_TO_MODES,
-  rankPositionsByProximity,
+  computeEffectiveSelections,
 } from './utils';
 import { Fretboard } from './components/Fretboard';
 import { RootSelector, ModeSelector, PositionSelector, OptionBar } from './components/Controls';
@@ -19,7 +18,7 @@ export default function App() {
   const [modeIdx, setModeIdx] = useState(0);
   const [selPosId, setSelPosId] = useState<number | null>(null);
   const [overlay, setOverlay] = useState(false);
-  const [showCT, setShowCT] = useState(false);
+  const [showCT, setShowCT] = useState(true);
   const [labelMode, setLabelMode] = useState<LabelMode>('note');
 
   // Progression mode state
@@ -46,33 +45,21 @@ export default function App() {
   const activeChord = activeProg?.chords[activeChordIdx];
   const isSkipped = activeChord && !QUALITY_TO_MODES[activeChord.quality];
 
+  // Compute effective selections for the whole progression (resolves auto-suggestion chain)
+  const effectiveAll = useMemo(
+    () => activeProg ? computeEffectiveSelections(activeProg.chords, activeProg.songKey) : [],
+    [activeProg],
+  );
+
   useEffect(() => {
     if (!progMode || !activeChord || isSkipped) return;
+    const eff = effectiveAll[activeChordIdx];
+    if (!eff) return;
     setRootName(activeChord.rootName);
-    setModeIdx(activeChord.modeIdx);
+    setModeIdx(eff.modeIdx);
+    setSelPosId(eff.posId);
     setOverlay(false);
-
-    if (activeChord.posConfirmed) {
-      setSelPosId(activeChord.posId);
-    } else {
-      // Auto-select closest position by computing rankings inline
-      const curMode = resolveMode(activeChord.rootName, MODE_TEMPLATES[activeChord.modeIdx]);
-      const curFretMap = buildFretMap(curMode.semi, curMode.notes);
-      const curAllPos = generatePositions(curFretMap, curMode.notes);
-
-      const prev = activeChordIdx > 0 ? activeProg?.chords[activeChordIdx - 1] : null;
-      let prevPos: Position | null = null;
-      if (prev && QUALITY_TO_MODES[prev.quality]) {
-        const prevMode = resolveMode(prev.rootName, MODE_TEMPLATES[prev.modeIdx]);
-        const prevFretMap = buildFretMap(prevMode.semi, prevMode.notes);
-        const prevAllPos = generatePositions(prevFretMap, prevMode.notes);
-        prevPos = prevAllPos.find(p => p.id === prev.posId) ?? null;
-      }
-
-      const ranked = rankPositionsByProximity(curAllPos, prevPos);
-      setSelPosId(ranked[0] ?? 1);
-    }
-  }, [progMode, activeChordIdx, activeChord?.rootName, activeChord?.modeIdx, activeChord?.posId, activeChord?.posConfirmed]);
+  }, [progMode, activeChordIdx, effectiveAll, activeChord, isSkipped]);
 
   // Keyboard navigation for progression mode
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
@@ -103,7 +90,7 @@ export default function App() {
   function handleChordModeChange(chordIdx: number, newModeIdx: number) {
     const copy = [...progressions];
     const prog = { ...copy[activeProgIdx], chords: [...copy[activeProgIdx].chords] };
-    prog.chords[chordIdx] = { ...prog.chords[chordIdx], modeIdx: newModeIdx };
+    prog.chords[chordIdx] = { ...prog.chords[chordIdx], modeIdx: newModeIdx, modeConfirmed: true };
     copy[activeProgIdx] = prog;
     handleSaveProgressions(copy);
   }
@@ -112,6 +99,15 @@ export default function App() {
     const copy = [...progressions];
     const prog = { ...copy[activeProgIdx], chords: [...copy[activeProgIdx].chords] };
     prog.chords[chordIdx] = { ...prog.chords[chordIdx], posId, posConfirmed: true };
+    copy[activeProgIdx] = prog;
+    handleSaveProgressions(copy);
+  }
+
+  function handleResetSelections() {
+    const copy = [...progressions];
+    const prog = { ...copy[activeProgIdx], chords: copy[activeProgIdx].chords.map(c => ({
+      ...c, posConfirmed: false, modeConfirmed: false,
+    }))};
     copy[activeProgIdx] = prog;
     handleSaveProgressions(copy);
   }
@@ -189,6 +185,7 @@ export default function App() {
                 onChordSelect={setActiveChordIdx}
                 onModeChange={handleChordModeChange}
                 onPosChange={handleChordPosChange}
+                onReset={handleResetSelections}
               />
             )}
 
