@@ -217,7 +217,7 @@ export function ProgressionEditor({
           value={input}
           onChange={e => { setInput(e.target.value); setError(''); }}
           onKeyDown={e => { if (e.key === 'Enter') addChord(); }}
-          placeholder="Dm7, G7, Cmaj7..."
+          placeholder="Dm7, G7, CM7..."
           className="bg-[#111] border border-[#444] rounded text-[11px] text-text-primary font-mono px-2 py-1 w-36"
           style={error ? { borderColor: '#E74C3C' } : undefined}
         />

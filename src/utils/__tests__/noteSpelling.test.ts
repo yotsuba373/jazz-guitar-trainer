@@ -50,9 +50,9 @@ describe('buildDegreeMap', () => {
 /* ── resolveMode ────────────────────────────────────────── */
 
 describe('resolveMode', () => {
-  it('C Ionian chord = Cmaj7, tones = C E G B', () => {
+  it('C Ionian chord = CM7, tones = C E G B', () => {
     const mode = resolveMode('C', MODE_TEMPLATES[0]);
-    expect(mode.chord).toBe('Cmaj7');
+    expect(mode.chord).toBe('CM7');
     expect(mode.chordTones).toEqual(['C', 'E', 'G', 'B']);
   });
 

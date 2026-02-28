@@ -5,6 +5,8 @@ export {
   parseChordSymbol,
   normalizeChordSymbol,
   suggestMode,
+  isDiatonic,
+  chordRomanNumeral,
   computeEffectiveSelections,
   rankPositionsByProximity,
   buildChordSlot,

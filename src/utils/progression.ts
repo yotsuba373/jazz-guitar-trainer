@@ -126,6 +126,51 @@ const MAJOR_SEMI_TO_DEG: Record<number, number> = {
   0: 0, 2: 1, 4: 2, 5: 3, 7: 4, 9: 5, 11: 6,
 };
 
+/** Semitone → Roman numeral base (uppercase) */
+const SEMI_TO_ROMAN: Record<number, string> = {
+  0: 'I', 1: '♭II', 2: 'II', 3: '♭III', 4: 'III', 5: 'IV',
+  6: '#IV', 7: 'V', 8: '♭VI', 9: 'VI', 10: '♭VII', 11: 'VII',
+};
+
+/**
+ * Compute the Roman numeral label for a chord in a given key.
+ * Uses uppercase for maj7/7, lowercase for m7/m7♭5.
+ * Returns null if no song key is set.
+ */
+export function chordRomanNumeral(
+  chordRoot: RootName,
+  quality: string,
+  songKey?: SongKey,
+): { numeral: string; diatonic: boolean } | null {
+  if (!songKey) return null;
+
+  let effectiveRoot = songKey.root;
+  if (songKey.minor) {
+    const rootSemi = ROOTS.find(r => r.name === songKey.root)?.semitone;
+    if (rootSemi == null) return null;
+    const majorSemi = (rootSemi + 3) % 12;
+    effectiveRoot = ROOTS.find(r => r.semitone === majorSemi)?.name ?? songKey.root;
+  }
+
+  const keySemi = ROOTS.find(r => r.name === effectiveRoot)?.semitone;
+  const chordSemi = ROOTS.find(r => r.name === chordRoot)?.semitone;
+  if (keySemi == null || chordSemi == null) return null;
+
+  const interval = (chordSemi - keySemi + 12) % 12;
+  const roman = SEMI_TO_ROMAN[interval] ?? '?';
+
+  // Diatonic check
+  const degIdx = MAJOR_SEMI_TO_DEG[interval];
+  const diatonic = degIdx != null && MODE_TEMPLATES[degIdx]?.chordQuality === quality;
+
+  // Case: lowercase for minor qualities
+  const isMinor = quality === 'm7' || quality === 'm7♭5';
+  let numeral = isMinor ? roman.replace(/[IVX]+/, m => m.toLowerCase()) : roman;
+  if (quality === 'm7♭5') numeral += '\u00B0'; // degree sign °
+
+  return { numeral, diatonic };
+}
+
 /**
  * Suggest the best mode for a chord based on the song key.
  * Uses diatonic analysis: if the chord root is a scale degree of the key,
@@ -162,6 +207,38 @@ export function suggestMode(
   if (tmpl && tmpl.chordQuality === quality) return degIdx;
 
   return fallback;
+}
+
+/**
+ * Check if a chord is diatonic to the given song key.
+ * A chord is diatonic when its root is a scale degree AND its quality
+ * matches the expected diatonic quality for that degree.
+ */
+export function isDiatonic(
+  chordRoot: RootName,
+  quality: string,
+  songKey?: SongKey,
+): boolean {
+  if (!songKey) return false;
+
+  let effectiveRoot = songKey.root;
+  if (songKey.minor) {
+    const rootSemi = ROOTS.find(r => r.name === songKey.root)?.semitone;
+    if (rootSemi == null) return false;
+    const majorSemi = (rootSemi + 3) % 12;
+    effectiveRoot = ROOTS.find(r => r.semitone === majorSemi)?.name ?? songKey.root;
+  }
+
+  const keySemi = ROOTS.find(r => r.name === effectiveRoot)?.semitone;
+  const chordSemi = ROOTS.find(r => r.name === chordRoot)?.semitone;
+  if (keySemi == null || chordSemi == null) return false;
+
+  const interval = (chordSemi - keySemi + 12) % 12;
+  const degIdx = MAJOR_SEMI_TO_DEG[interval];
+  if (degIdx == null) return false;
+
+  const tmpl = MODE_TEMPLATES[degIdx];
+  return tmpl != null && tmpl.chordQuality === quality;
 }
 
 /** Effective mode and position for a chord after resolving auto-suggestions */
@@ -253,10 +330,14 @@ export function loadProgressions(): Progression[] {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [...PRESET_PROGRESSIONS];
     const progs = JSON.parse(raw) as Progression[];
-    // Migrate old format: songKey was RootName string, now SongKey object
     for (const p of progs) {
+      // Migrate old format: songKey was RootName string, now SongKey object
       if (typeof p.songKey === 'string') {
         p.songKey = { root: p.songKey as RootName, minor: false };
+      }
+      // Migrate old chord symbols: maj7 → M7
+      for (const c of p.chords) {
+        c.symbol = c.symbol.replace(/maj7$/, 'M7');
       }
     }
     return progs;
