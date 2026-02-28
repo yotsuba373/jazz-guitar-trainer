@@ -75,7 +75,8 @@ export function buildDegreeMap(modeSemi: number[], noteNames: string[]): DegreeM
 export function resolveMode(rootName: RootName, template: ModeTemplate): Mode {
   const notes = spellScale(rootName, template.semi);
   const degrees = buildDegreeMap(template.semi, notes);
-  const chord = notes[0] + template.chordQuality;
+  const displayQuality = template.chordQuality === 'maj7' ? 'M7' : template.chordQuality;
+  const chord = notes[0] + displayQuality;
   const chordTones = template.chordDegreesIdx.map(i => notes[i]);
 
   // Compute absolute semitones for fretboard mapping

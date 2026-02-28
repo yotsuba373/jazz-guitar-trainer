@@ -3,7 +3,7 @@ import type { Progression, Position } from '../../types';
 import { MODE_TEMPLATES, POS_COLORS, MODE_COLORS } from '../../constants';
 import {
   QUALITY_TO_MODES, rankPositionsByProximity, computeEffectiveSelections,
-  resolveMode, buildFretMap, generatePositions,
+  isDiatonic, resolveMode, buildFretMap, generatePositions,
 } from '../../utils';
 
 interface ProgressionPlayerProps {
@@ -64,22 +64,27 @@ export function ProgressionPlayer({
         {chords.map((c, i) => {
           const active = i === activeChordIdx;
           const supported = QUALITY_TO_MODES[c.quality] != null;
+          const diatonic = !progression.songKey || !supported || isDiatonic(c.rootName, c.quality, progression.songKey);
           const eff = effectiveAll[i];
+          const borderColor = !supported ? '#333'
+            : !diatonic ? '#E67E22'
+            : active ? '#FFF'
+            : '#555';
           return (
             <button
               key={i}
               onClick={() => onChordSelect(i)}
               className="rounded cursor-pointer font-mono shrink-0 px-3 py-1.5 text-center min-w-[56px]"
               style={{
-                border: `2px solid ${active ? '#FFF' : supported ? '#555' : '#333'}`,
-                background: active ? '#2a2a2a' : '#111',
+                border: `2px solid ${borderColor}`,
+                background: active ? (diatonic ? '#2a2a2a' : '#2a2010') : '#111',
                 color: supported ? (active ? '#FFF' : '#AAA') : '#555',
                 opacity: supported ? 1 : 0.5,
               }}
             >
               <div className="text-[12px] font-bold">{c.symbol}</div>
               {supported && eff && (
-                <div className="text-[8px] mt-0.5" style={{ color: '#777' }}>
+                <div className="text-[8px] mt-0.5" style={{ color: '#666' }}>
                   {MODE_TEMPLATES[eff.modeIdx]?.name ?? '?'} · P{eff.posId}
                   {active && (!isPosConfirmed || !isModeConfirmed) && ' ?'}
                 </div>

@@ -3,6 +3,8 @@ import {
   parseChordSymbol,
   normalizeChordSymbol,
   suggestMode,
+  isDiatonic,
+  chordRomanNumeral,
   computeEffectiveSelections,
   QUALITY_TO_MODES,
   rankPositionsByProximity,
@@ -266,6 +268,92 @@ describe('suggestMode', () => {
 
   it('minor key: Bm7♭5 in Am → Locrian (6)', () => {
     expect(suggestMode('B', 'm7♭5', { root: 'A', minor: true })).toBe(6);
+  });
+});
+
+/* ── isDiatonic ──────────────────────────────────────── */
+
+describe('isDiatonic', () => {
+  it('all diatonic chords in C major return true', () => {
+    const key = { root: 'C' as const, minor: false };
+    expect(isDiatonic('C', 'maj7', key)).toBe(true);   // I
+    expect(isDiatonic('D', 'm7', key)).toBe(true);      // ii
+    expect(isDiatonic('E', 'm7', key)).toBe(true);      // iii
+    expect(isDiatonic('F', 'maj7', key)).toBe(true);    // IV
+    expect(isDiatonic('G', '7', key)).toBe(true);       // V
+    expect(isDiatonic('A', 'm7', key)).toBe(true);      // vi
+    expect(isDiatonic('B', 'm7♭5', key)).toBe(true);    // vii
+  });
+
+  it('non-diatonic chord returns false', () => {
+    const key = { root: 'C' as const, minor: false };
+    expect(isDiatonic('B♭', '7', key)).toBe(false);     // ♭VII7
+    expect(isDiatonic('E♭', 'maj7', key)).toBe(false);  // ♭III
+  });
+
+  it('wrong quality for diatonic root returns false', () => {
+    const key = { root: 'C' as const, minor: false };
+    expect(isDiatonic('D', '7', key)).toBe(false);      // D is ii but '7' is not m7
+    expect(isDiatonic('G', 'maj7', key)).toBe(false);   // G is V but maj7 is not 7
+  });
+
+  it('returns false when no songKey', () => {
+    expect(isDiatonic('C', 'maj7')).toBe(false);
+  });
+
+  it('minor key: Am diatonic chords', () => {
+    const key = { root: 'A' as const, minor: true };
+    expect(isDiatonic('A', 'm7', key)).toBe(true);      // i
+    expect(isDiatonic('B', 'm7♭5', key)).toBe(true);    // ii°
+    expect(isDiatonic('C', 'maj7', key)).toBe(true);    // III
+    expect(isDiatonic('D', 'm7', key)).toBe(true);      // iv
+    expect(isDiatonic('E', 'm7', key)).toBe(true);      // v
+    expect(isDiatonic('F', 'maj7', key)).toBe(true);    // VI
+    expect(isDiatonic('G', '7', key)).toBe(true);       // VII
+  });
+
+  it('minor key: non-diatonic returns false', () => {
+    const key = { root: 'A' as const, minor: true };
+    expect(isDiatonic('F', '7', key)).toBe(false);
+  });
+});
+
+/* ── chordRomanNumeral ───────────────────────────────── */
+
+describe('chordRomanNumeral', () => {
+  const cMaj = { root: 'C' as const, minor: false };
+
+  it('diatonic chords in C major', () => {
+    expect(chordRomanNumeral('C', 'maj7', cMaj)).toEqual({ numeral: 'I', diatonic: true });
+    expect(chordRomanNumeral('D', 'm7', cMaj)).toEqual({ numeral: 'ii', diatonic: true });
+    expect(chordRomanNumeral('E', 'm7', cMaj)).toEqual({ numeral: 'iii', diatonic: true });
+    expect(chordRomanNumeral('F', 'maj7', cMaj)).toEqual({ numeral: 'IV', diatonic: true });
+    expect(chordRomanNumeral('G', '7', cMaj)).toEqual({ numeral: 'V', diatonic: true });
+    expect(chordRomanNumeral('A', 'm7', cMaj)).toEqual({ numeral: 'vi', diatonic: true });
+    expect(chordRomanNumeral('B', 'm7♭5', cMaj)).toEqual({ numeral: 'vii°', diatonic: true });
+  });
+
+  it('non-diatonic chords show accidentals', () => {
+    expect(chordRomanNumeral('B♭', '7', cMaj)).toEqual({ numeral: '♭VII', diatonic: false });
+    expect(chordRomanNumeral('E♭', 'maj7', cMaj)).toEqual({ numeral: '♭III', diatonic: false });
+    expect(chordRomanNumeral('A♭', 'maj7', cMaj)).toEqual({ numeral: '♭VI', diatonic: false });
+  });
+
+  it('wrong quality for diatonic root is non-diatonic', () => {
+    expect(chordRomanNumeral('D', '7', cMaj)).toEqual({ numeral: 'II', diatonic: false });
+    expect(chordRomanNumeral('G', 'maj7', cMaj)).toEqual({ numeral: 'V', diatonic: false });
+  });
+
+  it('returns null when no songKey', () => {
+    expect(chordRomanNumeral('C', 'maj7')).toBeNull();
+  });
+
+  it('minor key: Am diatonic chords', () => {
+    const aMin = { root: 'A' as const, minor: true };
+    expect(chordRomanNumeral('A', 'm7', aMin)).toEqual({ numeral: 'vi', diatonic: true });
+    expect(chordRomanNumeral('D', 'm7', aMin)).toEqual({ numeral: 'ii', diatonic: true });
+    expect(chordRomanNumeral('G', '7', aMin)).toEqual({ numeral: 'V', diatonic: true });
+    expect(chordRomanNumeral('C', 'maj7', aMin)).toEqual({ numeral: 'I', diatonic: true });
   });
 });
 
