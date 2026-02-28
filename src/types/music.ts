@@ -54,3 +54,19 @@ export interface ModeTemplate {
   chordDegreesIdx: number[];
   chordQuality: string;
 }
+
+/** A single chord slot in a progression */
+export interface ChordSlot {
+  symbol: string;       // display name (e.g. "Dm7", "G7", "Cmaj7")
+  rootName: RootName;
+  quality: string;      // matches MODE_TEMPLATES.chordQuality
+  modeIdx: number;      // user-selected mode index
+  posId: number;        // position id (auto-suggested or user-selected)
+  posConfirmed: boolean; // true = user explicitly chose this position
+}
+
+/** A saveable chord progression */
+export interface Progression {
+  name: string;
+  chords: ChordSlot[];
+}

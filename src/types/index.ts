@@ -9,4 +9,6 @@ export type {
   LabelMode,
   RootName,
   ModeTemplate,
+  ChordSlot,
+  Progression,
 } from './music';
