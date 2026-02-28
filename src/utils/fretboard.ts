@@ -2,7 +2,8 @@ import type { FretMap, FretNote, Position, PositionInstance, StringNotes } from 
 import { OPEN_STRINGS } from '../constants';
 
 /**
- * Build a map of scale notes on each string across frets 1-21.
+ * Build a map of scale notes on each string across frets 0-22.
+ * Fret 0 represents the open string.
  */
 export function buildFretMap(scaleSemitones: number[], noteNames: string[]): FretMap {
   const semiToName: Record<number, string> = {};
@@ -12,7 +13,7 @@ export function buildFretMap(scaleSemitones: number[], noteNames: string[]): Fre
   for (let strIdx = 0; strIdx < 6; strIdx++) {
     const open = OPEN_STRINGS[strIdx];
     const notes: FretNote[] = [];
-    for (let fret = 1; fret <= 21; fret++) {
+    for (let fret = 0; fret <= 22; fret++) {
       const semi = (open + fret) % 12;
       if (semiToName[semi] !== undefined) {
         notes.push([semiToName[semi], fret, semi]);
@@ -62,11 +63,15 @@ export function generatePositions(fretMap: FretMap, scaleNotes: string[]): Posit
   const e1T = getOrderedTrios(0), gT = getOrderedTrios(2);
   const dT = getOrderedTrios(3), aT = getOrderedTrios(4);
 
-  // Find the primary Pos-1 B pair (starts with 2nd scale degree)
-  const refPairIdx = allPairs.findIndex(([n1]) => deg(n1) === 1);
+  // Find the primary Pos-1 B pair (starts with 2nd scale degree, fretted not open).
+  // Excludes fret-0 pairs so that keys where B string open = deg1 (e.g. A Ionian)
+  // don't anchor the alignment to the nut and corrupt all position shapes.
+  const refPairIdx = allPairs.findIndex(([n1]) => deg(n1) === 1 && n1[1] > 0);
   const refPair = allPairs[refPairIdx];
 
-  // Determine starting degree per string via fret-proximity alignment
+  // Determine starting degree per string via fret-proximity alignment.
+  // Excludes fret-0 (open string) trios so that alignment is based on
+  // fretted notes only, preventing open-string trios from shifting the baseline.
   function findAlignedDeg(trios: FretNote[][]): number {
     if (trios.length === 0) return -1;
     const bMin = refPair[0][1], bMax = refPair[1][1];
@@ -87,7 +92,7 @@ export function generatePositions(fretMap: FretMap, scaleNotes: string[]): Posit
   const dDeg0 = findAlignedDeg(dT);
   const aDeg0 = findAlignedDeg(aT);
 
-  // Find the trio closest to a fret range, matching a required first degree
+  // Find the trio closest to a fret range, matching a required first degree.
   function findClosestTrio(
     trios: FretNote[][], firstDeg: number, refMin: number, refMax: number,
   ): FretNote[] | null {
@@ -143,8 +148,8 @@ export function generatePositions(fretMap: FretMap, scaleNotes: string[]): Posit
         fretMax: frets.length ? Math.max(...frets) : 0,
       };
     })
-    // Drop sparse instances (need B pair + at least 3 other string groups)
-    .filter(inst => inst.strings.filter(s => s !== null).length >= 4);
+    // Only keep instances where all strings are present (complete position fits on fretboard).
+    .filter(inst => inst.strings.every(s => s !== null));
 
     // Label from any instance (note names are the same across octaves)
     const labelPair = matchingBPairs[0];
