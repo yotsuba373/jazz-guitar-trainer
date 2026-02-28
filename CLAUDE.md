@@ -63,42 +63,31 @@ fnm default lts-latest
    6E: F(1), G(3), A(5)
    ```
 
-4. **refPairIdx の閾値は `>= 3` を維持すること**
-   - `> 0` だと Bb ルートで refPair がフレット1に落ち、E弦の度数オフセットが1つずれる
-   - 全12キー × 全7モードで検証済み: 各弦の基準度数は E=3, G=5, D=2, A=6 で統一
-   - 閾値を下げる変更は全キー・全モードのクロスチェックなしに行わないこと
+4. **`STRING_DEG_OFFSETS` 定数は変更しないこと**
+   - `src/constants/music.ts` に定義: `{ e: 3, g: 5, d: 2, a: 6 }`
+   - 全 12 キー × 7 モード (84パターン) で不変であることを vitest で検証済み
+   - `npm test` で `degree offset invariant` テストが通らなくなったらバグ
 
-5. **度数オフセットの不変条件 (全キー・全モード共通)**
-   ```
-   eDeg0 = 3   (E弦 = 4th scale degree)
-   gDeg0 = 5   (G弦 = 6th scale degree)
-   dDeg0 = 2   (D弦 = 3rd scale degree)
-   aDeg0 = 6   (A弦 = 7th scale degree)
-   ```
-   どのキー・モードでもこの値が変わったらバグ。修正時は必ず全84パターンで検証。
+## テスト
 
-## 次のタスク: ルートキー選択機能
+```bash
+npm test          # vitest run (181 テスト)
+npm run build     # tsc + vite build
+```
 
-**実装プランは `PLAN-root-key.md` を参照。** このファイルを読んでから作業を開始すること。
-
-要点:
-- `buildFretMap` / `generatePositions` は変更不要（既にルート非依存）
-- `src/utils/noteSpelling.ts` を新規作成（エンハーモニック処理の核心）
-- `MODES` → `MODE_TEMPLATES` に置換、`resolveMode(rootName, template)` で動的生成
-- 全コンポーネントからハードコード "C" を除去
-- 13キー選択 UI を追加（F#/G♭ 両対応）
+テストファイル:
+- `src/utils/__tests__/fretboard.test.ts` — C Ionian Pos 1 リファレンス、度数オフセット不変条件 (84パターン)、構造検証
+- `src/utils/__tests__/noteSpelling.test.ts` — スペリング、度数マップ、resolveMode
 
 ## 今後の開発予定 (優先度順)
 
-1. ~~C以外のルート対応~~ → `PLAN-root-key.md` に詳細プランあり
-2. コード進行連動表示 (BPM/タイミング制御で自動切替)
-3. コード進行プリセット (II-V-I, Blues, Rhythm Changes)
-4. ポジション間移動ガイド (共通音ハイライト)
-5. 音声再生 (Web Audio API)
-6. カスタムスケール (メロディックマイナー, ハーモニックマイナー)
+1. コード進行連動表示 (BPM/タイミング制御で自動切替)
+2. コード進行プリセット (II-V-I, Blues, Rhythm Changes)
+3. ポジション間移動ガイド (共通音ハイライト)
+4. 音声再生 (Web Audio API)
+5. カスタムスケール (メロディックマイナー, ハーモニックマイナー)
 
 ## 参照ドキュメント
 
 - `HANDOFF.md` — コアアルゴリズム詳細、失敗パターン、データ構造
-- `PLAN-root-key.md` — ルートキー選択機能の実装プラン（次のタスク）
 - `berklee-positions-v2.jsx` — 移行元の Artifact コード (参照用)

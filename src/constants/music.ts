@@ -36,6 +36,15 @@ export const ROOTS: { name: RootName; semitone: number }[] = [
   { name: 'B', semitone: 11 },
 ];
 
+/**
+ * Pos 1 における各弦の開始度数 (standard tuning, 7-note diatonic scales).
+ * 全 12 キー × 7 モードで不変であることを検証済み。
+ */
+export const STRING_DEG_OFFSETS = { e: 3, g: 5, d: 2, a: 6 } as const;
+
+/** findClosestTrio でのBペア–トリオ間の最大フレットギャップ許容値 */
+export const MAX_TRIO_GAP = 5;
+
 export const POS_COLORS: string[] = [
   '#E74C3C', '#E67E22', '#F1C40F', '#27AE60',
   '#2980B9', '#8E44AD', '#16A085',
