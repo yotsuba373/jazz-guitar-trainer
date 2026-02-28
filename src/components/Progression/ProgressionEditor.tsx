@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { Progression, ChordSlot, RootName } from '../../types';
+import type { Progression, ChordSlot, RootName, SongKey } from '../../types';
 import { ROOTS } from '../../constants';
 import { parseChordSymbol, buildChordSlot, suggestMode, PRESET_PROGRESSIONS } from '../../utils';
 
@@ -18,7 +18,7 @@ export function ProgressionEditor({
 }: ProgressionEditorProps) {
   const prog = progressions[activeProgIdx] ?? { name: '', chords: [] };
   const [name, setName] = useState(prog.name);
-  const [songKey, setSongKey] = useState<RootName | undefined>(prog.songKey);
+  const [songKey, setSongKey] = useState<SongKey | undefined>(prog.songKey);
   const [chords, setChords] = useState<ChordSlot[]>([...prog.chords]);
   const [input, setInput] = useState('');
   const [error, setError] = useState('');
@@ -86,12 +86,12 @@ export function ProgressionEditor({
     setChords([...preset.chords]);
   }
 
-  function handleSongKeyChange(key: RootName | undefined) {
-    setSongKey(key);
+  function handleSongKeyChange(newKey: SongKey | undefined) {
+    setSongKey(newKey);
     // Re-suggest modes for unconfirmed chords
     setChords(chords.map(c => {
       if (c.modeConfirmed) return c;
-      return { ...c, modeIdx: suggestMode(c.rootName, c.quality, key) };
+      return { ...c, modeIdx: suggestMode(c.rootName, c.quality, newKey) };
     }));
   }
 
@@ -157,8 +157,11 @@ export function ProgressionEditor({
         />
         <span className="text-[9px] text-text-dim">Key:</span>
         <select
-          value={songKey ?? ''}
-          onChange={e => handleSongKeyChange(e.target.value ? e.target.value as RootName : undefined)}
+          value={songKey?.root ?? ''}
+          onChange={e => {
+            const root = e.target.value as RootName;
+            handleSongKeyChange(root ? { root, minor: songKey?.minor ?? false } : undefined);
+          }}
           className="bg-[#111] border border-[#444] rounded text-[11px] text-text-primary font-mono px-1.5 py-1 cursor-pointer"
         >
           <option value="">未設定</option>
@@ -166,6 +169,30 @@ export function ProgressionEditor({
             <option key={r.name} value={r.name}>{r.name}</option>
           ))}
         </select>
+        {songKey && (
+          <>
+            <button onClick={() => handleSongKeyChange({ ...songKey, minor: false })}
+              className={btnBase}
+              style={{
+                border: `1px solid ${!songKey.minor ? '#FFF' : '#444'}`,
+                background: !songKey.minor ? '#3a3a3a' : '#1a1a1a',
+                color: !songKey.minor ? '#FFF' : '#888',
+                fontWeight: !songKey.minor ? 700 : 400,
+              }}>
+              Major
+            </button>
+            <button onClick={() => handleSongKeyChange({ ...songKey, minor: true })}
+              className={btnBase}
+              style={{
+                border: `1px solid ${songKey.minor ? '#FFF' : '#444'}`,
+                background: songKey.minor ? '#3a3a3a' : '#1a1a1a',
+                color: songKey.minor ? '#FFF' : '#888',
+                fontWeight: songKey.minor ? 700 : 400,
+              }}>
+              Minor
+            </button>
+          </>
+        )}
       </div>
 
       {/* Chord list */}

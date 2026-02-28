@@ -10,5 +10,6 @@ export type {
   RootName,
   ModeTemplate,
   ChordSlot,
+  SongKey,
   Progression,
 } from './music';
