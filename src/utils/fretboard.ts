@@ -63,10 +63,10 @@ export function generatePositions(fretMap: FretMap, scaleNotes: string[]): Posit
   const e1T = getOrderedTrios(0), gT = getOrderedTrios(2);
   const dT = getOrderedTrios(3), aT = getOrderedTrios(4);
 
-  // Find the primary Pos-1 B pair (starts with 2nd scale degree, fretted not open).
-  // Excludes fret-0 pairs so that keys where B string open = deg1 (e.g. A Ionian)
-  // don't anchor the alignment to the nut and corrupt all position shapes.
-  const refPairIdx = allPairs.findIndex(([n1]) => deg(n1) === 1 && n1[1] > 0);
+  // Find the primary Pos-1 B pair (starts with 2nd scale degree, fret >= 3).
+  // Requires fret >= 3 so that keys with very low ref frets (e.g. Bb at fret 1)
+  // don't misalign E-string degree offsets due to lack of matching trios below fret 3.
+  const refPairIdx = allPairs.findIndex(([n1]) => deg(n1) === 1 && n1[1] >= 3);
   const refPair = allPairs[refPairIdx];
 
   // Determine starting degree per string via fret-proximity alignment.
