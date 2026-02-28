@@ -47,7 +47,7 @@ export function Fretboard({ visible, selPosId, dim, showCT, ctSet, getLabel, roo
           <g key={s}>
             <line x1={LP} y1={TP + s * SG} x2={LP + FC * FW} y2={TP + s * SG}
               stroke={s === 1 ? '#887766' : '#555'} strokeWidth={s === 1 ? 1.2 : 0.7 + s * 0.3} />
-            <text x={LP - 22} y={TP + s * SG + 4} textAnchor="middle"
+            <text x={LP - 44} y={TP + s * SG + 4} textAnchor="middle"
               fontSize="11" fill={s === 1 ? '#aa9977' : '#666'} fontWeight="600" fontFamily="monospace">
               {STR_LABELS[s]}
             </text>
