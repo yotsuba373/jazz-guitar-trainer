@@ -14,3 +14,11 @@ export {
   loadProgressions,
   PRESET_PROGRESSIONS,
 } from './progression';
+export {
+  formatChordSymbol,
+  formatQuality,
+  loadChordNotationPrefs,
+  saveChordNotationPrefs,
+  CHORD_NOTATION_OPTIONS,
+  DEFAULT_CHORD_PREFS,
+} from './chordFormat';

@@ -28,10 +28,14 @@ ROOT_LOOKUP['A#'] = 'B♭';
 
 // Quality patterns ordered so longer patterns match first
 const QUALITY_PATTERNS: [RegExp, string][] = [
+  [/^△7$/, 'maj7'],
   [/^M7$/, 'maj7'],
   [/^maj7$/, 'maj7'],
   [/^m7♭5$/, 'm7♭5'],
   [/^m7b5$/, 'm7♭5'],
+  [/^ø7$/, 'm7♭5'],
+  [/^mi7$/, 'm7'],
+  [/^-7$/, 'm7'],
   [/^m7$/, 'm7'],
   [/^7$/, '7'],
 ];

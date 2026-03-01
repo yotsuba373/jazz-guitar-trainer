@@ -1,10 +1,11 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
-import type { LabelMode, RootName, Progression } from './types';
+import type { LabelMode, RootName, Progression, ChordNotationPrefs } from './types';
 import { MODE_TEMPLATES, ROOTS, MODE_COLORS } from './constants';
 import {
   buildFretMap, generatePositions, resolveMode,
   loadProgressions, saveProgressions, QUALITY_TO_MODES,
   computeEffectiveSelections,
+  formatChordSymbol, loadChordNotationPrefs, saveChordNotationPrefs,
 } from './utils';
 import { Fretboard } from './components/Fretboard';
 import { RootSelector, ModeSelector, PositionSelector, OptionBar } from './components/Controls';
@@ -20,6 +21,7 @@ export default function App() {
   const [overlay, setOverlay] = useState(false);
   const [showCT, setShowCT] = useState(true);
   const [labelMode, setLabelMode] = useState<LabelMode>('note');
+  const [chordPrefs, setChordPrefs] = useState<ChordNotationPrefs>(() => loadChordNotationPrefs());
 
   // Progression mode state
   const [progMode, setProgMode] = useState(false);
@@ -112,6 +114,11 @@ export default function App() {
     handleSaveProgressions(copy);
   }
 
+  function handleChordPrefsChange(prefs: ChordNotationPrefs) {
+    setChordPrefs(prefs);
+    saveChordNotationPrefs(prefs);
+  }
+
   function getLabel(nn: string): string {
     return labelMode === 'degree' ? (deg[nn] || nn) : nn;
   }
@@ -171,6 +178,7 @@ export default function App() {
               <ProgressionEditor
                 progressions={progressions}
                 activeProgIdx={activeProgIdx}
+                chordPrefs={chordPrefs}
                 onSave={handleSaveProgressions}
                 onSelectProg={(idx) => { setActiveProgIdx(idx); setActiveChordIdx(0); }}
                 onClose={() => setEditing(false)}
@@ -182,6 +190,7 @@ export default function App() {
                 progression={activeProg}
                 activeChordIdx={activeChordIdx}
                 allPos={allPos}
+                chordPrefs={chordPrefs}
                 onChordSelect={setActiveChordIdx}
                 onModeChange={handleChordModeChange}
                 onPosChange={handleChordPosChange}
@@ -210,7 +219,7 @@ export default function App() {
           <span className="text-text-dim ml-2">{mode.notes.join(' ')}</span>
         </div>
         <div className="text-[10px] text-text-dim mb-2.5">
-          {mode.chord}: {mode.chordTones.join(' ')} ({mode.chordSub})
+          {formatChordSymbol(rootNote, mode.chordQuality, chordPrefs)}: {mode.chordTones.join(' ')} ({mode.chordSub})
         </div>
 
         {!progMode && (
@@ -228,8 +237,10 @@ export default function App() {
           mode={mode}
           showCT={showCT}
           labelMode={labelMode}
+          chordPrefs={chordPrefs}
           onToggleCT={setShowCT}
           onSetLabelMode={setLabelMode}
+          onChordPrefsChange={handleChordPrefsChange}
         />
 
         <Fretboard
@@ -250,6 +261,7 @@ export default function App() {
             ctSet={ctSet}
             getLabel={getLabel}
             rootNote={rootNote}
+            chordPrefs={chordPrefs}
           />
         )}
 
@@ -261,7 +273,7 @@ export default function App() {
           />
         )}
 
-        <Footer />
+        <Footer chordPrefs={chordPrefs} />
       </div>
     </div>
   );

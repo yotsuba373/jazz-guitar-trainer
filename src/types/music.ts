@@ -30,8 +30,17 @@ export interface Mode {
   notes: string[];
   degrees: DegreeMap;
   chord: string;
+  chordQuality: string;   // internal quality key (e.g. 'maj7', 'm7')
   chordTones: string[];
   chordSub: string;
+}
+
+/** User's chord notation preferences */
+export interface ChordNotationPrefs {
+  maj7: string;   // 'M7' | 'maj7' | '△7'
+  m7: string;     // 'm7' | 'mi7' | '-7'
+  '7': string;    // '7'
+  'm7♭5': string; // 'm7♭5' | 'ø7'
 }
 
 /** The complete fretboard map: one array of FretNotes per string */

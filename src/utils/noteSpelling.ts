@@ -91,6 +91,7 @@ export function resolveMode(rootName: RootName, template: ModeTemplate): Mode {
     notes,
     degrees,
     chord,
+    chordQuality: template.chordQuality,
     chordTones,
     chordSub: template.chordSub,
   };
