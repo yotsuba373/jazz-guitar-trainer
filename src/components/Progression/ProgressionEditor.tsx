@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import type { Progression, ChordSlot, RootName, SongKey, ChordNotationPrefs } from '../../types';
 import { ROOTS } from '../../constants';
-import { parseChordSymbol, buildChordSlot, suggestMode, formatChordSymbol, PRESET_PROGRESSIONS } from '../../utils';
+import { parseChordSymbol, buildChordSlot, suggestMode, displayChordName, PRESET_PROGRESSIONS } from '../../utils';
+import { SongImporter } from './SongImporter';
 
 interface ProgressionEditorProps {
   progressions: Progression[];
@@ -23,13 +24,14 @@ export function ProgressionEditor({
   const [chords, setChords] = useState<ChordSlot[]>([...prog.chords]);
   const [input, setInput] = useState('');
   const [error, setError] = useState('');
+  const [showImporter, setShowImporter] = useState(false);
 
   function addChord() {
     const trimmed = input.trim();
     if (!trimmed) return;
     const parsed = parseChordSymbol(trimmed);
     if (!parsed) {
-      setError(`"${trimmed}" は対応外のコードです (M7/m7/7/m7♭5 のみ)`);
+      setError(`"${trimmed}" は認識できないコードです`);
       return;
     }
     setError('');
@@ -87,6 +89,13 @@ export function ProgressionEditor({
     setChords([...preset.chords]);
   }
 
+  function handleImport(imported: Progression) {
+    setName(imported.name);
+    setSongKey(imported.songKey);
+    setChords([...imported.chords]);
+    setShowImporter(false);
+  }
+
   function handleSongKeyChange(newKey: SongKey | undefined) {
     setSongKey(newKey);
     // Re-suggest modes for unconfirmed chords
@@ -135,7 +144,7 @@ export function ProgressionEditor({
         </button>
       </div>
 
-      {/* Preset loader */}
+      {/* Preset loader + import */}
       <div className="flex flex-wrap gap-1 mb-2">
         <span className="text-[9px] text-text-dim mr-1 self-center">プリセット:</span>
         {PRESET_PROGRESSIONS.map((preset, i) => (
@@ -145,7 +154,23 @@ export function ProgressionEditor({
             {preset.name}
           </button>
         ))}
+        <button onClick={() => setShowImporter(!showImporter)}
+          className={btnBase}
+          style={{
+            border: `1px solid ${showImporter ? '#FFF' : '#2980B9'}`,
+            background: showImporter ? '#1a2a3a' : '#1a1a1a',
+            color: '#2980B9',
+          }}>
+          インポート
+        </button>
       </div>
+
+      {showImporter && (
+        <SongImporter
+          onImport={handleImport}
+          onClose={() => setShowImporter(false)}
+        />
+      )}
 
       {/* Name + Key input */}
       <div className="flex items-center gap-2 mb-2">
@@ -200,7 +225,7 @@ export function ProgressionEditor({
       <div className="flex flex-wrap gap-1 mb-2 min-h-[28px]">
         {chords.map((c, i) => (
           <div key={i} className="flex items-center gap-0.5 bg-[#222] border border-[#444] rounded px-1.5 py-0.5">
-            <span className="text-[11px] text-text-primary font-mono">{formatChordSymbol(c.rootName, c.quality, chordPrefs)}</span>
+            <span className="text-[11px] text-text-primary font-mono">{displayChordName(c, chordPrefs)}</span>
             <button onClick={() => moveChord(i, -1)} className="text-[9px] text-text-dim hover:text-white cursor-pointer px-0.5">◀</button>
             <button onClick={() => moveChord(i, 1)} className="text-[9px] text-text-dim hover:text-white cursor-pointer px-0.5">▶</button>
             <button onClick={() => removeChord(i)} className="text-[9px] text-[#E74C3C] hover:text-white cursor-pointer px-0.5">×</button>
