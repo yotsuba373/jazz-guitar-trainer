@@ -28,3 +28,8 @@ export {
   searchSongs,
   songToProgression,
 } from './jazzStandards';
+export {
+  deriveChartLayout,
+  getChartLayout,
+  buildChordRows,
+} from './chartLayout';

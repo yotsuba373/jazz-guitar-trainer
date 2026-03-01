@@ -1,4 +1,4 @@
-import type { RawJazzStandard, RootName, SongKey, ChordSlot, Progression } from '../types';
+import type { RawJazzStandard, RootName, SongKey, ChordSlot, Progression, ChartSection, ChartLayout } from '../types';
 import { parseChordSymbol, buildChordSlot } from './progression';
 
 const JSON_URL =
@@ -50,35 +50,86 @@ export function parseSongKey(keyStr?: string): SongKey | undefined {
 
 // --- Chord extraction ---
 
-/** Extract all chord symbols from a song, flattened across sections. */
-export function extractChordSymbols(song: RawJazzStandard): string[] {
-  const symbols: string[] = [];
+/** Structured section with measure boundaries preserved. */
+export interface StructuredSection {
+  label: string;
+  measures: string[][];
+  endings?: string[][][];  // each ending is an array of measures
+  repeats?: number;
+}
+
+/** Extract chord symbols preserving section labels, measure boundaries, endings, and repeats. */
+export function extractStructuredChords(song: RawJazzStandard): StructuredSection[] {
+  // Collect used single-letter labels to avoid conflicts when auto-labeling
+  const usedLabels = new Set(
+    song.Sections
+      .map(s => (s.Label ?? '').trim())
+      .filter(l => /^[A-Z]$/i.test(l))
+      .map(l => l.toUpperCase()),
+  );
+  let nextCode = 65; // 'A'
+  function nextAutoLabel(): string {
+    while (nextCode <= 90) {
+      const label = String.fromCharCode(nextCode++);
+      if (!usedLabels.has(label)) return label;
+    }
+    return '';
+  }
+
+  const sections: StructuredSection[] = [];
   let lastChord = '';
 
-  function processMeasures(chordStr: string) {
-    for (const measure of chordStr.split('|')) {
-      for (const raw of measure.split(',')) {
+  function parseMeasures(chordStr: string): string[][] {
+    const measures: string[][] = [];
+    for (const measureStr of chordStr.split('|')) {
+      const measure: string[] = [];
+      for (const raw of measureStr.split(',')) {
         const chord = raw.trim();
         if (!chord) continue;
         if (chord === '%') {
-          if (lastChord) symbols.push(lastChord);
+          if (lastChord) measure.push(lastChord);
         } else {
-          symbols.push(chord);
+          measure.push(chord);
           lastChord = chord;
         }
       }
+      if (measure.length > 0) {
+        measures.push(measure);
+      }
     }
+    return measures;
   }
 
   for (const section of song.Sections) {
-    processMeasures(section.MainSegment.Chords);
-    // Use first ending only
+    const rawLabel = (section.Label ?? '').trim();
+    const label = rawLabel || nextAutoLabel();
+    const measures = parseMeasures(section.MainSegment.Chords);
+
+    let endings: string[][][] | undefined;
     if (section.Endings && section.Endings.length > 0) {
-      processMeasures(section.Endings[0].Chords);
+      endings = section.Endings.map(e => parseMeasures(e.Chords));
     }
+
+    const repeats = section.Repeats;
+
+    sections.push({ label, measures, endings, repeats });
   }
 
-  return symbols;
+  return sections;
+}
+
+/** Extract all chord symbols from a song, flattened across sections. */
+export function extractChordSymbols(song: RawJazzStandard): string[] {
+  const result: string[] = [];
+  for (const sec of extractStructuredChords(song)) {
+    result.push(...sec.measures.flat());
+    if (sec.endings) {
+      for (const ending of sec.endings) {
+        result.push(...ending.flat());
+      }
+    }
+  }
+  return result;
 }
 
 // --- Conversion ---
@@ -86,27 +137,48 @@ export function extractChordSymbols(song: RawJazzStandard): string[] {
 /** Convert a JazzStandard song into the app's Progression format. */
 export function songToProgression(song: RawJazzStandard): Progression {
   const songKey = parseSongKey(song.Key);
-  const symbols = extractChordSymbols(song);
+  const structured = extractStructuredChords(song);
 
   const chords: ChordSlot[] = [];
-  for (const sym of symbols) {
-    const parsed = parseChordSymbol(sym);
-    if (parsed) {
-      const prevPosId = chords.length > 0 ? chords[chords.length - 1].posId : 1;
-      chords.push(buildChordSlot(sym, parsed, prevPosId, songKey));
-    } else {
-      // Unsupported chord → skip slot
-      chords.push({
-        symbol: sym,
-        rootName: 'C',
-        quality: 'unknown',
-        modeIdx: 0,
-        posId: 1,
-        posConfirmed: false,
-        modeConfirmed: false,
-      });
+  const chartSections: ChartSection[] = [];
+
+  function pushChords(symbols: string[]): number[] {
+    const indices: number[] = [];
+    for (const sym of symbols) {
+      const idx = chords.length;
+      const parsed = parseChordSymbol(sym);
+      if (parsed) {
+        const prevPosId = chords.length > 0 ? chords[chords.length - 1].posId : 1;
+        chords.push(buildChordSlot(sym, parsed, prevPosId, songKey));
+      } else {
+        chords.push({
+          symbol: sym, rootName: 'C', quality: 'unknown',
+          modeIdx: 0, posId: 1, posConfirmed: false, modeConfirmed: false,
+        });
+      }
+      indices.push(idx);
     }
+    return indices;
   }
 
-  return { name: song.Title, songKey, chords };
+  for (const sec of structured) {
+    const chartMeasures = sec.measures.map(m => ({ chordIndices: pushChords(m) }));
+
+    let chartEndings: { chordIndices: number[] }[][] | undefined;
+    if (sec.endings) {
+      chartEndings = sec.endings.map(ending =>
+        ending.map(m => ({ chordIndices: pushChords(m) })),
+      );
+    }
+
+    chartSections.push({
+      label: sec.label,
+      measures: chartMeasures,
+      endings: chartEndings,
+      repeats: sec.repeats,
+    });
+  }
+
+  const chartLayout: ChartLayout = { sections: chartSections, barsPerRow: 4 };
+  return { name: song.Title, songKey, chords, chartLayout };
 }

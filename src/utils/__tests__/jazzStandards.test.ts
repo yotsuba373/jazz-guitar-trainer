@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseSongKey, extractChordSymbols, songToProgression, searchSongs } from '../jazzStandards';
+import { parseSongKey, extractChordSymbols, extractStructuredChords, songToProgression, searchSongs } from '../jazzStandards';
 import type { RawJazzStandard } from '../../types';
 
 // --- parseSongKey ---
@@ -66,7 +66,7 @@ describe('extractChordSymbols', () => {
     expect(extractChordSymbols(song)).toEqual(['Dm7', 'G7', 'Cmaj7']);
   });
 
-  it('uses first ending only', () => {
+  it('includes all endings in flat output', () => {
     const song: RawJazzStandard = {
       Title: 'Test',
       Sections: [{
@@ -77,7 +77,7 @@ describe('extractChordSymbols', () => {
         ],
       }],
     };
-    expect(extractChordSymbols(song)).toEqual(['Dm7', 'G7', 'Cmaj7']);
+    expect(extractChordSymbols(song)).toEqual(['Dm7', 'G7', 'Cmaj7', 'Am7']);
   });
 
   it('concatenates multiple sections', () => {
@@ -108,6 +108,117 @@ describe('extractChordSymbols', () => {
       ],
     };
     expect(extractChordSymbols(song)).toEqual(['Dm7', 'G7', 'G7', 'Cmaj7']);
+  });
+});
+
+// --- extractStructuredChords ---
+
+describe('extractStructuredChords', () => {
+  it('preserves section labels', () => {
+    const song: RawJazzStandard = {
+      Title: 'Test',
+      Sections: [
+        { Label: 'A', MainSegment: { Chords: 'Dm7|G7' } },
+        { Label: 'B', MainSegment: { Chords: 'Cmaj7' } },
+      ],
+    };
+    const sections = extractStructuredChords(song);
+    expect(sections).toHaveLength(2);
+    expect(sections[0].label).toBe('A');
+    expect(sections[1].label).toBe('B');
+  });
+
+  it('separates endings from main measures', () => {
+    const song: RawJazzStandard = {
+      Title: 'Test',
+      Sections: [{
+        MainSegment: { Chords: 'Dm7|G7' },
+        Endings: [
+          { Chords: 'Cmaj7' },
+          { Chords: 'Am7' },
+        ],
+      }],
+    };
+    const sections = extractStructuredChords(song);
+    expect(sections[0].measures).toHaveLength(2); // main only
+    expect(sections[0].endings).toHaveLength(2);
+    expect(sections[0].endings![0]).toEqual([['Cmaj7']]);
+    expect(sections[0].endings![1]).toEqual([['Am7']]);
+  });
+
+  it('preserves repeats field', () => {
+    const song: RawJazzStandard = {
+      Title: 'Test',
+      Sections: [{
+        Label: 'A',
+        MainSegment: { Chords: 'Dm7|G7' },
+        Repeats: 1,
+      }],
+    };
+    const sections = extractStructuredChords(song);
+    expect(sections[0].repeats).toBe(1);
+  });
+
+  it('no endings field when section has no endings', () => {
+    const song: RawJazzStandard = {
+      Title: 'Test',
+      Sections: [{ MainSegment: { Chords: 'Dm7' } }],
+    };
+    const sections = extractStructuredChords(song);
+    expect(sections[0].endings).toBeUndefined();
+  });
+
+  it('multi-chord ending measures', () => {
+    const song: RawJazzStandard = {
+      Title: 'Test',
+      Sections: [{
+        MainSegment: { Chords: 'Dm7' },
+        Endings: [{ Chords: 'Cm7,F7|Bbmaj7' }],
+      }],
+    };
+    const sections = extractStructuredChords(song);
+    expect(sections[0].endings![0]).toEqual([['Cm7', 'F7'], ['Bbmaj7']]);
+  });
+
+  it('auto-labels unlabeled sections sequentially', () => {
+    const song: RawJazzStandard = {
+      Title: 'Test',
+      Sections: [
+        { Label: 'A', MainSegment: { Chords: 'Dm7' } },
+        { Label: 'B', MainSegment: { Chords: 'G7' } },
+        { MainSegment: { Chords: 'Cmaj7' } },
+      ],
+    };
+    const sections = extractStructuredChords(song);
+    expect(sections[2].label).toBe('C');
+  });
+
+  it('auto-labels all sections when none have labels', () => {
+    const song: RawJazzStandard = {
+      Title: 'Test',
+      Sections: [
+        { MainSegment: { Chords: 'Dm7' } },
+        { MainSegment: { Chords: 'G7' } },
+      ],
+    };
+    const sections = extractStructuredChords(song);
+    expect(sections[0].label).toBe('A');
+    expect(sections[1].label).toBe('B');
+  });
+
+  it('skips already-used labels when auto-labeling', () => {
+    const song: RawJazzStandard = {
+      Title: 'Test',
+      Sections: [
+        { Label: 'A', MainSegment: { Chords: 'Dm7' } },
+        { MainSegment: { Chords: 'G7' } },
+        { Label: 'B', MainSegment: { Chords: 'Cmaj7' } },
+        { MainSegment: { Chords: 'Am7' } },
+      ],
+    };
+    const sections = extractStructuredChords(song);
+    expect(sections[1].label).toBe('C');
+    expect(sections[3].label).toBe('D');
   });
 });
 
@@ -206,5 +317,45 @@ describe('songToProgression', () => {
     expect(prog.songKey).toEqual({ root: 'B♭', minor: false });
     expect(prog.chords[0].rootName).toBe('B♭');
     expect(prog.chords[0].quality).toBe('maj7');
+  });
+
+  it('includes all endings in chords[] and chartLayout', () => {
+    const song: RawJazzStandard = {
+      Title: 'Ending test',
+      Key: 'C',
+      Sections: [{
+        Label: 'A',
+        MainSegment: { Chords: 'Dm7|G7' },
+        Endings: [
+          { Chords: 'Cmaj7' },
+          { Chords: 'Am7' },
+        ],
+      }],
+    };
+    const prog = songToProgression(song);
+    // Flat chords: main(2) + ending1(1) + ending2(1) = 4
+    expect(prog.chords).toHaveLength(4);
+    expect(prog.chords[2].quality).toBe('maj7'); // ending 1
+    expect(prog.chords[3].quality).toBe('m7');   // ending 2
+
+    // Chart layout
+    const sec = prog.chartLayout!.sections[0];
+    expect(sec.measures).toHaveLength(2); // main only
+    expect(sec.endings).toHaveLength(2);
+    expect(sec.endings![0][0].chordIndices).toEqual([2]); // ending 1
+    expect(sec.endings![1][0].chordIndices).toEqual([3]); // ending 2
+  });
+
+  it('preserves repeats in chartLayout', () => {
+    const song: RawJazzStandard = {
+      Title: 'Repeat test',
+      Sections: [{
+        Label: 'A',
+        MainSegment: { Chords: 'Dm7|G7' },
+        Repeats: 1,
+      }],
+    };
+    const prog = songToProgression(song);
+    expect(prog.chartLayout!.sections[0].repeats).toBe(1);
   });
 });

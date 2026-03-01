@@ -3,8 +3,9 @@ import type { Progression, Position, ChordNotationPrefs } from '../../types';
 import { MODE_TEMPLATES, POS_COLORS, MODE_COLORS } from '../../constants';
 import {
   QUALITY_TO_MODES, rankPositionsByProximity, computeEffectiveSelections,
-  isDiatonic, displayChordName, resolveMode, buildFretMap, generatePositions,
+  resolveMode, buildFretMap, generatePositions,
 } from '../../utils';
+import { ChordChart } from './ChordChart';
 
 interface ProgressionPlayerProps {
   progression: Progression;
@@ -60,43 +61,14 @@ export function ProgressionPlayer({
 
   return (
     <div className="mb-3">
-      {/* Chord cards - horizontal scroll */}
-      <div className="flex gap-1 overflow-x-auto pb-1.5 mb-2">
-        {chords.map((c, i) => {
-          const active = i === activeChordIdx;
-          const supported = QUALITY_TO_MODES[c.quality] != null;
-          const diatonic = !progression.songKey || !supported || isDiatonic(c.rootName, c.quality, progression.songKey);
-          const eff = effectiveAll[i];
-          const borderColor = !supported ? '#333'
-            : !diatonic ? '#E67E22'
-            : active ? '#FFF'
-            : '#555';
-          return (
-            <button
-              key={i}
-              onClick={() => onChordSelect(i)}
-              className="rounded cursor-pointer font-mono shrink-0 px-3 py-1.5 text-center min-w-[56px]"
-              style={{
-                border: `2px solid ${borderColor}`,
-                background: active ? (diatonic ? '#2a2a2a' : '#2a2010') : '#111',
-                color: supported ? (active ? '#FFF' : '#AAA') : '#555',
-                opacity: supported ? 1 : 0.5,
-              }}
-            >
-              <div className="text-[12px] font-bold">{displayChordName(c, chordPrefs)}</div>
-              {supported && eff && (
-                <div className="text-[8px] mt-0.5" style={{ color: '#666' }}>
-                  {MODE_TEMPLATES[eff.modeIdx]?.name ?? '?'} · P{eff.posId}
-                  {active && (!isPosConfirmed || !isModeConfirmed) && ' ?'}
-                </div>
-              )}
-              {!supported && (
-                <div className="text-[8px] mt-0.5" style={{ color: '#555' }}>Skip</div>
-              )}
-            </button>
-          );
-        })}
-      </div>
+      {/* Chord chart grid */}
+      <ChordChart
+        progression={progression}
+        activeChordIdx={activeChordIdx}
+        effectiveAll={effectiveAll}
+        chordPrefs={chordPrefs}
+        onChordSelect={onChordSelect}
+      />
 
       {/* Active chord controls */}
       {activeChord && QUALITY_TO_MODES[activeChord.quality] && (
@@ -160,7 +132,7 @@ export function ProgressionPlayer({
 
       {/* Keyboard hint + reset */}
       <div className="flex items-center gap-3 mt-2">
-        <span className="text-[9px] text-text-dim">← → キーでコード移動</span>
+        <span className="text-[9px] text-text-dim">← → ↑ ↓ キーでコード移動</span>
         {chords.some(c => c.posConfirmed || c.modeConfirmed) && (
           <button onClick={onReset} className={btnBase}
             style={{ border: '1px solid #666', background: '#1a1a1a', color: '#999' }}>
