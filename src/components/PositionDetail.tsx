@@ -1,5 +1,6 @@
-import type { FretNote, Mode, Position } from '../types';
+import type { FretNote, Mode, Position, ChordNotationPrefs } from '../types';
 import { STR_LABELS, POS_COLORS } from '../constants';
+import { formatChordSymbol } from '../utils';
 
 interface PositionDetailProps {
   position: Position;
@@ -8,9 +9,10 @@ interface PositionDetailProps {
   ctSet: Set<string>;
   getLabel: (nn: string) => string;
   rootNote: string;
+  chordPrefs: ChordNotationPrefs;
 }
 
-export function PositionDetail({ position, mode, showCT, ctSet, getLabel, rootNote }: PositionDetailProps) {
+export function PositionDetail({ position, mode, showCT, ctSet, getLabel, rootNote, chordPrefs }: PositionDetailProps) {
   const posColor = POS_COLORS[position.id - 1];
   const deg = mode.degrees;
 
@@ -47,7 +49,7 @@ export function PositionDetail({ position, mode, showCT, ctSet, getLabel, rootNo
       ))}
       {showCT && (
         <div className="text-[10px] text-text-muted mt-1.5">
-          {mode.chord}: {mode.chordTones.map(n => `${n}(${deg[n]})`).join(' ')}
+          {formatChordSymbol(rootNote, mode.chordQuality, chordPrefs)}: {mode.chordTones.map(n => `${n}(${deg[n]})`).join(' ')}
         </div>
       )}
     </div>

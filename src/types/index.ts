@@ -11,5 +11,6 @@ export type {
   ModeTemplate,
   ChordSlot,
   SongKey,
+  ChordNotationPrefs,
   Progression,
 } from './music';

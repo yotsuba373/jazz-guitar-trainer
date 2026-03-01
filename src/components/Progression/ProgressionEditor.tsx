@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import type { Progression, ChordSlot, RootName, SongKey } from '../../types';
+import type { Progression, ChordSlot, RootName, SongKey, ChordNotationPrefs } from '../../types';
 import { ROOTS } from '../../constants';
-import { parseChordSymbol, buildChordSlot, suggestMode, PRESET_PROGRESSIONS } from '../../utils';
+import { parseChordSymbol, buildChordSlot, suggestMode, formatChordSymbol, PRESET_PROGRESSIONS } from '../../utils';
 
 interface ProgressionEditorProps {
   progressions: Progression[];
   activeProgIdx: number;
+  chordPrefs: ChordNotationPrefs;
   onSave: (progs: Progression[]) => void;
   onSelectProg: (idx: number) => void;
   onClose: () => void;
@@ -14,7 +15,7 @@ interface ProgressionEditorProps {
 const btnBase = 'rounded cursor-pointer text-[10px] font-mono px-2.5 py-[5px]';
 
 export function ProgressionEditor({
-  progressions, activeProgIdx, onSave, onSelectProg, onClose,
+  progressions, activeProgIdx, chordPrefs, onSave, onSelectProg, onClose,
 }: ProgressionEditorProps) {
   const prog = progressions[activeProgIdx] ?? { name: '', chords: [] };
   const [name, setName] = useState(prog.name);
@@ -199,7 +200,7 @@ export function ProgressionEditor({
       <div className="flex flex-wrap gap-1 mb-2 min-h-[28px]">
         {chords.map((c, i) => (
           <div key={i} className="flex items-center gap-0.5 bg-[#222] border border-[#444] rounded px-1.5 py-0.5">
-            <span className="text-[11px] text-text-primary font-mono">{c.symbol}</span>
+            <span className="text-[11px] text-text-primary font-mono">{formatChordSymbol(c.rootName, c.quality, chordPrefs)}</span>
             <button onClick={() => moveChord(i, -1)} className="text-[9px] text-text-dim hover:text-white cursor-pointer px-0.5">◀</button>
             <button onClick={() => moveChord(i, 1)} className="text-[9px] text-text-dim hover:text-white cursor-pointer px-0.5">▶</button>
             <button onClick={() => removeChord(i)} className="text-[9px] text-[#E74C3C] hover:text-white cursor-pointer px-0.5">×</button>

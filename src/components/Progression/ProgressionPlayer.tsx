@@ -1,15 +1,16 @@
 import { useMemo } from 'react';
-import type { Progression, Position } from '../../types';
+import type { Progression, Position, ChordNotationPrefs } from '../../types';
 import { MODE_TEMPLATES, POS_COLORS, MODE_COLORS } from '../../constants';
 import {
   QUALITY_TO_MODES, rankPositionsByProximity, computeEffectiveSelections,
-  isDiatonic, resolveMode, buildFretMap, generatePositions,
+  isDiatonic, formatChordSymbol, resolveMode, buildFretMap, generatePositions,
 } from '../../utils';
 
 interface ProgressionPlayerProps {
   progression: Progression;
   activeChordIdx: number;
   allPos: Position[];
+  chordPrefs: ChordNotationPrefs;
   onChordSelect: (idx: number) => void;
   onModeChange: (chordIdx: number, modeIdx: number) => void;
   onPosChange: (chordIdx: number, posId: number) => void;
@@ -19,7 +20,7 @@ interface ProgressionPlayerProps {
 const btnBase = 'rounded cursor-pointer text-[10px] font-mono px-2 py-[3px]';
 
 export function ProgressionPlayer({
-  progression, activeChordIdx, allPos,
+  progression, activeChordIdx, allPos, chordPrefs,
   onChordSelect, onModeChange, onPosChange, onReset,
 }: ProgressionPlayerProps) {
   const chords = progression.chords;
@@ -82,7 +83,7 @@ export function ProgressionPlayer({
                 opacity: supported ? 1 : 0.5,
               }}
             >
-              <div className="text-[12px] font-bold">{c.symbol}</div>
+              <div className="text-[12px] font-bold">{formatChordSymbol(c.rootName, c.quality, chordPrefs)}</div>
               {supported && eff && (
                 <div className="text-[8px] mt-0.5" style={{ color: '#666' }}>
                   {MODE_TEMPLATES[eff.modeIdx]?.name ?? '?'} · P{eff.posId}
