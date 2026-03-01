@@ -142,8 +142,8 @@ describe('extractStructuredChords', () => {
     const sections = extractStructuredChords(song);
     expect(sections[0].measures).toHaveLength(2); // main only
     expect(sections[0].endings).toHaveLength(2);
-    expect(sections[0].endings![0]).toEqual([['Cmaj7']]);
-    expect(sections[0].endings![1]).toEqual([['Am7']]);
+    expect(sections[0].endings![0]).toEqual([[{ chord: 'Cmaj7', beats: 1 }]]);
+    expect(sections[0].endings![1]).toEqual([[{ chord: 'Am7', beats: 1 }]]);
   });
 
   it('preserves repeats field', () => {
@@ -177,7 +177,23 @@ describe('extractStructuredChords', () => {
       }],
     };
     const sections = extractStructuredChords(song);
-    expect(sections[0].endings![0]).toEqual([['Cm7', 'F7'], ['Bbmaj7']]);
+    expect(sections[0].endings![0]).toEqual([
+      [{ chord: 'Cm7', beats: 1 }, { chord: 'F7', beats: 1 }],
+      [{ chord: 'Bbmaj7', beats: 1 }],
+    ]);
+  });
+
+  it('preserves beat widths from empty comma slots', () => {
+    const song: RawJazzStandard = {
+      Title: 'Test',
+      Sections: [{ MainSegment: { Chords: 'Cm7,,Eb7,E7' } }],
+    };
+    const sections = extractStructuredChords(song);
+    expect(sections[0].measures[0]).toEqual([
+      { chord: 'Cm7', beats: 2 },
+      { chord: 'Eb7', beats: 1 },
+      { chord: 'E7', beats: 1 },
+    ]);
   });
 
   it('auto-labels unlabeled sections sequentially', () => {
@@ -344,6 +360,16 @@ describe('songToProgression', () => {
     expect(sec.endings).toHaveLength(2);
     expect(sec.endings![0][0].chordIndices).toEqual([2]); // ending 1
     expect(sec.endings![1][0].chordIndices).toEqual([3]); // ending 2
+  });
+
+  it('propagates beat widths to chartLayout', () => {
+    const song: RawJazzStandard = {
+      Title: 'Beat test',
+      Sections: [{ MainSegment: { Chords: 'Cm7,,Eb7,E7|Dm7' } }],
+    };
+    const prog = songToProgression(song);
+    expect(prog.chartLayout!.sections[0].measures[0].beatWidths).toEqual([2, 1, 1]);
+    expect(prog.chartLayout!.sections[0].measures[1].beatWidths).toEqual([1]);
   });
 
   it('preserves repeats in chartLayout', () => {

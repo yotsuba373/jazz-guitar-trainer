@@ -121,7 +121,14 @@ export function ChordChart({
                   <span>•</span><span>•</span>
                 </span>
               )}
-              {measure.chordIndices.map(ci => renderChord(ci))}
+              {measure.chordIndices.map((ci, i) => {
+                const beats = measure.beatWidths?.[i] ?? 1;
+                return (
+                  <div key={ci} style={{ flex: beats }}>
+                    {renderChord(ci)}
+                  </div>
+                );
+              })}
               {isLastCell && opts.repeatEnd && (
                 <span className="flex flex-col text-[8px] leading-[6px] text-[#888] ml-auto -mr-1">
                   <span>•</span><span>•</span>
