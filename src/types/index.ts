@@ -13,4 +13,6 @@ export type {
   SongKey,
   ChordNotationPrefs,
   Progression,
+  RawJazzStandard,
+  RawSection,
 } from './music';

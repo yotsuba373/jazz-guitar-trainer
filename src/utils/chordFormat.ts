@@ -16,6 +16,27 @@ export const CHORD_NOTATION_OPTIONS: Record<keyof ChordNotationPrefs, string[]> 
   'm7♭5': ['m7♭5', 'ø7'],
 };
 
+/** All suffixes that should use notation preferences (not extended chords like 6, 7b9) */
+const BASE_SUFFIXES = new Set(
+  Object.values(CHORD_NOTATION_OPTIONS).flat(),
+);
+
+/**
+ * Display a chord name: applies notation preferences only for base qualities
+ * (M7/maj7/△7, m7/mi7/-7, 7, m7♭5/ø7). Extended chords (6, 7b9, dim7 etc.)
+ * are displayed with their original symbol.
+ */
+export function displayChordName(
+  slot: { symbol: string; rootName: string; quality: string },
+  prefs: ChordNotationPrefs,
+): string {
+  const suffix = slot.symbol.slice(slot.rootName.length);
+  if (BASE_SUFFIXES.has(suffix)) {
+    return formatChordSymbol(slot.rootName, slot.quality, prefs);
+  }
+  return slot.symbol;
+}
+
 const STORAGE_KEY = 'jazz-guitar-chord-notation';
 
 /** Format a chord symbol using user preferences: root + preferred quality display */

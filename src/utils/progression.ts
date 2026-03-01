@@ -26,27 +26,53 @@ ROOT_LOOKUP['F#'] = 'G♭';
 ROOT_LOOKUP['G#'] = 'A♭';
 ROOT_LOOKUP['A#'] = 'B♭';
 
-// Quality patterns ordered so longer patterns match first
+// Quality patterns: [regex, mapped quality family]
+// Order matters: longer/more-specific patterns first
 const QUALITY_PATTERNS: [RegExp, string][] = [
-  [/^△7$/, 'maj7'],
-  [/^M7$/, 'maj7'],
-  [/^maj7$/, 'maj7'],
-  [/^m7♭5$/, 'm7♭5'],
-  [/^m7b5$/, 'm7♭5'],
-  [/^ø7$/, 'm7♭5'],
-  [/^mi7$/, 'm7'],
-  [/^-7$/, 'm7'],
-  [/^m7$/, 'm7'],
-  [/^7$/, '7'],
+  // --- half-diminished (before m7 to avoid partial match) ---
+  [/^m7[♭b]5/, 'm7♭5'],
+  [/^[øo]7?$/, 'm7♭5'],
+
+  // --- diminished (separate from m7♭5, Skip for now) ---
+  [/^dim/, 'dim'],
+  [/^0[7]?$/, 'dim'],
+
+  // --- minor family (m/maj7, m6 etc. before generic m7) ---
+  [/^m\/maj7/, 'm7'],
+  [/^mi7/, 'm7'],
+  [/^-7/, 'm7'],
+  [/^m6/, 'm7'],
+  [/^m9/, 'm7'],
+  [/^m11/, 'm7'],
+  [/^m13/, 'm7'],
+  [/^m69/, 'm7'],
+  [/^m7/, 'm7'],
+  [/^m$/, 'm7'],
+
+  // --- major family ---
+  [/^[△Δ]7/, 'maj7'],
+  [/^M[79]/, 'maj7'],
+  [/^maj[79]/, 'maj7'],
+  [/^maj1[13]/, 'maj7'],
+  [/^69$/, 'maj7'],
+  [/^6$/, 'maj7'],
+
+  // --- dominant family (prefix match covers 7b9, 7#11, 7sus, 7alt, etc.) ---
+  [/^7/, '7'],
+  [/^9/, '7'],
+  [/^13/, '7'],
+  [/^11$/, '7'],
 ];
 
 /**
- * Parse a chord symbol like "Dm7", "B♭maj7", "F#m7b5" into root + quality.
- * Returns null for unsupported chord types.
+ * Parse a chord symbol like "Dm7", "C7b9", "F#m7b5" into root + quality + suffix.
+ * quality = mapped family for mode suggestion (maj7/m7/7/m7♭5/dim).
+ * suffix = original quality string for display (e.g. "7b9", "m6", "dim7").
+ * Returns null for unrecognized chord types.
  */
 export function parseChordSymbol(
   symbol: string,
-): { rootName: RootName; quality: string } | null {
+): { rootName: RootName; quality: string; suffix: string } | null {
   const trimmed = symbol.trim();
   if (!trimmed) return null;
 
@@ -58,12 +84,13 @@ export function parseChordSymbol(
   const rootName = ROOT_LOOKUP[rootStr];
   if (!rootName) return null;
 
-  const qualityStr = trimmed.slice(rootMatch[0].length);
+  // Strip slash bass note (e.g. "m7/Bb" → "m7")
+  const qualityStr = trimmed.slice(rootMatch[0].length).replace(/\/[A-G][♭♯#b]?$/, '');
   if (!qualityStr) return null;
 
   for (const [pattern, quality] of QUALITY_PATTERNS) {
     if (pattern.test(qualityStr)) {
-      return { rootName, quality };
+      return { rootName, quality, suffix: qualityStr };
     }
   }
 
@@ -107,22 +134,15 @@ function minInstanceDistance(a: Position, b: Position): number {
   return min === Infinity ? 0 : min;
 }
 
-const QUALITY_DISPLAY: Record<string, string> = {
-  'maj7': 'M7',
-  'm7': 'm7',
-  '7': '7',
-  'm7♭5': 'm7♭5',
-};
-
 /**
- * Normalize a chord symbol for display: root in Unicode + quality in standard form.
- * e.g. "Dbmaj7" → "D♭M7", "CM7" → "CM7", "Dm7" → "Dm7"
+ * Normalize a chord symbol for display: root in Unicode + original suffix.
+ * e.g. "Dbmaj7" → "D♭maj7", "Bb7b9" → "B♭7b9", "F#dim7" → "G♭dim7"
  */
 export function normalizeChordSymbol(
   _symbol: string,
-  parsed: { rootName: RootName; quality: string },
+  parsed: { rootName: RootName; quality: string; suffix: string },
 ): string {
-  return parsed.rootName + (QUALITY_DISPLAY[parsed.quality] ?? parsed.quality);
+  return parsed.rootName + parsed.suffix;
 }
 
 /** Major scale semitone → degree index mapping */
@@ -310,7 +330,7 @@ export function computeEffectiveSelections(
  */
 export function buildChordSlot(
   symbol: string,
-  parsed: { rootName: RootName; quality: string },
+  parsed: { rootName: RootName; quality: string; suffix: string },
   prevPosId?: number,
   songKey?: SongKey,
 ): ChordSlot {

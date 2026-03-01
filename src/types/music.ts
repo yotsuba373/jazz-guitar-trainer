@@ -87,3 +87,17 @@ export interface Progression {
   songKey?: SongKey;    // song key for smart mode suggestion
   chords: ChordSlot[];
 }
+
+/** Raw song entry from JazzStandards.json */
+export interface RawJazzStandard {
+  Title: string;
+  Composer?: string;
+  Key?: string;
+  Sections: RawSection[];
+}
+
+export interface RawSection {
+  Label?: string;
+  MainSegment: { Chords: string };
+  Endings?: { Chords: string }[];
+}

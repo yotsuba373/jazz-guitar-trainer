@@ -21,4 +21,10 @@ export {
   saveChordNotationPrefs,
   CHORD_NOTATION_OPTIONS,
   DEFAULT_CHORD_PREFS,
+  displayChordName,
 } from './chordFormat';
+export {
+  fetchJazzStandards,
+  searchSongs,
+  songToProgression,
+} from './jazzStandards';

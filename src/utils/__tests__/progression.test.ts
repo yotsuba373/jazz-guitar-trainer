@@ -20,37 +20,33 @@ import type { Position } from '../../types';
 
 /* ── parseChordSymbol ──────────────────────────────────── */
 
-describe('parseChordSymbol', () => {
+describe('parseChordSymbol — base qualities', () => {
   it('Dm7 → D, m7', () => {
-    expect(parseChordSymbol('Dm7')).toEqual({ rootName: 'D', quality: 'm7' });
+    expect(parseChordSymbol('Dm7')).toEqual({ rootName: 'D', quality: 'm7', suffix: 'm7' });
   });
 
   it('G7 → G, 7', () => {
-    expect(parseChordSymbol('G7')).toEqual({ rootName: 'G', quality: '7' });
+    expect(parseChordSymbol('G7')).toEqual({ rootName: 'G', quality: '7', suffix: '7' });
   });
 
   it('Cmaj7 → C, maj7', () => {
-    expect(parseChordSymbol('Cmaj7')).toEqual({ rootName: 'C', quality: 'maj7' });
+    expect(parseChordSymbol('Cmaj7')).toEqual({ rootName: 'C', quality: 'maj7', suffix: 'maj7' });
   });
 
   it('B♭maj7 → B♭, maj7', () => {
-    expect(parseChordSymbol('B♭maj7')).toEqual({ rootName: 'B♭', quality: 'maj7' });
+    expect(parseChordSymbol('B♭maj7')).toEqual({ rootName: 'B♭', quality: 'maj7', suffix: 'maj7' });
   });
 
   it('Bbmaj7 (ASCII flat) → B♭, maj7', () => {
-    expect(parseChordSymbol('Bbmaj7')).toEqual({ rootName: 'B♭', quality: 'maj7' });
+    expect(parseChordSymbol('Bbmaj7')).toEqual({ rootName: 'B♭', quality: 'maj7', suffix: 'maj7' });
   });
 
   it('F#m7b5 → G♭, m7♭5', () => {
-    expect(parseChordSymbol('F#m7b5')).toEqual({ rootName: 'G♭', quality: 'm7♭5' });
+    expect(parseChordSymbol('F#m7b5')).toEqual({ rootName: 'G♭', quality: 'm7♭5', suffix: 'm7b5' });
   });
 
   it('E♭m7 → E♭, m7', () => {
-    expect(parseChordSymbol('E♭m7')).toEqual({ rootName: 'E♭', quality: 'm7' });
-  });
-
-  it('returns null for unsupported quality (dim)', () => {
-    expect(parseChordSymbol('Bdim')).toBeNull();
+    expect(parseChordSymbol('E♭m7')).toEqual({ rootName: 'E♭', quality: 'm7', suffix: 'm7' });
   });
 
   it('returns null for empty string', () => {
@@ -62,15 +58,123 @@ describe('parseChordSymbol', () => {
   });
 
   it('trims whitespace', () => {
-    expect(parseChordSymbol('  Am7  ')).toEqual({ rootName: 'A', quality: 'm7' });
+    expect(parseChordSymbol('  Am7  ')).toEqual({ rootName: 'A', quality: 'm7', suffix: 'm7' });
   });
 
   it('CM7 → C, maj7 (M7 alias)', () => {
-    expect(parseChordSymbol('CM7')).toEqual({ rootName: 'C', quality: 'maj7' });
+    expect(parseChordSymbol('CM7')).toEqual({ rootName: 'C', quality: 'maj7', suffix: 'M7' });
   });
 
   it('BbM7 → B♭, maj7 (M7 alias with flat)', () => {
-    expect(parseChordSymbol('BbM7')).toEqual({ rootName: 'B♭', quality: 'maj7' });
+    expect(parseChordSymbol('BbM7')).toEqual({ rootName: 'B♭', quality: 'maj7', suffix: 'M7' });
+  });
+});
+
+describe('parseChordSymbol — extended chords', () => {
+  // Major family → quality: 'maj7'
+  it('C6 → maj7', () => {
+    const r = parseChordSymbol('C6');
+    expect(r).toMatchObject({ rootName: 'C', quality: 'maj7', suffix: '6' });
+  });
+  it('C69 → maj7', () => {
+    expect(parseChordSymbol('C69')).toMatchObject({ quality: 'maj7', suffix: '69' });
+  });
+  it('Cmaj9 → maj7', () => {
+    expect(parseChordSymbol('Cmaj9')).toMatchObject({ quality: 'maj7', suffix: 'maj9' });
+  });
+  it('Cmaj7#11 → maj7', () => {
+    expect(parseChordSymbol('Cmaj7#11')).toMatchObject({ quality: 'maj7', suffix: 'maj7#11' });
+  });
+  it('CM9 → maj7', () => {
+    expect(parseChordSymbol('CM9')).toMatchObject({ quality: 'maj7', suffix: 'M9' });
+  });
+
+  // Minor family → quality: 'm7'
+  it('Cm → m7', () => {
+    expect(parseChordSymbol('Cm')).toMatchObject({ rootName: 'C', quality: 'm7', suffix: 'm' });
+  });
+  it('Cm6 → m7', () => {
+    expect(parseChordSymbol('Cm6')).toMatchObject({ quality: 'm7', suffix: 'm6' });
+  });
+  it('Cm9 → m7', () => {
+    expect(parseChordSymbol('Cm9')).toMatchObject({ quality: 'm7', suffix: 'm9' });
+  });
+  it('Cm11 → m7', () => {
+    expect(parseChordSymbol('Cm11')).toMatchObject({ quality: 'm7', suffix: 'm11' });
+  });
+  it('Cm/maj7 → m7', () => {
+    expect(parseChordSymbol('Cm/maj7')).toMatchObject({ quality: 'm7', suffix: 'm/maj7' });
+  });
+  it('Cm69 → m7', () => {
+    expect(parseChordSymbol('Cm69')).toMatchObject({ quality: 'm7', suffix: 'm69' });
+  });
+
+  // Dominant family → quality: '7'
+  it('C7b9 → 7', () => {
+    expect(parseChordSymbol('C7b9')).toMatchObject({ quality: '7', suffix: '7b9' });
+  });
+  it('C7#9 → 7', () => {
+    expect(parseChordSymbol('C7#9')).toMatchObject({ quality: '7', suffix: '7#9' });
+  });
+  it('C7#11 → 7', () => {
+    expect(parseChordSymbol('C7#11')).toMatchObject({ quality: '7', suffix: '7#11' });
+  });
+  it('C7b13 → 7', () => {
+    expect(parseChordSymbol('C7b13')).toMatchObject({ quality: '7', suffix: '7b13' });
+  });
+  it('C7alt → 7', () => {
+    expect(parseChordSymbol('C7alt')).toMatchObject({ quality: '7', suffix: '7alt' });
+  });
+  it('C7sus → 7', () => {
+    expect(parseChordSymbol('C7sus')).toMatchObject({ quality: '7', suffix: '7sus' });
+  });
+  it('C7#5 → 7', () => {
+    expect(parseChordSymbol('C7#5')).toMatchObject({ quality: '7', suffix: '7#5' });
+  });
+  it('C7b5 → 7', () => {
+    expect(parseChordSymbol('C7b5')).toMatchObject({ quality: '7', suffix: '7b5' });
+  });
+  it('C9 → 7', () => {
+    expect(parseChordSymbol('C9')).toMatchObject({ quality: '7', suffix: '9' });
+  });
+  it('C13 → 7', () => {
+    expect(parseChordSymbol('C13')).toMatchObject({ quality: '7', suffix: '13' });
+  });
+  it('C9sus → 7', () => {
+    expect(parseChordSymbol('C9sus')).toMatchObject({ quality: '7', suffix: '9sus' });
+  });
+  it('C13sus → 7', () => {
+    expect(parseChordSymbol('C13sus')).toMatchObject({ quality: '7', suffix: '13sus' });
+  });
+
+  // Diminished → quality: 'dim' (Skip, not mapped to m7♭5)
+  it('Cdim → dim', () => {
+    expect(parseChordSymbol('Cdim')).toMatchObject({ quality: 'dim', suffix: 'dim' });
+  });
+  it('Cdim7 → dim', () => {
+    expect(parseChordSymbol('Cdim7')).toMatchObject({ quality: 'dim', suffix: 'dim7' });
+  });
+  it('C07 → dim', () => {
+    expect(parseChordSymbol('C07')).toMatchObject({ quality: 'dim', suffix: '07' });
+  });
+
+  // Half-diminished
+  it('Cø7 → m7♭5', () => {
+    expect(parseChordSymbol('Cø7')).toMatchObject({ quality: 'm7♭5', suffix: 'ø7' });
+  });
+  it('Cø → m7♭5', () => {
+    expect(parseChordSymbol('Cø')).toMatchObject({ quality: 'm7♭5', suffix: 'ø' });
+  });
+
+  // Slash chords — strip bass note
+  it('Fm7/Bb → root=F, quality=m7', () => {
+    expect(parseChordSymbol('Fm7/Bb')).toMatchObject({ rootName: 'F', quality: 'm7', suffix: 'm7' });
+  });
+  it('Cmaj7/E → root=C, quality=maj7', () => {
+    expect(parseChordSymbol('Cmaj7/E')).toMatchObject({ rootName: 'C', quality: 'maj7', suffix: 'maj7' });
+  });
+  it('Dm7b5/G → root=D, quality=m7♭5', () => {
+    expect(parseChordSymbol('Dm7b5/G')).toMatchObject({ rootName: 'D', quality: 'm7♭5' });
   });
 });
 
@@ -146,8 +250,8 @@ describe('rankPositionsByProximity', () => {
 
 describe('buildChordSlot', () => {
   it('builds slot with first compatible mode and default posId', () => {
-    const slot = buildChordSlot('Dm7', { rootName: 'D', quality: 'm7' });
-    expect(slot.symbol).toBe('Dm7'); // normalized
+    const slot = buildChordSlot('Dm7', { rootName: 'D', quality: 'm7', suffix: 'm7' });
+    expect(slot.symbol).toBe('Dm7');
     expect(slot.rootName).toBe('D');
     expect(slot.quality).toBe('m7');
     expect(slot.modeIdx).toBe(1); // Dorian (first m7 mode)
@@ -157,17 +261,23 @@ describe('buildChordSlot', () => {
   });
 
   it('uses prevPosId when provided', () => {
-    const slot = buildChordSlot('G7', { rootName: 'G', quality: '7' }, 3);
+    const slot = buildChordSlot('G7', { rootName: 'G', quality: '7', suffix: '7' }, 3);
     expect(slot.posId).toBe(3);
   });
 
-  it('normalizes symbol: Cmaj7 → CM7', () => {
-    const slot = buildChordSlot('Cmaj7', { rootName: 'C', quality: 'maj7' });
-    expect(slot.symbol).toBe('CM7');
+  it('preserves suffix in symbol: Cmaj7 → Cmaj7', () => {
+    const slot = buildChordSlot('Cmaj7', { rootName: 'C', quality: 'maj7', suffix: 'maj7' });
+    expect(slot.symbol).toBe('Cmaj7');
+  });
+
+  it('preserves extended suffix: C7b9 → C7b9', () => {
+    const slot = buildChordSlot('C7b9', { rootName: 'C', quality: '7', suffix: '7b9' });
+    expect(slot.symbol).toBe('C7b9');
+    expect(slot.quality).toBe('7');
   });
 
   it('uses suggestMode when songKey is provided', () => {
-    const slot = buildChordSlot('Dm7', { rootName: 'D', quality: 'm7' }, 1, { root: 'C', minor: false });
+    const slot = buildChordSlot('Dm7', { rootName: 'D', quality: 'm7', suffix: 'm7' }, 1, { root: 'C', minor: false });
     expect(slot.modeIdx).toBe(1); // Dorian (II of C)
   });
 });
@@ -175,24 +285,32 @@ describe('buildChordSlot', () => {
 /* ── normalizeChordSymbol ──────────────────────────────── */
 
 describe('normalizeChordSymbol', () => {
-  it('maj7 → M7', () => {
-    expect(normalizeChordSymbol('Cmaj7', { rootName: 'C', quality: 'maj7' })).toBe('CM7');
+  it('preserves suffix: maj7', () => {
+    expect(normalizeChordSymbol('Cmaj7', { rootName: 'C', quality: 'maj7', suffix: 'maj7' })).toBe('Cmaj7');
   });
 
-  it('m7 stays m7', () => {
-    expect(normalizeChordSymbol('Dm7', { rootName: 'D', quality: 'm7' })).toBe('Dm7');
+  it('preserves suffix: m7', () => {
+    expect(normalizeChordSymbol('Dm7', { rootName: 'D', quality: 'm7', suffix: 'm7' })).toBe('Dm7');
   });
 
-  it('normalizes root: Db → D♭', () => {
-    expect(normalizeChordSymbol('Dbmaj7', { rootName: 'D♭', quality: 'maj7' })).toBe('D♭M7');
+  it('normalizes root: Db → D♭, preserves suffix', () => {
+    expect(normalizeChordSymbol('Dbmaj7', { rootName: 'D♭', quality: 'maj7', suffix: 'maj7' })).toBe('D♭maj7');
   });
 
-  it('7 stays 7', () => {
-    expect(normalizeChordSymbol('G7', { rootName: 'G', quality: '7' })).toBe('G7');
+  it('preserves suffix: 7', () => {
+    expect(normalizeChordSymbol('G7', { rootName: 'G', quality: '7', suffix: '7' })).toBe('G7');
   });
 
-  it('m7♭5 stays m7♭5', () => {
-    expect(normalizeChordSymbol('Bm7b5', { rootName: 'B', quality: 'm7♭5' })).toBe('Bm7♭5');
+  it('preserves extended suffix: 7b9', () => {
+    expect(normalizeChordSymbol('C7b9', { rootName: 'C', quality: '7', suffix: '7b9' })).toBe('C7b9');
+  });
+
+  it('preserves extended suffix: dim7', () => {
+    expect(normalizeChordSymbol('Cdim7', { rootName: 'C', quality: 'dim', suffix: 'dim7' })).toBe('Cdim7');
+  });
+
+  it('normalizes root with extended suffix: Bb7#9 → B♭7#9', () => {
+    expect(normalizeChordSymbol('Bb7#9', { rootName: 'B♭', quality: '7', suffix: '7#9' })).toBe('B♭7#9');
   });
 });
 

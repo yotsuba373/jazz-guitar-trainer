@@ -3,7 +3,7 @@ import type { Progression, Position, ChordNotationPrefs } from '../../types';
 import { MODE_TEMPLATES, POS_COLORS, MODE_COLORS } from '../../constants';
 import {
   QUALITY_TO_MODES, rankPositionsByProximity, computeEffectiveSelections,
-  isDiatonic, formatChordSymbol, resolveMode, buildFretMap, generatePositions,
+  isDiatonic, displayChordName, resolveMode, buildFretMap, generatePositions,
 } from '../../utils';
 
 interface ProgressionPlayerProps {
@@ -83,7 +83,7 @@ export function ProgressionPlayer({
                 opacity: supported ? 1 : 0.5,
               }}
             >
-              <div className="text-[12px] font-bold">{formatChordSymbol(c.rootName, c.quality, chordPrefs)}</div>
+              <div className="text-[12px] font-bold">{displayChordName(c, chordPrefs)}</div>
               {supported && eff && (
                 <div className="text-[8px] mt-0.5" style={{ color: '#666' }}>
                   {MODE_TEMPLATES[eff.modeIdx]?.name ?? '?'} · P{eff.posId}
