@@ -84,6 +84,7 @@ export interface SongKey {
 /** A single measure in the chart layout (contains chord indices into Progression.chords[]) */
 export interface ChartMeasure {
   chordIndices: number[];
+  beatWidths?: number[];  // parallel array of beat counts per chord (e.g. [2,1,1])
 }
 
 /** A section of measures (e.g., "A", "B", "Intro") */

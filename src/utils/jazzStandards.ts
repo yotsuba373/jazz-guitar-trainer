@@ -50,11 +50,17 @@ export function parseSongKey(keyStr?: string): SongKey | undefined {
 
 // --- Chord extraction ---
 
+/** A chord within a measure, with beat duration. */
+export interface MeasureChord {
+  chord: string;
+  beats: number;
+}
+
 /** Structured section with measure boundaries preserved. */
 export interface StructuredSection {
   label: string;
-  measures: string[][];
-  endings?: string[][][];  // each ending is an array of measures
+  measures: MeasureChord[][];
+  endings?: MeasureChord[][][];
   repeats?: number;
 }
 
@@ -79,17 +85,23 @@ export function extractStructuredChords(song: RawJazzStandard): StructuredSectio
   const sections: StructuredSection[] = [];
   let lastChord = '';
 
-  function parseMeasures(chordStr: string): string[][] {
-    const measures: string[][] = [];
+  function parseMeasures(chordStr: string): MeasureChord[][] {
+    const measures: MeasureChord[][] = [];
     for (const measureStr of chordStr.split('|')) {
-      const measure: string[] = [];
+      const measure: MeasureChord[] = [];
       for (const raw of measureStr.split(',')) {
         const chord = raw.trim();
-        if (!chord) continue;
+        if (!chord) {
+          // Empty comma slot → extend previous chord's beat count
+          if (measure.length > 0) {
+            measure[measure.length - 1].beats++;
+          }
+          continue;
+        }
         if (chord === '%') {
-          if (lastChord) measure.push(lastChord);
+          if (lastChord) measure.push({ chord: lastChord, beats: 1 });
         } else {
-          measure.push(chord);
+          measure.push({ chord, beats: 1 });
           lastChord = chord;
         }
       }
@@ -105,7 +117,7 @@ export function extractStructuredChords(song: RawJazzStandard): StructuredSectio
     const label = rawLabel || nextAutoLabel();
     const measures = parseMeasures(section.MainSegment.Chords);
 
-    let endings: string[][][] | undefined;
+    let endings: MeasureChord[][][] | undefined;
     if (section.Endings && section.Endings.length > 0) {
       endings = section.Endings.map(e => parseMeasures(e.Chords));
     }
@@ -122,10 +134,10 @@ export function extractStructuredChords(song: RawJazzStandard): StructuredSectio
 export function extractChordSymbols(song: RawJazzStandard): string[] {
   const result: string[] = [];
   for (const sec of extractStructuredChords(song)) {
-    result.push(...sec.measures.flat());
+    result.push(...sec.measures.flat().map(mc => mc.chord));
     if (sec.endings) {
       for (const ending of sec.endings) {
-        result.push(...ending.flat());
+        result.push(...ending.flat().map(mc => mc.chord));
       }
     }
   }
@@ -142,9 +154,10 @@ export function songToProgression(song: RawJazzStandard): Progression {
   const chords: ChordSlot[] = [];
   const chartSections: ChartSection[] = [];
 
-  function pushChords(symbols: string[]): number[] {
+  function pushMeasureChords(items: MeasureChord[]): { indices: number[], beats: number[] } {
     const indices: number[] = [];
-    for (const sym of symbols) {
+    const beats: number[] = [];
+    for (const { chord: sym, beats: b } of items) {
       const idx = chords.length;
       const parsed = parseChordSymbol(sym);
       if (parsed) {
@@ -157,17 +170,24 @@ export function songToProgression(song: RawJazzStandard): Progression {
         });
       }
       indices.push(idx);
+      beats.push(b);
     }
-    return indices;
+    return { indices, beats };
   }
 
   for (const sec of structured) {
-    const chartMeasures = sec.measures.map(m => ({ chordIndices: pushChords(m) }));
+    const chartMeasures = sec.measures.map(m => {
+      const { indices, beats } = pushMeasureChords(m);
+      return { chordIndices: indices, beatWidths: beats };
+    });
 
-    let chartEndings: { chordIndices: number[] }[][] | undefined;
+    let chartEndings: { chordIndices: number[], beatWidths: number[] }[][] | undefined;
     if (sec.endings) {
       chartEndings = sec.endings.map(ending =>
-        ending.map(m => ({ chordIndices: pushChords(m) })),
+        ending.map(m => {
+          const { indices, beats } = pushMeasureChords(m);
+          return { chordIndices: indices, beatWidths: beats };
+        }),
       );
     }
 
