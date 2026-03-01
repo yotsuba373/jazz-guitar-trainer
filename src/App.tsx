@@ -6,6 +6,7 @@ import {
   loadProgressions, saveProgressions, QUALITY_TO_MODES,
   computeEffectiveSelections,
   formatChordSymbol, loadChordNotationPrefs, saveChordNotationPrefs,
+  getChartLayout, buildChordRows,
 } from './utils';
 import { Fretboard } from './components/Fretboard';
 import { RootSelector, ModeSelector, PositionSelector, OptionBar } from './components/Controls';
@@ -76,6 +77,20 @@ export default function App() {
     } else if (e.key === 'ArrowLeft') {
       e.preventDefault();
       setActiveChordIdx(i => Math.max(i - 1, 0));
+    } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      const layout = getChartLayout(activeProg);
+      const rows = buildChordRows(layout);
+      setActiveChordIdx(cur => {
+        const curRow = rows.findIndex(row => row.includes(cur));
+        if (curRow < 0) return cur;
+        const posInRow = rows[curRow].indexOf(cur);
+        const targetRow = e.key === 'ArrowUp'
+          ? Math.max(0, curRow - 1)
+          : Math.min(rows.length - 1, curRow + 1);
+        const target = rows[targetRow];
+        return target[Math.min(posInRow, target.length - 1)];
+      });
     }
   }, [progMode, editing, activeProg]);
 

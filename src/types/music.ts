@@ -81,11 +81,31 @@ export interface SongKey {
   minor: boolean;
 }
 
+/** A single measure in the chart layout (contains chord indices into Progression.chords[]) */
+export interface ChartMeasure {
+  chordIndices: number[];
+}
+
+/** A section of measures (e.g., "A", "B", "Intro") */
+export interface ChartSection {
+  label: string;
+  measures: ChartMeasure[];
+  endings?: ChartMeasure[][];  // endings[0]=1st ending measures, endings[1]=2nd, etc.
+  repeats?: number;            // 1=play twice (standard repeat)
+}
+
+/** Chart layout metadata — how chords[] maps to a visual grid */
+export interface ChartLayout {
+  sections: ChartSection[];
+  barsPerRow: number;
+}
+
 /** A saveable chord progression */
 export interface Progression {
   name: string;
   songKey?: SongKey;    // song key for smart mode suggestion
   chords: ChordSlot[];
+  chartLayout?: ChartLayout;  // optional chart display layout
 }
 
 /** Raw song entry from JazzStandards.json */
@@ -99,5 +119,6 @@ export interface RawJazzStandard {
 export interface RawSection {
   Label?: string;
   MainSegment: { Chords: string };
+  Repeats?: number;
   Endings?: { Chords: string }[];
 }

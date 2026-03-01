@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { Progression, ChordSlot, RootName, SongKey, ChordNotationPrefs } from '../../types';
+import type { Progression, ChordSlot, ChartLayout, RootName, SongKey, ChordNotationPrefs } from '../../types';
 import { ROOTS } from '../../constants';
 import { parseChordSymbol, buildChordSlot, suggestMode, displayChordName, PRESET_PROGRESSIONS } from '../../utils';
 import { SongImporter } from './SongImporter';
@@ -22,6 +22,7 @@ export function ProgressionEditor({
   const [name, setName] = useState(prog.name);
   const [songKey, setSongKey] = useState<SongKey | undefined>(prog.songKey);
   const [chords, setChords] = useState<ChordSlot[]>([...prog.chords]);
+  const [chartLayout, setChartLayout] = useState<ChartLayout | undefined>(prog.chartLayout);
   const [input, setInput] = useState('');
   const [error, setError] = useState('');
   const [showImporter, setShowImporter] = useState(false);
@@ -37,11 +38,13 @@ export function ProgressionEditor({
     setError('');
     const prevPosId = chords.length > 0 ? chords[chords.length - 1].posId : 1;
     setChords([...chords, buildChordSlot(trimmed, parsed, prevPosId, songKey)]);
+    setChartLayout(undefined); // invalidate: chords changed
     setInput('');
   }
 
   function removeChord(idx: number) {
     setChords(chords.filter((_, i) => i !== idx));
+    setChartLayout(undefined);
   }
 
   function moveChord(idx: number, dir: -1 | 1) {
@@ -50,10 +53,11 @@ export function ProgressionEditor({
     const copy = [...chords];
     [copy[idx], copy[next]] = [copy[next], copy[idx]];
     setChords(copy);
+    setChartLayout(undefined);
   }
 
   function handleSave() {
-    const updated: Progression = { name: name || 'Untitled', songKey, chords };
+    const updated: Progression = { name: name || 'Untitled', songKey, chords, chartLayout };
     const copy = [...progressions];
     if (activeProgIdx < copy.length) {
       copy[activeProgIdx] = updated;
@@ -70,6 +74,7 @@ export function ProgressionEditor({
     setName('New');
     setSongKey(undefined);
     setChords([]);
+    setChartLayout(undefined);
   }
 
   function handleDelete() {
@@ -81,18 +86,21 @@ export function ProgressionEditor({
     setName(copy[newIdx].name);
     setSongKey(copy[newIdx].songKey);
     setChords([...copy[newIdx].chords]);
+    setChartLayout(copy[newIdx].chartLayout);
   }
 
   function handleLoadPreset(preset: Progression) {
     setName(preset.name);
     setSongKey(preset.songKey);
     setChords([...preset.chords]);
+    setChartLayout(preset.chartLayout);
   }
 
   function handleImport(imported: Progression) {
     setName(imported.name);
     setSongKey(imported.songKey);
     setChords([...imported.chords]);
+    setChartLayout(imported.chartLayout);
     setShowImporter(false);
   }
 
@@ -113,6 +121,7 @@ export function ProgressionEditor({
     setName(p.name);
     setSongKey(p.songKey);
     setChords([...p.chords]);
+    setChartLayout(p.chartLayout);
   }
 
   return (
