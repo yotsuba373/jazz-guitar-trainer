@@ -1,4 +1,4 @@
-export { buildFretMap, generatePositions } from './fretboard';
+export { buildFretMap, generatePositions, generateDimPositions } from './fretboard';
 export { spellScale, buildDegreeMap, resolveMode } from './noteSpelling';
 export {
   QUALITY_TO_MODES,

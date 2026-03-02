@@ -12,7 +12,8 @@ interface ModeSelectorProps {
 const MODE_FAMILIES = [
   { label: 'Diatonic', end: 7 },
   { label: 'Melodic Minor', end: 14 },
-  { label: 'Harmonic Minor', end: Infinity },
+  { label: 'Harmonic Minor', end: 16 },
+  { label: 'Diminished', end: Infinity },
 ] as const;
 
 export function ModeSelector({ templates, modeIdx, rootName, onModeChange }: ModeSelectorProps) {

@@ -41,6 +41,14 @@ export const MODE_TEMPLATES: ModeTemplate[] = [
     chordSub: '1 ♭3 5 7', chordDegreesIdx: [0,2,4,6], chordQuality: 'mMaj7' },
   { key: 'phrygian-dom', name: 'Phrygian Dominant', semi: [0,1,4,5,7,8,10],
     chordSub: '1 3 5 ♭7 ♭9', chordDegreesIdx: [0,2,4,6,1], chordQuality: '7b9' },
+
+  // ── Diminished (対称スケール — 8音) ──
+  { key: 'dim-wh', name: 'Diminished W-H', semi: [0,2,3,5,6,8,9,11],
+    chordSub: '1 ♭3 ♭5 ♭♭7', chordDegreesIdx: [0,2,4,6], chordQuality: 'dim',
+    customDegrees: ['1','2','♭3','4','♭5','♭6','6','7'] },
+  { key: 'dim-hw', name: 'Diminished H-W', semi: [0,1,3,4,6,7,9,10],
+    chordSub: '1 3 5 ♭7', chordDegreesIdx: [0,3,5,7], chordQuality: '7',
+    customDegrees: ['1','♭2','♭3','3','♭5','5','6','♭7'] },
 ];
 
 export const ROOTS: { name: RootName; semitone: number }[] = [
@@ -82,4 +90,6 @@ export const MODE_COLORS: Record<string, string> = {
   'altered': '#FF9800',
   // Harmonic Minor modes
   'phrygian-dom': '#D2691E', 'harmonic-minor': '#D32F2F',
+  // Diminished modes
+  'dim-wh': '#78909C', 'dim-hw': '#90A4AE',
 };

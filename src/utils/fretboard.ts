@@ -141,3 +141,97 @@ export function generatePositions(fretMap: FretMap, scaleNotes: string[]): Posit
     };
   });
 }
+
+/**
+ * Generate 4 positions for diminished scales (W-H / H-W).
+ * Notes form adjacent-fret pairs repeating every 3 frets on each string.
+ * Each position spans 5 frets, 3 frets apart. Position shape:
+ *   e:  xx-x-  (3 notes)    B:  x-xx-  (3 notes)
+ *   G:  xx-x-  (3 notes)    D:  x-xx-  (3 notes)
+ *   A:  -xx-x  (3 notes)    6E: xx-xx  (4 notes)
+ *
+ * Position ordering by dim7 chord tone in E-string first pair:
+ *   Pos 1 = Root, Pos 2 = #2(♭3), Pos 3 = #4(♭5), Pos 4 = 6
+ */
+export function generateDimPositions(fretMap: FretMap, rootSemi = 0): Position[] {
+  // Build 4-note reference windows (2 consecutive adjacent-fret pairs)
+  const refNotes = fretMap[0].filter(([, f]) => f > 0); // 1E=6E same tuning
+  const refPairs: [FretNote, FretNote][] = [];
+  for (let i = 0; i < refNotes.length - 1; i++) {
+    if (refNotes[i + 1][1] - refNotes[i][1] === 1) {
+      refPairs.push([refNotes[i], refNotes[i + 1]]);
+    }
+  }
+  const refWindows: FretNote[][] = [];
+  for (let i = 0; i < refPairs.length - 1; i++) {
+    refWindows.push([...refPairs[i], ...refPairs[i + 1]]);
+  }
+  if (refWindows.length < 4) return [];
+
+  // Group reference windows by phase (4 phases, cycling every 12 frets)
+  const baseFret = refWindows[0][0][1];
+  const phases: FretNote[][][] = [[], [], [], []];
+  for (const win of refWindows) {
+    const offset = win[0][1] - baseFret;
+    const phase = Math.round((offset % 12) / 3) % 4;
+    phases[phase].push(win);
+  }
+
+  // Reorder phases → positions by chord tone: Root=1, ♭3=2, ♭5=3, 6=4
+  const chordSemis = [
+    rootSemi, (rootSemi + 3) % 12, (rootSemi + 6) % 12, (rootSemi + 9) % 12,
+  ];
+  const posPhases: FretNote[][][] = [[], [], [], []];
+  for (let p = 0; p < 4; p++) {
+    if (phases[p].length === 0) continue;
+    const pairSemis = [phases[p][0][0][2], phases[p][0][1][2]];
+    const posIdx = chordSemis.findIndex(cs => pairSemis.includes(cs));
+    if (posIdx >= 0) posPhases[posIdx] = phases[p];
+  }
+
+  // Collect scale notes on a string within a fret range
+  function notesInRange(strIdx: number, fMin: number, fMax: number): FretNote[] {
+    return fretMap[strIdx].filter(([, f]) => f >= fMin && f <= fMax);
+  }
+
+  return posPhases.map((refInstances, i): Position => {
+    const instances: PositionInstance[] = refInstances.map(refWin => {
+      const fMin = refWin[0][1];
+      const fMax = refWin[refWin.length - 1][1];
+
+      const strings: StringNotes[] = Array.from({ length: 6 }, (_, s) => {
+        if (s === 5) return refWin; // 6E: full xx-xx (4 notes)
+        const notes = notesInRange(s, fMin, fMax);
+        if (notes.length === 0) return null;
+        // 1E and G share E-phase → naturally 4 notes → trim to 3 (xx-x-)
+        if ((s === 0 || s === 2) && notes.length > 3) return notes.slice(0, 3);
+        return notes;
+      });
+
+      const frets = strings
+        .filter((s): s is FretNote[] => s !== null)
+        .flatMap(s => s.map(([, f]) => f));
+
+      return {
+        strings,
+        fretMin: frets.length ? Math.min(...frets) : 0,
+        fretMax: frets.length ? Math.max(...frets) : 0,
+      };
+    }).filter(inst => inst.strings.filter(s => s !== null).length >= 4);
+
+    // B-string label from first instance
+    const bNotes = instances[0]?.strings[1];
+    const bLabel = bNotes ? bNotes.slice(0, 2).map(([n]) => n).join(', ') : '?';
+
+    const rangeStr = instances.length
+      ? instances.map(inst => `${inst.fretMin}\u2013${inst.fretMax}`).join(', ')
+      : '?';
+
+    return {
+      id: i + 1,
+      bPair: bLabel,
+      range: rangeStr,
+      instances,
+    };
+  });
+}
