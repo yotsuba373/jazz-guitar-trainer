@@ -10,14 +10,36 @@ interface FretboardNoteProps {
   isCT: boolean;
   showCT: boolean;
   label: string;
+  isGuideTone?: boolean;
+  guideRole?: '3rd' | '7th';
 }
 
 export function FretboardNote({
   posId, stringIndex, noteName: _noteName, fret, posColor,
-  isRoot, isCT, showCT, label,
+  isRoot, isCT, showCT, label, isGuideTone, guideRole,
 }: FretboardNoteProps) {
   const cx = LP + (fret - 0.5) * FW;
   const cy = TP + stringIndex * SG;
+  const fs = label.length > 2 ? '7' : label.length > 1 ? '8' : '10';
+
+  // Guide tone: diamond shape (except root, which keeps its distinct style)
+  if (isGuideTone && !isRoot) {
+    const d = 16;
+    const gtColor = guideRole === '3rd' ? '#F1C40F' : '#3498DB';
+    return (
+      <g key={`${posId}-${stringIndex}-${fret}`}>
+        <rect
+          x={cx - d / 2} y={cy - d / 2} width={d} height={d}
+          transform={`rotate(45 ${cx} ${cy})`}
+          fill={gtColor} stroke="#FFF" strokeWidth={1.5}
+        />
+        <text
+          x={cx} y={cy + 4} textAnchor="middle"
+          fontSize="10" fontWeight="700" fill="#000" fontFamily="monospace"
+        >{label}</text>
+      </g>
+    );
+  }
 
   let fill = posColor, tc = '#FFF', r = 12, sk = 'none', sw = 0;
   if (isRoot) { fill = '#FFF'; tc = posColor; r = 13; sk = posColor; sw = 2.5; }
@@ -28,8 +50,7 @@ export function FretboardNote({
       <circle cx={cx} cy={cy} r={r} fill={fill} stroke={sk} strokeWidth={sw} />
       <text
         x={cx} y={cy + 3.5} textAnchor="middle"
-        fontSize={label.length > 2 ? '7' : label.length > 1 ? '8' : '10'}
-        fontWeight="700" fill={tc} fontFamily="monospace"
+        fontSize={fs} fontWeight="700" fill={tc} fontFamily="monospace"
       >{label}</text>
     </g>
   );
