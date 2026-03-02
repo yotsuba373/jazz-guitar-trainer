@@ -1,6 +1,8 @@
 import type { Position } from '../../types';
+import type { GuideToneInfo } from '../../utils/guideTones';
 import { STR_LABELS, POS_COLORS, FC, FW, SG, TP, LP, DOTS, SVG_WIDTH, SVG_HEIGHT } from '../../constants';
 import { FretboardNote } from './FretboardNote';
+import { GhostNote } from './GhostNote';
 
 interface FretboardProps {
   visible: Position[];
@@ -10,9 +12,10 @@ interface FretboardProps {
   ctSet: Set<string>;
   getLabel: (nn: string) => string;
   rootNote: string;
+  guideToneInfo?: GuideToneInfo | null;
 }
 
-export function Fretboard({ visible, selPosId, dim, showCT, ctSet, getLabel, rootNote }: FretboardProps) {
+export function Fretboard({ visible, selPosId, dim, showCT, ctSet, getLabel, rootNote, guideToneInfo }: FretboardProps) {
   return (
     <div className="overflow-x-auto mb-[14px]">
       <svg width={SVG_WIDTH} height={SVG_HEIGHT}
@@ -60,7 +63,10 @@ export function Fretboard({ visible, selPosId, dim, showCT, ctSet, getLabel, roo
 
         {/* Notes */}
         {visible.map(pos => {
-          const c = POS_COLORS[pos.id - 1];
+          const gtActive = guideToneInfo != null;
+          const c = gtActive ? '#AAA' : POS_COLORS[pos.id - 1];
+          const gtThird = guideToneInfo?.third;
+          const gtSeventh = guideToneInfo?.seventh;
           return (
             <g key={pos.id} opacity={(!dim || selPosId === pos.id) ? 1 : 0.07}>
               {pos.instances.map((inst, iIdx) =>
@@ -77,6 +83,8 @@ export function Fretboard({ visible, selPosId, dim, showCT, ctSet, getLabel, roo
                       isCT={showCT && ctSet.has(n)}
                       showCT={showCT}
                       label={getLabel(n)}
+                      isGuideTone={gtActive && (n === gtThird || n === gtSeventh)}
+                      guideRole={n === gtThird ? '3rd' : n === gtSeventh ? '7th' : undefined}
                     />
                   ))
                 )
@@ -84,6 +92,17 @@ export function Fretboard({ visible, selPosId, dim, showCT, ctSet, getLabel, roo
             </g>
           );
         })}
+
+        {/* Ghost rings: next chord's 3rd (rendered ON TOP of notes) */}
+        {guideToneInfo?.nextThirdLocations.map(({ stringIdx, fret }, i) => (
+          <GhostNote
+            key={`ghost-${i}`}
+            stringIdx={stringIdx}
+            fret={fret}
+            noteName={guideToneInfo.nextThird!}
+            color="#F1C40F"
+          />
+        ))}
       </svg>
     </div>
   );

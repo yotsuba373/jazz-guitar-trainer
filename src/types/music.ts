@@ -41,6 +41,9 @@ export interface ChordNotationPrefs {
   m7: string;     // 'm7' | 'mi7' | '-7'
   '7': string;    // '7'
   'm7♭5': string; // 'm7♭5' | 'ø7'
+  dim: string;    // 'dim' | '°'
+  mMaj7: string;  // 'mMaj7' | 'mM7' | 'm(maj7)'
+  aug: string;    // 'aug' | '+'
 }
 
 /** The complete fretboard map: one array of FretNotes per string */
@@ -62,6 +65,7 @@ export interface ModeTemplate {
   chordSub: string;
   chordDegreesIdx: number[];
   chordQuality: string;
+  customDegrees?: string[];  // 8-note scales: degree labels (buildDegreeMap doesn't apply)
 }
 
 /** A single chord slot in a progression */

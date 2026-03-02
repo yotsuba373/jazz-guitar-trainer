@@ -30,16 +30,45 @@ function accidentalToString(offset: number): string {
 
 /**
  * Generate correctly-spelled scale notes for a given root and interval set.
- * Guarantees each of the 7 letter names (A-G) appears exactly once.
+ * For 7-note scales: each letter A-G appears exactly once.
+ * For 8-note scales: one letter appears twice with different accidentals.
+ *   Algorithm: try sequential letters; if a double accidental (|diff| > 1)
+ *   is found, shift subsequent letters by -1 so the previous letter is reused.
  */
 export function spellScale(rootName: string, semiIntervals: number[]): string[] {
   const { letter: rootLetter, accOffset: rootAcc } = parseNoteName(rootName);
   const rootLetterIdx = LETTERS.indexOf(rootLetter as typeof LETTERS[number]);
   const rootSemitone = (LETTER_SEMITONES[rootLetter] + rootAcc + 120) % 12;
+  const n = semiIntervals.length;
+
+  if (n <= 7) {
+    return semiIntervals.map((interval, i) => {
+      const targetSemi = (rootSemitone + interval) % 12;
+      const assignedLetter = LETTERS[(rootLetterIdx + i) % 7];
+      const naturalSemi = LETTER_SEMITONES[assignedLetter];
+      let diff = targetSemi - naturalSemi;
+      if (diff > 6) diff -= 12;
+      if (diff < -6) diff += 12;
+      return assignedLetter + accidentalToString(diff);
+    });
+  }
+
+  // 8-note scale: find where double accidental occurs, then shift
+  let shiftAt = -1; // position from which to shift letter index by -1
+  for (let i = 0; i < n; i++) {
+    const targetSemi = (rootSemitone + semiIntervals[i]) % 12;
+    const assignedLetter = LETTERS[(rootLetterIdx + i) % 7];
+    const naturalSemi = LETTER_SEMITONES[assignedLetter];
+    let diff = targetSemi - naturalSemi;
+    if (diff > 6) diff -= 12;
+    if (diff < -6) diff += 12;
+    if (Math.abs(diff) > 1) { shiftAt = i; break; }
+  }
 
   return semiIntervals.map((interval, i) => {
     const targetSemi = (rootSemitone + interval) % 12;
-    const assignedLetter = LETTERS[(rootLetterIdx + i) % 7];
+    const letterOff = (shiftAt >= 0 && i >= shiftAt) ? i - 1 : i;
+    const assignedLetter = LETTERS[((rootLetterIdx + letterOff) % 7 + 7) % 7];
     const naturalSemi = LETTER_SEMITONES[assignedLetter];
     let diff = targetSemi - naturalSemi;
     if (diff > 6) diff -= 12;
@@ -74,7 +103,9 @@ export function buildDegreeMap(modeSemi: number[], noteNames: string[]): DegreeM
  */
 export function resolveMode(rootName: RootName, template: ModeTemplate): Mode {
   const notes = spellScale(rootName, template.semi);
-  const degrees = buildDegreeMap(template.semi, notes);
+  const degrees = template.customDegrees
+    ? Object.fromEntries(notes.map((n, i) => [n, template.customDegrees![i]]))
+    : buildDegreeMap(template.semi, notes);
   const displayQuality = template.chordQuality === 'maj7' ? 'M7' : template.chordQuality;
   const chord = notes[0] + displayQuality;
   const chordTones = template.chordDegreesIdx.map(i => notes[i]);
