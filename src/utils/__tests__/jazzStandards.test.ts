@@ -298,7 +298,7 @@ describe('songToProgression', () => {
     };
     const prog = songToProgression(song);
     expect(prog.chords).toHaveLength(3);
-    expect(prog.chords[1].quality).toBe('7'); // mapped to dominant family
+    expect(prog.chords[1].quality).toBe('7alt'); // 7#9 → Altered
     expect(prog.chords[1].symbol).toBe('G7#9'); // original symbol preserved
   });
 
@@ -351,7 +351,7 @@ describe('songToProgression', () => {
       Sections: [{ MainSegment: { Chords: 'Caug|Dm7' } }],
     };
     const prog = songToProgression(song);
-    expect(prog.chords[0].quality).toBe('7');
+    expect(prog.chords[0].quality).toBe('aug');
   });
 
   it('sus chords are supported', () => {

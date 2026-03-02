@@ -7,6 +7,8 @@ export const DEFAULT_CHORD_PREFS: ChordNotationPrefs = {
   '7': '7',
   'm7♭5': 'm7♭5',
   dim: 'dim',
+  mMaj7: 'mMaj7',
+  aug: 'aug',
 };
 
 /** All available notation variants per quality */
@@ -16,6 +18,8 @@ export const CHORD_NOTATION_OPTIONS: Record<keyof ChordNotationPrefs, string[]> 
   '7': ['7'],
   'm7♭5': ['m7♭5', 'ø7'],
   dim: ['dim', '°'],
+  mMaj7: ['mMaj7', 'mM7', 'm(maj7)'],
+  aug: ['aug', '+'],
 };
 
 /** All suffixes that should use notation preferences (not extended chords like 6, 7b9) */
@@ -81,6 +85,8 @@ export function loadChordNotationPrefs(): ChordNotationPrefs {
       '7': '7',
       'm7♭5': CHORD_NOTATION_OPTIONS['m7♭5'].includes(parsed['m7♭5']) ? parsed['m7♭5'] : DEFAULT_CHORD_PREFS['m7♭5'],
       dim: CHORD_NOTATION_OPTIONS.dim.includes(parsed.dim) ? parsed.dim : DEFAULT_CHORD_PREFS.dim,
+      mMaj7: CHORD_NOTATION_OPTIONS.mMaj7.includes(parsed.mMaj7) ? parsed.mMaj7 : DEFAULT_CHORD_PREFS.mMaj7,
+      aug: CHORD_NOTATION_OPTIONS.aug.includes(parsed.aug) ? parsed.aug : DEFAULT_CHORD_PREFS.aug,
     };
   } catch {
     return { ...DEFAULT_CHORD_PREFS };

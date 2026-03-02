@@ -68,4 +68,46 @@ describe('resolveMode', () => {
     // Mixolydian has ♭7
     expect(mode.degrees[mode.notes[6]]).toBe('♭7');
   });
+
+  // New modes: melodic minor family + Phrygian Dominant
+  it('C Melodic Minor chord = CmMaj7, tones = C E♭ G B', () => {
+    const mode = resolveMode('C', MODE_TEMPLATES[7]);
+    expect(mode.chord).toBe('CmMaj7');
+    expect(mode.chordTones).toEqual(['C', 'E♭', 'G', 'B']);
+    expect(mode.degrees['E♭']).toBe('♭3');
+    expect(mode.degrees['B']).toBe('7');
+  });
+
+  it('C Altered chord tones = C F♭ G♭ B♭ (1 3 ♭5 ♭7 via [0,3,4,6])', () => {
+    const mode = resolveMode('C', MODE_TEMPLATES[13]);
+    // Altered scale: C D♭ E♭ F♭ G♭ A♭ B♭
+    expect(mode.notes[0]).toBe('C');
+    // chordDegreesIdx [0,3,4,6] → root, natural 3 (Fb=E enharmonic), ♭5 (Gb), ♭7 (Bb)
+    expect(mode.chordTones).toEqual(['C', 'F♭', 'G♭', 'B♭']);
+  });
+
+  it('C Phrygian Dominant: 1 ♭2 3 4 5 ♭6 ♭7', () => {
+    const mode = resolveMode('C', MODE_TEMPLATES[15]);
+    expect(mode.notes).toEqual(['C', 'D♭', 'E', 'F', 'G', 'A♭', 'B♭']);
+    expect(mode.degrees['D♭']).toBe('♭2');
+    expect(mode.degrees['E']).toBe('3');
+    expect(mode.degrees['A♭']).toBe('♭6');
+    expect(mode.degrees['B♭']).toBe('♭7');
+  });
+
+  it('C Harmonic Minor: 1 2 ♭3 4 5 ♭6 7', () => {
+    const mode = resolveMode('C', MODE_TEMPLATES[14]);
+    expect(mode.notes).toEqual(['C', 'D', 'E♭', 'F', 'G', 'A♭', 'B']);
+    expect(mode.chord).toBe('CmMaj7');
+    expect(mode.chordTones).toEqual(['C', 'E♭', 'G', 'B']);
+    expect(mode.degrees['A♭']).toBe('♭6');
+    expect(mode.degrees['B']).toBe('7');
+  });
+
+  it('C Lydian Augmented: 1 2 3 #4 #5 6 7', () => {
+    const mode = resolveMode('C', MODE_TEMPLATES[9]);
+    expect(mode.notes).toEqual(['C', 'D', 'E', 'F#', 'G#', 'A', 'B']);
+    expect(mode.degrees['F#']).toBe('#4');
+    expect(mode.degrees['G#']).toBe('#5');
+  });
 });

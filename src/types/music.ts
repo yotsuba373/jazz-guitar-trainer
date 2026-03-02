@@ -42,6 +42,8 @@ export interface ChordNotationPrefs {
   '7': string;    // '7'
   'm7♭5': string; // 'm7♭5' | 'ø7'
   dim: string;    // 'dim' | '°'
+  mMaj7: string;  // 'mMaj7' | 'mM7' | 'm(maj7)'
+  aug: string;    // 'aug' | '+'
 }
 
 /** The complete fretboard map: one array of FretNotes per string */

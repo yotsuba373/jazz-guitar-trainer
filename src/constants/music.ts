@@ -19,6 +19,28 @@ export const MODE_TEMPLATES: ModeTemplate[] = [
     chordSub: '1 ♭3 5 ♭7', chordDegreesIdx: [0,2,4,6], chordQuality: 'm7' },
   { key: 'locrian', name: 'Locrian', semi: [0,1,3,5,6,8,10],
     chordSub: '1 ♭3 ♭5 ♭7', chordDegreesIdx: [0,2,4,6], chordQuality: 'm7♭5' },
+
+  // ── Melodic Minor modes ──
+  { key: 'melodic-minor', name: 'Melodic Minor', semi: [0,2,3,5,7,9,11],
+    chordSub: '1 ♭3 5 7', chordDegreesIdx: [0,2,4,6], chordQuality: 'mMaj7' },
+  { key: 'dorian-b2', name: 'Dorian ♭2', semi: [0,1,3,5,7,9,10],
+    chordSub: '1 ♭3 5 ♭7', chordDegreesIdx: [0,2,4,6], chordQuality: 'm7' },
+  { key: 'lydian-aug', name: 'Lydian Augmented', semi: [0,2,4,6,8,9,11],
+    chordSub: '1 3 #5 7', chordDegreesIdx: [0,2,4,6], chordQuality: 'aug' },
+  { key: 'lydian-dom', name: 'Lydian Dominant', semi: [0,2,4,6,7,9,10],
+    chordSub: '1 3 5 ♭7', chordDegreesIdx: [0,2,4,6], chordQuality: '7#11' },
+  { key: 'mixolydian-b6', name: 'Mixolydian ♭6', semi: [0,2,4,5,7,8,10],
+    chordSub: '1 3 5 ♭7', chordDegreesIdx: [0,2,4,6], chordQuality: '7b13' },
+  { key: 'locrian-s2', name: 'Locrian ♯2', semi: [0,2,3,5,6,8,10],
+    chordSub: '1 ♭3 ♭5 ♭7', chordDegreesIdx: [0,2,4,6], chordQuality: 'm7♭5' },
+  { key: 'altered', name: 'Altered', semi: [0,1,3,4,6,8,10],
+    chordSub: '1 3 ♭5 ♭7', chordDegreesIdx: [0,3,4,6], chordQuality: '7alt' },
+
+  // ── Harmonic Minor modes ──
+  { key: 'harmonic-minor', name: 'Harmonic Minor', semi: [0,2,3,5,7,8,11],
+    chordSub: '1 ♭3 5 7', chordDegreesIdx: [0,2,4,6], chordQuality: 'mMaj7' },
+  { key: 'phrygian-dom', name: 'Phrygian Dominant', semi: [0,1,4,5,7,8,10],
+    chordSub: '1 3 5 ♭7 ♭9', chordDegreesIdx: [0,2,4,6,1], chordQuality: '7b9' },
 ];
 
 export const ROOTS: { name: RootName; semitone: number }[] = [
@@ -51,6 +73,13 @@ export const POS_COLORS: string[] = [
 ];
 
 export const MODE_COLORS: Record<string, string> = {
+  // Diatonic (major scale modes)
   ionian: '#E74C3C', dorian: '#E67E22', phrygian: '#F1C40F', lydian: '#27AE60',
   mixolydian: '#2980B9', aeolian: '#8E44AD', locrian: '#16A085',
+  // Melodic Minor modes
+  'melodic-minor': '#E91E63', 'dorian-b2': '#FF5722', 'lydian-aug': '#CDDC39',
+  'lydian-dom': '#4CAF50', 'mixolydian-b6': '#00BCD4', 'locrian-s2': '#9C27B0',
+  'altered': '#FF9800',
+  // Harmonic Minor modes
+  'phrygian-dom': '#D2691E', 'harmonic-minor': '#D32F2F',
 };

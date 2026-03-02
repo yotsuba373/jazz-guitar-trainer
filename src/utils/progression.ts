@@ -5,11 +5,17 @@ import { buildFretMap, generatePositions } from './fretboard';
 
 /** Map chord quality → compatible MODE_TEMPLATES indices */
 export const QUALITY_TO_MODES: Record<string, number[]> = {
-  'maj7': [0, 3],    // Ionian, Lydian
-  'm7':   [1, 2, 5], // Dorian, Phrygian, Aeolian
-  '7':    [4],       // Mixolydian
-  'm7♭5': [6],       // Locrian
-  'dim':  [6],       // Locrian (♭3 ♭5 shared; ♭7 vs ♭♭7 tolerated)
+  'maj7':  [0, 3],              // Ionian, Lydian
+  'm7':    [1, 2, 5, 8],        // Dorian, Phrygian, Aeolian, Dorian ♭2
+  '7':     [4, 10, 11, 15, 13], // Mixolydian, Lydian Dom, Mixo♭6, Phryg Dom, Altered
+  'm7♭5':  [6, 12],             // Locrian, Locrian ♯2
+  'dim':   [6],                 // Locrian (Phase 2: 8-note dim scale)
+  'mMaj7': [7, 14],             // Melodic Minor, Harmonic Minor
+  'aug':   [9],                 // Lydian Augmented
+  '7alt':  [13],                // Altered
+  '7b9':   [15, 13],            // Phrygian Dominant, Altered
+  '7#11':  [10, 13],            // Lydian Dominant, Altered
+  '7b13':  [11, 15, 13],         // Mixolydian ♭6, Phrygian Dominant, Altered
 };
 
 const STORAGE_KEY = 'jazz-guitar-progressions';
@@ -38,13 +44,18 @@ const QUALITY_PATTERNS: [RegExp, string][] = [
   [/^dim/, 'dim'],
   [/^0[7]?$/, 'dim'],
 
-  // --- augmented family → dominant function ---
-  [/^aug/, '7'],
-  [/^\+7/, '7'],
-  [/^\+$/, '7'],
+  // --- augmented: specific before general ---
+  [/^aug7/, '7alt'],       // aug7 = dom aug → Altered (b7 + #5)
+  [/^aug/, 'aug'],         // aug, augmaj7 → Lydian Aug (7 + #5)
+  [/^\+7/, '7alt'],        // +7 = dom aug → Altered
+  [/^\+$/, 'aug'],         // + = bare triad → Lydian Aug
 
-  // --- minor family (m/maj7, m6 etc. before generic m7) ---
-  [/^m\/maj7/, 'm7'],
+  // --- mMaj7 (before m7 to catch m/maj7, mM7 first) ---
+  [/^m\/maj7/, 'mMaj7'],
+  [/^mM7/, 'mMaj7'],
+  [/^m\(maj7\)/, 'mMaj7'],
+
+  // --- minor family (m6 etc. before generic m7) ---
   [/^mi7/, 'm7'],
   [/^-7/, 'm7'],
   [/^m6/, 'm7'],
@@ -68,7 +79,16 @@ const QUALITY_PATTERNS: [RegExp, string][] = [
   // --- sus → dominant function ---
   [/^sus[24]?$/, '7'],
 
-  // --- dominant family (prefix match covers 7b9, 7#11, 7sus, 7alt, etc.) ---
+  // --- specific dominant variants (before generic ^7) ---
+  [/^7alt/, '7alt'],
+  [/^7[♭b]9/, '7b9'],
+  [/^7[#♯]9/, '7alt'],
+  [/^7[#♯]5/, '7alt'],     // 7#5 → Altered (has #5 + b7)
+  [/^7[♭b]5/, '7alt'],     // 7b5 → Altered (has b5, no natural 5)
+  [/^7[#♯]11/, '7#11'],
+  [/^7[♭b]13/, '7b13'],
+
+  // --- dominant family (generic catch-all) ---
   [/^7/, '7'],
   [/^9/, '7'],
   [/^13/, '7'],
@@ -201,7 +221,7 @@ export function chordRomanNumeral(
   const diatonic = degIdx != null && MODE_TEMPLATES[degIdx]?.chordQuality === quality;
 
   // Case: lowercase for minor qualities
-  const isMinor = quality === 'm7' || quality === 'm7♭5' || quality === 'dim';
+  const isMinor = quality === 'm7' || quality === 'm7♭5' || quality === 'dim' || quality === 'mMaj7';
   let numeral = isMinor ? roman.replace(/[IVX]+/, m => m.toLowerCase()) : roman;
   if (quality === 'm7♭5' || quality === 'dim') numeral += '\u00B0'; // degree sign °
 
