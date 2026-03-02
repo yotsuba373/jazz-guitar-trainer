@@ -106,37 +106,44 @@ describe('parseChordSymbol — extended chords', () => {
   it('Cm11 → m7', () => {
     expect(parseChordSymbol('Cm11')).toMatchObject({ quality: 'm7', suffix: 'm11' });
   });
-  it('Cm/maj7 → m7', () => {
-    expect(parseChordSymbol('Cm/maj7')).toMatchObject({ quality: 'm7', suffix: 'm/maj7' });
+  it('Cm/maj7 → mMaj7', () => {
+    expect(parseChordSymbol('Cm/maj7')).toMatchObject({ quality: 'mMaj7', suffix: 'm/maj7' });
+  });
+  it('CmM7 → mMaj7', () => {
+    expect(parseChordSymbol('CmM7')).toMatchObject({ quality: 'mMaj7', suffix: 'mM7' });
+  });
+  it('Cm(maj7) → mMaj7', () => {
+    expect(parseChordSymbol('Cm(maj7)')).toMatchObject({ quality: 'mMaj7', suffix: 'm(maj7)' });
   });
   it('Cm69 → m7', () => {
     expect(parseChordSymbol('Cm69')).toMatchObject({ quality: 'm7', suffix: 'm69' });
   });
 
-  // Dominant family → quality: '7'
-  it('C7b9 → 7', () => {
-    expect(parseChordSymbol('C7b9')).toMatchObject({ quality: '7', suffix: '7b9' });
+  // Specific dominant variants → dedicated qualities
+  it('C7b9 → 7b9', () => {
+    expect(parseChordSymbol('C7b9')).toMatchObject({ quality: '7b9', suffix: '7b9' });
   });
-  it('C7#9 → 7', () => {
-    expect(parseChordSymbol('C7#9')).toMatchObject({ quality: '7', suffix: '7#9' });
+  it('C7#9 → 7alt', () => {
+    expect(parseChordSymbol('C7#9')).toMatchObject({ quality: '7alt', suffix: '7#9' });
   });
-  it('C7#11 → 7', () => {
-    expect(parseChordSymbol('C7#11')).toMatchObject({ quality: '7', suffix: '7#11' });
+  it('C7#11 → 7#11', () => {
+    expect(parseChordSymbol('C7#11')).toMatchObject({ quality: '7#11', suffix: '7#11' });
   });
-  it('C7b13 → 7', () => {
-    expect(parseChordSymbol('C7b13')).toMatchObject({ quality: '7', suffix: '7b13' });
+  it('C7b13 → 7b13', () => {
+    expect(parseChordSymbol('C7b13')).toMatchObject({ quality: '7b13', suffix: '7b13' });
   });
-  it('C7alt → 7', () => {
-    expect(parseChordSymbol('C7alt')).toMatchObject({ quality: '7', suffix: '7alt' });
+  it('C7alt → 7alt', () => {
+    expect(parseChordSymbol('C7alt')).toMatchObject({ quality: '7alt', suffix: '7alt' });
   });
+  // Generic dominant → quality: '7'
   it('C7sus → 7', () => {
     expect(parseChordSymbol('C7sus')).toMatchObject({ quality: '7', suffix: '7sus' });
   });
-  it('C7#5 → 7', () => {
-    expect(parseChordSymbol('C7#5')).toMatchObject({ quality: '7', suffix: '7#5' });
+  it('C7#5 → 7alt', () => {
+    expect(parseChordSymbol('C7#5')).toMatchObject({ quality: '7alt', suffix: '7#5' });
   });
-  it('C7b5 → 7', () => {
-    expect(parseChordSymbol('C7b5')).toMatchObject({ quality: '7', suffix: '7b5' });
+  it('C7b5 → 7alt', () => {
+    expect(parseChordSymbol('C7b5')).toMatchObject({ quality: '7alt', suffix: '7b5' });
   });
   it('C9 → 7', () => {
     expect(parseChordSymbol('C9')).toMatchObject({ quality: '7', suffix: '9' });
@@ -181,18 +188,26 @@ describe('parseChordSymbol — extended chords', () => {
     expect(parseChordSymbol('Dm7b5/G')).toMatchObject({ rootName: 'D', quality: 'm7♭5' });
   });
 
-  // Augmented → dominant family
-  it('Caug → 7', () => {
-    expect(parseChordSymbol('Caug')).toMatchObject({ quality: '7', suffix: 'aug' });
+  // Augmented → aug (Lydian Augmented)
+  it('Caug → aug', () => {
+    expect(parseChordSymbol('Caug')).toMatchObject({ quality: 'aug', suffix: 'aug' });
   });
-  it('Caug7 → 7', () => {
-    expect(parseChordSymbol('Caug7')).toMatchObject({ quality: '7', suffix: 'aug7' });
+  it('Caug7 → 7alt', () => {
+    expect(parseChordSymbol('Caug7')).toMatchObject({ quality: '7alt', suffix: 'aug7' });
   });
-  it('C+7 → 7', () => {
-    expect(parseChordSymbol('C+7')).toMatchObject({ quality: '7', suffix: '+7' });
+  it('C+7 → 7alt', () => {
+    expect(parseChordSymbol('C+7')).toMatchObject({ quality: '7alt', suffix: '+7' });
   });
-  it('C+ → 7', () => {
-    expect(parseChordSymbol('C+')).toMatchObject({ quality: '7', suffix: '+' });
+  it('C+ → aug', () => {
+    expect(parseChordSymbol('C+')).toMatchObject({ quality: 'aug', suffix: '+' });
+  });
+
+  // Minor augmented → no matching mode, returns null (grayed out)
+  it('Dmaug → null (unsupported)', () => {
+    expect(parseChordSymbol('Dmaug')).toBeNull();
+  });
+  it('Cm#5 → null (unsupported)', () => {
+    expect(parseChordSymbol('Cm#5')).toBeNull();
   });
 
   // Sus → dominant family
@@ -225,7 +240,7 @@ describe('parseChordSymbol — extended chords', () => {
 /* ── QUALITY_TO_MODES ──────────────────────────────────── */
 
 describe('QUALITY_TO_MODES', () => {
-  it('covers all 4 chord qualities from MODE_TEMPLATES', () => {
+  it('covers all chord qualities from MODE_TEMPLATES', () => {
     const qualities = new Set(MODE_TEMPLATES.map(t => t.chordQuality));
     for (const q of qualities) {
       expect(QUALITY_TO_MODES[q]).toBeDefined();
@@ -233,21 +248,35 @@ describe('QUALITY_TO_MODES', () => {
     }
   });
 
-  it('each mapped index has the correct chordQuality (except dim→Locrian approximation)', () => {
+  // Qualities that cross-map to modes with different chordQuality
+  const CROSS_MAP_QUALITIES: Record<string, string[]> = {
+    'dim':  ['m7♭5'],                                // dim → Locrian (m7♭5 approx)
+    '7':    ['7', '7#11', '7b13', '7b9', '7alt'],   // generic dom → various dom modes
+    '7b9':  ['7b9', '7alt'],                         // 7b9 → Phryg Dom + Altered
+    '7#11': ['7#11', '7alt'],                        // 7#11 → Lydian Dom + Altered
+    '7b13': ['7b13', '7b9', '7alt'],                  // 7b13 → Mixo♭6 + Phryg Dom + Altered
+  };
+
+  it('each mapped index has a compatible chordQuality', () => {
     for (const [quality, indices] of Object.entries(QUALITY_TO_MODES)) {
+      const allowed = CROSS_MAP_QUALITIES[quality] ?? [quality];
       for (const idx of indices) {
-        if (quality === 'dim') {
-          // dim maps to Locrian (m7♭5) as an approximation
-          expect(MODE_TEMPLATES[idx].chordQuality).toBe('m7♭5');
-        } else {
-          expect(MODE_TEMPLATES[idx].chordQuality).toBe(quality);
-        }
+        expect(allowed).toContain(MODE_TEMPLATES[idx].chordQuality);
       }
     }
   });
 
   it('dim maps to Locrian (index 6)', () => {
     expect(QUALITY_TO_MODES['dim']).toEqual([6]);
+  });
+
+  it('new qualities map to correct modes', () => {
+    expect(QUALITY_TO_MODES['mMaj7']).toEqual([7, 14]);
+    expect(QUALITY_TO_MODES['aug']).toEqual([9]);
+    expect(QUALITY_TO_MODES['7alt']).toEqual([13]);
+    expect(QUALITY_TO_MODES['7b9']).toEqual([15, 13]);
+    expect(QUALITY_TO_MODES['7#11']).toEqual([10, 13]);
+    expect(QUALITY_TO_MODES['7b13']).toEqual([11, 15, 13]);
   });
 });
 
@@ -324,9 +353,9 @@ describe('buildChordSlot', () => {
   });
 
   it('preserves extended suffix: C7b9 → C7b9', () => {
-    const slot = buildChordSlot('C7b9', { rootName: 'C', quality: '7', suffix: '7b9' });
+    const slot = buildChordSlot('C7b9', { rootName: 'C', quality: '7b9', suffix: '7b9' });
     expect(slot.symbol).toBe('C7b9');
-    expect(slot.quality).toBe('7');
+    expect(slot.quality).toBe('7b9');
   });
 
   it('uses suggestMode when songKey is provided', () => {
@@ -474,6 +503,26 @@ describe('suggestMode', () => {
 
   it('minor key: Bm7♭5 in Am → Locrian (6)', () => {
     expect(suggestMode('B', 'm7♭5', { root: 'A', minor: true })).toBe(6);
+  });
+
+  // New quality fallbacks (non-diatonic, use QUALITY_TO_MODES[0])
+  it('CmMaj7 → fallback Melodic Minor (7)', () => {
+    expect(suggestMode('C', 'mMaj7')).toBe(7);
+  });
+  it('C7alt → fallback Altered (13)', () => {
+    expect(suggestMode('C', '7alt')).toBe(13);
+  });
+  it('C7b9 → fallback Phrygian Dominant (15)', () => {
+    expect(suggestMode('C', '7b9')).toBe(15);
+  });
+  it('Caug → fallback Lydian Augmented (9)', () => {
+    expect(suggestMode('C', 'aug')).toBe(9);
+  });
+  it('C7#11 → fallback Lydian Dominant (10)', () => {
+    expect(suggestMode('C', '7#11')).toBe(10);
+  });
+  it('C7b13 → fallback Mixolydian ♭6 (11)', () => {
+    expect(suggestMode('C', '7b13')).toBe(11);
   });
 });
 

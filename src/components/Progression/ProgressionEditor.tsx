@@ -78,8 +78,18 @@ export function ProgressionEditor({
   }
 
   function handleDelete() {
-    if (progressions.length <= 1) return;
     const copy = progressions.filter((_, i) => i !== activeProgIdx);
+    if (copy.length === 0) {
+      // Last one deleted → reset to empty new progression
+      const fresh = [{ name: 'New', chords: [] as ChordSlot[] }];
+      onSave(fresh);
+      onSelectProg(0);
+      setName('New');
+      setSongKey(undefined);
+      setChords([]);
+      setChartLayout(undefined);
+      return;
+    }
     const newIdx = Math.min(activeProgIdx, copy.length - 1);
     onSave(copy);
     onSelectProg(newIdx);
@@ -265,8 +275,7 @@ export function ProgressionEditor({
           保存
         </button>
         <button onClick={handleDelete} className={btnBase}
-          style={{ border: '1px solid #E74C3C', background: '#1a1a1a', color: '#E74C3C',
-            opacity: progressions.length <= 1 ? 0.3 : 1 }}>
+          style={{ border: '1px solid #E74C3C', background: '#1a1a1a', color: '#E74C3C' }}>
           削除
         </button>
       </div>

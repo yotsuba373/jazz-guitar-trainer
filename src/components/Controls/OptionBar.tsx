@@ -32,7 +32,11 @@ export function OptionBar({
     onChordPrefsChange({ ...chordPrefs, [key]: next });
   }
 
-  const chordDisplay = formatChordSymbol(mode.notes[0], mode.chordQuality, chordPrefs);
+  // Chord tone highlight label: use base quality (tensions like #11, b13, b9
+  // don't change the highlighted chord tones 1-3-5-b7)
+  const CT_BASE: Record<string, string> = { '7#11': '7', '7b13': '7', '7b9': '7' };
+  const ctQuality = CT_BASE[mode.chordQuality] ?? mode.chordQuality;
+  const chordDisplay = formatChordSymbol(mode.notes[0], ctQuality, chordPrefs);
 
   return (
     <div className="flex gap-3.5 mb-3 flex-wrap items-center">
@@ -72,7 +76,7 @@ export function OptionBar({
           }}>
           記号
         </button>
-        {notationOpen && (['maj7', 'm7', 'm7♭5', 'dim'] as const).map(key => {
+        {notationOpen && (['maj7', 'm7', 'm7♭5', 'dim', 'mMaj7', 'aug'] as const).map(key => {
           const opts = CHORD_NOTATION_OPTIONS[key];
           if (opts.length <= 1) return null;
           return (

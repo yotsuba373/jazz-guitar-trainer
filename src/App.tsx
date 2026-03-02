@@ -276,10 +276,10 @@ export default function App() {
 
         <div className="text-[11px] text-text-secondary mb-1">
           <span className="font-bold" style={{ color: MODE_COLORS[mode.key] }}>{rootNote} {mode.name}</span>
-          <span className="text-text-dim ml-2">{mode.notes.join(' ')}</span>
+          <span className="text-text-dim ml-2">{mode.notes.map(n => `${n}(${mode.degrees[n]})`).join(' ')}</span>
         </div>
         <div className="text-[10px] text-text-dim mb-2.5">
-          {formatChordSymbol(rootNote, mode.chordQuality, chordPrefs)}: {mode.chordTones.join(' ')} ({mode.chordSub})
+          {formatChordSymbol(rootNote, mode.chordQuality, chordPrefs)}: {mode.chordTones.map((n, i) => `${n}(${mode.chordSub.split(' ')[i] ?? mode.degrees[n]})`).join(' ')}
         </div>
 
         {!progMode && (
