@@ -168,12 +168,22 @@ export default function App() {
     if (!isPlaying || !progMode || !activeProg) return;
     const layout = getChartLayout(activeProg);
     const beatMap = new Map<number, number>();
-    for (const section of layout.sections) {
-      for (const measure of section.measures) {
+    function addMeasures(measures: typeof layout.sections[0]['measures']) {
+      for (const measure of measures) {
         const count = measure.chordIndices.length;
+        const bwSum = measure.beatWidths
+          ? measure.beatWidths.reduce((a, b) => a + b, 0)
+          : count;
         measure.chordIndices.forEach((ci, i) => {
-          beatMap.set(ci, measure.beatWidths?.[i] ?? (4 / count));
+          const bw = measure.beatWidths?.[i] ?? 1;
+          beatMap.set(ci, (bw / bwSum) * 4);
         });
+      }
+    }
+    for (const section of layout.sections) {
+      addMeasures(section.measures);
+      if (section.endings) {
+        for (const ending of section.endings) addMeasures(ending);
       }
     }
     const beats = beatMap.get(activeChordIdx) ?? 4;
