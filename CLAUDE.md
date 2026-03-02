@@ -37,12 +37,14 @@ fnm default lts-latest
 
 ## アーキテクチャ
 
-- `src/App.tsx` — 状態管理ハブ (通常モード + 進行モード)
+- `src/App.tsx` — 状態管理ハブ (通常モード + 進行モード + ↑↓ナビ)
 - `src/utils/fretboard.ts` — `buildFretMap()`, `generatePositions()` 純粋関数
 - `src/utils/progression.ts` — コード進行ユーティリティ (`parseChordSymbol`, `rankPositionsByProximity`)
+- `src/utils/jazzStandards.ts` — JazzStandards インポート (`extractStructuredChords`, `songToProgression`)
+- `src/utils/chartLayout.ts` — 譜面レイアウト (`deriveChartLayout`, `getChartLayout`, `buildChordRows`)
 - `src/constants/` — MODE_TEMPLATES, カラー, SVG寸法
 - `src/components/` — プレゼンテーションコンポーネント
-- `src/components/Progression/` — 進行エディタ + プレイヤー
+- `src/components/Progression/` — 進行エディタ + プレイヤー + ChordChart (iReal Pro 風譜面)
 
 ## 絶対に守るべきルール
 
@@ -73,7 +75,7 @@ fnm default lts-latest
 ## テスト
 
 ```bash
-npm test          # vitest run (202 テスト)
+npm test          # vitest run (313 テスト)
 npm run build     # tsc + vite build
 ```
 
@@ -81,17 +83,17 @@ npm run build     # tsc + vite build
 - `src/utils/__tests__/fretboard.test.ts` — C Ionian Pos 1 リファレンス、度数オフセット不変条件 (84パターン)、構造検証
 - `src/utils/__tests__/noteSpelling.test.ts` — スペリング、度数マップ、resolveMode
 - `src/utils/__tests__/progression.test.ts` — parseChordSymbol、QUALITY_TO_MODES、近接ランキング、localStorage
+- `src/utils/__tests__/jazzStandards.test.ts` — パース、エンディング、リピート、ビート幅、自動ラベル
 
 ## 今後の開発予定 (優先度順)
 
-1. ~~コード進行連動表示~~ → 実装済み (進行モード)
-2. BPM/タイミング制御で自動切替
-3. コード進行プリセット拡充 (Blues, Rhythm Changes)
-4. ポジション間移動ガイド (共通音ハイライト)
-5. 音声再生 (Web Audio API)
-6. カスタムスケール (メロディックマイナー, ハーモニックマイナー)
+1. BPM/タイミング制御で自動切替
+2. コード進行プリセット拡充 (Blues, Rhythm Changes)
+3. ポジション間移動ガイド (共通音ハイライト)
+4. 音声再生 (Web Audio API)
+5. カスタムスケール (メロディックマイナー, ハーモニックマイナー)
 
 ## 参照ドキュメント
 
-- `HANDOFF.md` — コアアルゴリズム詳細、失敗パターン、データ構造
+- `HANDOFF.md` — アーキテクチャ詳細、データフロー、コアアルゴリズム、失敗パターン
 - `berklee-positions-v2.jsx` — 移行元の Artifact コード (参照用)
