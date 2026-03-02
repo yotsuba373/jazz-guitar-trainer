@@ -6,6 +6,7 @@ export const DEFAULT_CHORD_PREFS: ChordNotationPrefs = {
   m7: 'm7',
   '7': '7',
   'm7♭5': 'm7♭5',
+  dim: 'dim',
 };
 
 /** All available notation variants per quality */
@@ -14,6 +15,7 @@ export const CHORD_NOTATION_OPTIONS: Record<keyof ChordNotationPrefs, string[]> 
   m7: ['m7', 'mi7', '-7'],
   '7': ['7'],
   'm7♭5': ['m7♭5', 'ø7'],
+  dim: ['dim', '°'],
 };
 
 /** All suffixes that should use notation preferences (not extended chords like 6, 7b9) */
@@ -21,9 +23,12 @@ const BASE_SUFFIXES = new Set(
   Object.values(CHORD_NOTATION_OPTIONS).flat(),
 );
 
+/** Known dim suffixes (original notation variants, with and without 7) */
+const DIM_SUFFIXES = new Set(['dim', 'dim7', '°', '°7', '0', '07']);
+
 /**
  * Display a chord name: applies notation preferences only for base qualities
- * (M7/maj7/△7, m7/mi7/-7, 7, m7♭5/ø7). Extended chords (6, 7b9, dim7 etc.)
+ * (M7/maj7/△7, m7/mi7/-7, 7, m7♭5/ø7, dim/°). Extended chords (6, 7b9 etc.)
  * are displayed with their original symbol.
  */
 export function displayChordName(
@@ -31,6 +36,13 @@ export function displayChordName(
   prefs: ChordNotationPrefs,
 ): string {
   const suffix = slot.symbol.slice(slot.rootName.length);
+
+  // dim quality: base pref + optional '7'
+  if (slot.quality === 'dim' && DIM_SUFFIXES.has(suffix)) {
+    const has7 = suffix.endsWith('7');
+    return slot.rootName + prefs.dim + (has7 ? '7' : '');
+  }
+
   if (BASE_SUFFIXES.has(suffix)) {
     return formatChordSymbol(slot.rootName, slot.quality, prefs);
   }
@@ -68,6 +80,7 @@ export function loadChordNotationPrefs(): ChordNotationPrefs {
       m7: CHORD_NOTATION_OPTIONS.m7.includes(parsed.m7) ? parsed.m7 : DEFAULT_CHORD_PREFS.m7,
       '7': '7',
       'm7♭5': CHORD_NOTATION_OPTIONS['m7♭5'].includes(parsed['m7♭5']) ? parsed['m7♭5'] : DEFAULT_CHORD_PREFS['m7♭5'],
+      dim: CHORD_NOTATION_OPTIONS.dim.includes(parsed.dim) ? parsed.dim : DEFAULT_CHORD_PREFS.dim,
     };
   } catch {
     return { ...DEFAULT_CHORD_PREFS };

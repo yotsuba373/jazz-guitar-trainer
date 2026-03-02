@@ -53,8 +53,12 @@ describe('parseChordSymbol — base qualities', () => {
     expect(parseChordSymbol('')).toBeNull();
   });
 
-  it('returns null for bare root (no quality)', () => {
-    expect(parseChordSymbol('C')).toBeNull();
+  it('bare root → maj7 (major triad)', () => {
+    expect(parseChordSymbol('C')).toEqual({ rootName: 'C', quality: 'maj7', suffix: '' });
+  });
+
+  it('bare root with flat → maj7', () => {
+    expect(parseChordSymbol('Bb')).toEqual({ rootName: 'B♭', quality: 'maj7', suffix: '' });
   });
 
   it('trims whitespace', () => {
@@ -176,6 +180,46 @@ describe('parseChordSymbol — extended chords', () => {
   it('Dm7b5/G → root=D, quality=m7♭5', () => {
     expect(parseChordSymbol('Dm7b5/G')).toMatchObject({ rootName: 'D', quality: 'm7♭5' });
   });
+
+  // Augmented → dominant family
+  it('Caug → 7', () => {
+    expect(parseChordSymbol('Caug')).toMatchObject({ quality: '7', suffix: 'aug' });
+  });
+  it('Caug7 → 7', () => {
+    expect(parseChordSymbol('Caug7')).toMatchObject({ quality: '7', suffix: 'aug7' });
+  });
+  it('C+7 → 7', () => {
+    expect(parseChordSymbol('C+7')).toMatchObject({ quality: '7', suffix: '+7' });
+  });
+  it('C+ → 7', () => {
+    expect(parseChordSymbol('C+')).toMatchObject({ quality: '7', suffix: '+' });
+  });
+
+  // Sus → dominant family
+  it('Csus4 → 7', () => {
+    expect(parseChordSymbol('Csus4')).toMatchObject({ quality: '7', suffix: 'sus4' });
+  });
+  it('Csus2 → 7', () => {
+    expect(parseChordSymbol('Csus2')).toMatchObject({ quality: '7', suffix: 'sus2' });
+  });
+  it('Csus → 7', () => {
+    expect(parseChordSymbol('Csus')).toMatchObject({ quality: '7', suffix: 'sus' });
+  });
+
+  // Add → major family
+  it('Cadd9 → maj7', () => {
+    expect(parseChordSymbol('Cadd9')).toMatchObject({ quality: 'maj7', suffix: 'add9' });
+  });
+
+  // Bare dash → minor family
+  it('C- → m7', () => {
+    expect(parseChordSymbol('C-')).toMatchObject({ quality: 'm7', suffix: '-' });
+  });
+
+  // Slash chord with bare triad
+  it('C/E → maj7 (bare triad with slash bass)', () => {
+    expect(parseChordSymbol('C/E')).toMatchObject({ rootName: 'C', quality: 'maj7', suffix: '' });
+  });
 });
 
 /* ── QUALITY_TO_MODES ──────────────────────────────────── */
@@ -189,12 +233,21 @@ describe('QUALITY_TO_MODES', () => {
     }
   });
 
-  it('each mapped index has the correct chordQuality', () => {
+  it('each mapped index has the correct chordQuality (except dim→Locrian approximation)', () => {
     for (const [quality, indices] of Object.entries(QUALITY_TO_MODES)) {
       for (const idx of indices) {
-        expect(MODE_TEMPLATES[idx].chordQuality).toBe(quality);
+        if (quality === 'dim') {
+          // dim maps to Locrian (m7♭5) as an approximation
+          expect(MODE_TEMPLATES[idx].chordQuality).toBe('m7♭5');
+        } else {
+          expect(MODE_TEMPLATES[idx].chordQuality).toBe(quality);
+        }
       }
     }
+  });
+
+  it('dim maps to Locrian (index 6)', () => {
+    expect(QUALITY_TO_MODES['dim']).toEqual([6]);
   });
 });
 
@@ -279,6 +332,41 @@ describe('buildChordSlot', () => {
   it('uses suggestMode when songKey is provided', () => {
     const slot = buildChordSlot('Dm7', { rootName: 'D', quality: 'm7', suffix: 'm7' }, 1, { root: 'C', minor: false });
     expect(slot.modeIdx).toBe(1); // Dorian (II of C)
+  });
+
+  it('bare triad: C in key of C → maj7 (I)', () => {
+    const slot = buildChordSlot('C', { rootName: 'C', quality: 'maj7', suffix: '' }, 1, { root: 'C', minor: false });
+    expect(slot.quality).toBe('maj7');
+    expect(slot.modeIdx).toBe(0); // Ionian
+  });
+
+  it('bare triad: G in key of C → 7 (V, dominant)', () => {
+    const slot = buildChordSlot('G', { rootName: 'G', quality: 'maj7', suffix: '' }, 1, { root: 'C', minor: false });
+    expect(slot.quality).toBe('7');
+    expect(slot.modeIdx).toBe(4); // Mixolydian
+  });
+
+  it('bare triad: D in key of C → m7 (ii, minor)', () => {
+    const slot = buildChordSlot('D', { rootName: 'D', quality: 'maj7', suffix: '' }, 1, { root: 'C', minor: false });
+    expect(slot.quality).toBe('m7');
+    expect(slot.modeIdx).toBe(1); // Dorian
+  });
+
+  it('bare triad: B in key of C → m7♭5 (vii)', () => {
+    const slot = buildChordSlot('B', { rootName: 'B', quality: 'maj7', suffix: '' }, 1, { root: 'C', minor: false });
+    expect(slot.quality).toBe('m7♭5');
+    expect(slot.modeIdx).toBe(6); // Locrian
+  });
+
+  it('bare triad: non-diatonic without key → defaults to maj7', () => {
+    const slot = buildChordSlot('C', { rootName: 'C', quality: 'maj7', suffix: '' });
+    expect(slot.quality).toBe('maj7');
+  });
+
+  it('bare triad: F in key of C → maj7 (IV)', () => {
+    const slot = buildChordSlot('F', { rootName: 'F', quality: 'maj7', suffix: '' }, 1, { root: 'C', minor: false });
+    expect(slot.quality).toBe('maj7');
+    expect(slot.modeIdx).toBe(3); // Lydian
   });
 });
 
@@ -472,6 +560,11 @@ describe('chordRomanNumeral', () => {
     expect(chordRomanNumeral('D', 'm7', aMin)).toEqual({ numeral: 'ii', diatonic: true });
     expect(chordRomanNumeral('G', '7', aMin)).toEqual({ numeral: 'V', diatonic: true });
     expect(chordRomanNumeral('C', 'maj7', aMin)).toEqual({ numeral: 'I', diatonic: true });
+  });
+
+  it('dim chord: lowercase + degree sign', () => {
+    expect(chordRomanNumeral('D', 'dim', cMaj)).toEqual({ numeral: 'ii°', diatonic: false });
+    expect(chordRomanNumeral('B', 'dim', cMaj)).toEqual({ numeral: 'vii°', diatonic: false });
   });
 });
 
