@@ -78,7 +78,7 @@ export function Fretboard({ visible, selPosId, dim, showCT, ctSet, getLabel, roo
                       stringIndex={sIdx}
                       noteName={n}
                       fret={f}
-                      posColor={c}
+                      posColor={n === rootNote ? POS_COLORS[pos.id - 1] : c}
                       isRoot={n === rootNote}
                       isCT={showCT && ctSet.has(n)}
                       showCT={showCT}
