@@ -10,10 +10,14 @@ Vite 7 + React 19 + TypeScript 5 + Tailwind CSS v4。
 ## 現在の機能
 
 ### 基本機能
-- 7モード (Ionian〜Locrian) の切替表示
+- 18モード対応:
+  - Diatonic 7 (Ionian〜Locrian)
+  - Melodic Minor 7 (Melodic Minor, Dorian♭2, Lydian Aug, Lydian Dom, Mixo♭6, Locrian♯2, Altered)
+  - Harmonic Minor 2 (Harmonic Minor, Phrygian Dominant)
+  - Diminished 2 (W-H, H-W) — 8音対称スケール、4ポジション制
 - 7ポジションの個別表示 / 全表示 / オーバーレイ表示
 - ルートキー選択 (12キー対応)
-- コードトーン強調 (maj7/m7/7/m7♭5)
+- コードトーン強調 (maj7/m7/7/m7♭5/mMaj7/aug/dim/7alt 等)
 - ラベル切替（音名 / 度数）
 - コード記法プリファレンス (M7/maj7/△7, m7/mi7/-7, m7♭5/ø7)
 
@@ -22,6 +26,8 @@ Vite 7 + React 19 + TypeScript 5 + Tailwind CSS v4。
 - コード→モード/ポジション提案 (近接順)
 - ←→↑↓ キーボードナビゲーション
 - プリセット (II-V-I in C/F/B♭)
+- ガイドトーン表示 (3rd/7th ボイスリーディング可視化)
+- 次コード 3rd ゴーストノート表示 + 解決分類 (half-step-down/up, common-tone)
 
 ### JazzStandards インポート (1382曲)
 - GitHub JSON からフェッチ・キャッシュ
@@ -45,25 +51,31 @@ Vite 7 + React 19 + TypeScript 5 + Tailwind CSS v4。
 src/
 ├── App.tsx                          — 状態管理ハブ (通常モード + 進行モード + ↑↓ナビ)
 ├── types/
-│   └── music.ts                     — ChordSlot, Progression, ChartMeasure, ChartLayout 等
+│   └── music.ts                     — ChordSlot, Progression, ChartMeasure, ChartLayout, ModeTemplate 等
 ├── constants/
-│   └── music.ts                     — MODE_TEMPLATES, ROOTS, STRING_DEG_OFFSETS
+│   └── music.ts                     — MODE_TEMPLATES(18), ROOTS, STRING_DEG_OFFSETS, MODE_COLORS
 ├── utils/
-│   ├── fretboard.ts                 — buildFretMap(), generatePositions()
+│   ├── fretboard.ts                 — buildFretMap(), generatePositions(), generateDimPositions()
 │   ├── noteSpelling.ts              — spellScale(), buildDegreeMap(), resolveMode()
-│   ├── progression.ts               — parseChordSymbol(), rankPositionsByProximity()
+│   ├── progression.ts               — parseChordSymbol(), rankPositionsByProximity(), QUALITY_TO_MODES
+│   ├── guideTones.ts                — getGuideTones(), findNoteLocations(), classifyResolution()
 │   ├── jazzStandards.ts             — fetchJazzStandards(), extractStructuredChords(), songToProgression()
 │   ├── chartLayout.ts               — deriveChartLayout(), getChartLayout(), buildChordRows()
-│   └── __tests__/                   — vitest テスト (313 tests)
-│       ├── fretboard.test.ts        — 172 tests (Pos1リファレンス、度数オフセット不変条件)
-│       ├── progression.test.ts      — 95 tests (parseChordSymbol、近接ランキング)
-│       ├── jazzStandards.test.ts    — 37 tests (パース、エンディング、リピート、ビート幅、自動ラベル)
-│       └── noteSpelling.test.ts     — 9 tests
+│   └── __tests__/                   — vitest テスト (596 tests)
+│       ├── fretboard.test.ts        — 388 tests (Pos1リファレンス、度数オフセット不変条件、構造検証)
+│       ├── progression.test.ts      — 125 tests (parseChordSymbol、QUALITY_TO_MODES、近接ランキング)
+│       ├── jazzStandards.test.ts    — 42 tests (パース、エンディング、リピート、ビート幅、自動ラベル)
+│       ├── noteSpelling.test.ts     — 19 tests (スペリング、度数マップ、resolveMode、8音スケール)
+│       └── guideTones.test.ts       — 22 tests (ガイドトーン抽出、解決分類)
 ├── components/
-│   ├── Fretboard/                   — SVG指板描画
-│   ├── Controls/                    — RootSelector, ModeSelector, PositionSelector
+│   ├── Fretboard/                   — SVG指板描画 (Fretboard, FretboardNote, GhostNote)
+│   ├── Controls/                    — RootSelector, ModeSelector, PositionSelector, OptionBar
+│   ├── Footer.tsx                   — フッター
+│   ├── PositionDetail.tsx           — テキスト詳細 (フレット範囲ラベル)
+│   ├── PositionGrid.tsx             — ポジション選択グリッド
 │   └── Progression/
 │       ├── ChordChart.tsx           — iReal Pro 風譜面グリッド
+│       ├── GuideToneLine.tsx        — ガイドトーン (3rd/7th) ボイスリーディング表示
 │       ├── ProgressionEditor.tsx    — 進行エディタ (chartLayout 保持)
 │       ├── ProgressionPlayer.tsx    — 進行プレイヤー (ChordChart 使用)
 │       └── SongImporter.tsx         — JazzStandards 検索・インポート
@@ -106,7 +118,7 @@ CSS Grid 描画
 
 ## コアアルゴリズム解説
 
-### ポジション生成の仕組み
+### 7音スケール: ポジション生成 (`generatePositions`)
 
 Berklee 7ポジションシステムの核心は **B弦（2弦）が各ポジションで2音のみ** という点。
 他の弦はすべて3音。これはB-G弦間の長3度チューニングに起因する。
@@ -130,12 +142,31 @@ Berklee 7ポジションシステムの核心は **B弦（2弦）が各ポジシ
 | ❌ 3 | 生成offset変更 | 12シェイプ | 開始フレットが変わりトリオ選択が変化 |
 | ✅ | **1:1順次割当** | 7シェイプ、正確 | シンプルが最強 |
 
+### 8音対称スケール: ディミニッシュポジション (`generateDimPositions`)
+
+ディミニッシュ (W-H / H-W) は対称スケールのため **4ポジション** を生成。
+dim7 の構成音 (Root, ♭3, ♭5, 6) は短3度ずつ等間隔 → 12フレットを4分割。
+
+- 各弦で隣接フレットペアが3フレットごとに繰り返し
+- 各ポジションは5フレット幅、3フレット間隔
+- ポジション順: Pos 1=Root, Pos 2=♭3, Pos 3=♭5, Pos 4=6
+- 6弦のみ4音 (xx-xx)、他弦は3音
+
+### ガイドトーン & ボイスリーディング (`guideTones.ts`)
+
+進行モードで次のコードへの声部進行を可視化:
+- `getGuideTones(mode)`: コードの3rd/7th を抽出
+- `findNoteLocations()`: 指板上の全出現位置を検索
+- `classifyResolution()`: 現コード7th → 次コード3rd の解決タイプ分類
+  - `half-step-down` (理想的), `half-step-up`, `common-tone`, `other`
+- dim7 はスキップ (対称構造のため3rd/7th が不定)
+
 ---
 
 ## 検証
 
 ```bash
-npm test          # 313 tests (vitest)
+npm test          # 596 tests (vitest)
 npm run build     # tsc + vite build
 npm run dev       # localhost:5173
 ```
@@ -158,4 +189,9 @@ A:  B(2), C(3), D(5)
 2. コード進行プリセット拡充 (Blues, Rhythm Changes)
 3. ポジション間移動ガイド（共通音ハイライト）
 4. 音声再生 (Web Audio API)
-5. カスタムスケール (メロディックマイナー, ハーモニックマイナー)
+
+### 実装済み (参考)
+- ~~カスタムスケール (メロディックマイナー, ハーモニックマイナー)~~ → 実装済み (18モード対応)
+- ~~コード進行連動表示~~ → 実装済み (進行モード)
+- ~~ガイドトーン表示~~ → 実装済み (ボイスリーディング可視化)
+- ~~ディミニッシュスケール~~ → 実装済み (W-H/H-W、4ポジション制)
