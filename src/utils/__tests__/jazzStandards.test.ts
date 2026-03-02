@@ -298,19 +298,69 @@ describe('songToProgression', () => {
     };
     const prog = songToProgression(song);
     expect(prog.chords).toHaveLength(3);
-    expect(prog.chords[1].quality).toBe('7'); // mapped to dominant family
+    expect(prog.chords[1].quality).toBe('7alt'); // 7#9 → Altered
     expect(prog.chords[1].symbol).toBe('G7#9'); // original symbol preserved
   });
 
   it('truly unsupported chords become skip slots', () => {
     const song: RawJazzStandard = {
       Title: 'Test',
-      Sections: [{ MainSegment: { Chords: 'Dm7|Gadd4|Cmaj7' } }],
+      Sections: [{ MainSegment: { Chords: 'Dm7|Gno5|Cmaj7' } }],
     };
     const prog = songToProgression(song);
     expect(prog.chords).toHaveLength(3);
     expect(prog.chords[1].quality).toBe('unknown');
-    expect(prog.chords[1].symbol).toBe('Gadd4');
+    expect(prog.chords[1].symbol).toBe('Gno5');
+  });
+
+  it('add chords are supported (not skip)', () => {
+    const song: RawJazzStandard = {
+      Title: 'Test',
+      Sections: [{ MainSegment: { Chords: 'Cadd9|Dm7' } }],
+    };
+    const prog = songToProgression(song);
+    expect(prog.chords[0].quality).toBe('maj7');
+    expect(prog.chords[0].symbol).toBe('Cadd9');
+  });
+
+  it('bare triads are supported with diatonic quality inference', () => {
+    const song: RawJazzStandard = {
+      Title: 'Test',
+      Key: 'C',
+      Sections: [{ MainSegment: { Chords: 'C|F|G' } }],
+    };
+    const prog = songToProgression(song);
+    expect(prog.chords).toHaveLength(3);
+    expect(prog.chords[0].quality).toBe('maj7'); // I
+    expect(prog.chords[1].quality).toBe('maj7'); // IV
+    expect(prog.chords[2].quality).toBe('7');    // V → dominant
+  });
+
+  it('dim chords are supported', () => {
+    const song: RawJazzStandard = {
+      Title: 'Test',
+      Sections: [{ MainSegment: { Chords: 'Bdim7|Cmaj7' } }],
+    };
+    const prog = songToProgression(song);
+    expect(prog.chords[0].quality).toBe('dim');
+  });
+
+  it('aug chords are supported', () => {
+    const song: RawJazzStandard = {
+      Title: 'Test',
+      Sections: [{ MainSegment: { Chords: 'Caug|Dm7' } }],
+    };
+    const prog = songToProgression(song);
+    expect(prog.chords[0].quality).toBe('aug');
+  });
+
+  it('sus chords are supported', () => {
+    const song: RawJazzStandard = {
+      Title: 'Test',
+      Sections: [{ MainSegment: { Chords: 'Csus4|Dm7' } }],
+    };
+    const prog = songToProgression(song);
+    expect(prog.chords[0].quality).toBe('7');
   });
 
   it('handles missing key gracefully', () => {
