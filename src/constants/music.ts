@@ -76,8 +76,8 @@ export const STRING_DEG_OFFSETS = { e: 3, g: 5, d: 2, a: 6 } as const;
 export const MAX_TRIO_GAP = 5;
 
 export const POS_COLORS: string[] = [
-  '#E74C3C', '#E67E22', '#F1C40F', '#27AE60',
-  '#2980B9', '#8E44AD', '#16A085',
+  '#E74C3C', '#E67E22', '#E8336F', '#27AE60',
+  '#6EAC00', '#8E44AD', '#16A085',
 ];
 
 export const MODE_COLORS: Record<string, string> = {

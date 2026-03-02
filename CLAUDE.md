@@ -3,7 +3,7 @@
 ## プロジェクト概要
 
 Berklee 7-Position System に基づくギター指板ビジュアライザー。
-Vite + React + TypeScript + Tailwind CSS v4 で構成。
+Vite 7 + React 19 + TypeScript 5 + Tailwind CSS v4 で構成。
 
 ## セットアップ手順
 
@@ -38,13 +38,14 @@ fnm default lts-latest
 ## アーキテクチャ
 
 - `src/App.tsx` — 状態管理ハブ (通常モード + 進行モード + ↑↓ナビ)
-- `src/utils/fretboard.ts` — `buildFretMap()`, `generatePositions()` 純粋関数
+- `src/utils/fretboard.ts` — `buildFretMap()`, `generatePositions()`, `generateDimPositions()` 純粋関数
 - `src/utils/progression.ts` — コード進行ユーティリティ (`parseChordSymbol`, `rankPositionsByProximity`)
+- `src/utils/guideTones.ts` — ガイドトーン & ボイスリーディング (`getGuideTones`, `classifyResolution`)
 - `src/utils/jazzStandards.ts` — JazzStandards インポート (`extractStructuredChords`, `songToProgression`)
 - `src/utils/chartLayout.ts` — 譜面レイアウト (`deriveChartLayout`, `getChartLayout`, `buildChordRows`)
-- `src/constants/` — MODE_TEMPLATES, カラー, SVG寸法
+- `src/constants/` — MODE_TEMPLATES (18モード), カラー, SVG寸法
 - `src/components/` — プレゼンテーションコンポーネント
-- `src/components/Progression/` — 進行エディタ + プレイヤー + ChordChart (iReal Pro 風譜面)
+- `src/components/Progression/` — 進行エディタ + プレイヤー + ChordChart (iReal Pro 風譜面) + GuideToneLine
 
 ## 絶対に守るべきルール
 
@@ -75,15 +76,16 @@ fnm default lts-latest
 ## テスト
 
 ```bash
-npm test          # vitest run (313 テスト)
+npm test          # vitest run (596 テスト)
 npm run build     # tsc + vite build
 ```
 
 テストファイル:
-- `src/utils/__tests__/fretboard.test.ts` — C Ionian Pos 1 リファレンス、度数オフセット不変条件 (84パターン)、構造検証
-- `src/utils/__tests__/noteSpelling.test.ts` — スペリング、度数マップ、resolveMode
-- `src/utils/__tests__/progression.test.ts` — parseChordSymbol、QUALITY_TO_MODES、近接ランキング、localStorage
-- `src/utils/__tests__/jazzStandards.test.ts` — パース、エンディング、リピート、ビート幅、自動ラベル
+- `src/utils/__tests__/fretboard.test.ts` — 388 tests: C Ionian Pos 1 リファレンス、度数オフセット不変条件 (84パターン)、構造検証
+- `src/utils/__tests__/progression.test.ts` — 125 tests: parseChordSymbol、QUALITY_TO_MODES、近接ランキング、localStorage
+- `src/utils/__tests__/jazzStandards.test.ts` — 42 tests: パース、エンディング、リピート、ビート幅、自動ラベル
+- `src/utils/__tests__/noteSpelling.test.ts` — 19 tests: スペリング、度数マップ、resolveMode、8音スケール
+- `src/utils/__tests__/guideTones.test.ts` — 22 tests: ガイドトーン抽出、解決分類
 
 ## 今後の開発予定 (優先度順)
 
@@ -91,7 +93,6 @@ npm run build     # tsc + vite build
 2. コード進行プリセット拡充 (Blues, Rhythm Changes)
 3. ポジション間移動ガイド (共通音ハイライト)
 4. 音声再生 (Web Audio API)
-5. カスタムスケール (メロディックマイナー, ハーモニックマイナー)
 
 ## 参照ドキュメント
 
