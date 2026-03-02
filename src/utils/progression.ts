@@ -1,19 +1,19 @@
 import type { Position, PositionInstance, RootName, SongKey, ChordSlot, Progression } from '../types';
 import { ROOTS, MODE_TEMPLATES } from '../constants';
 import { resolveMode } from './noteSpelling';
-import { buildFretMap, generatePositions } from './fretboard';
+import { buildFretMap, generatePositions, generateDimPositions } from './fretboard';
 
 /** Map chord quality → compatible MODE_TEMPLATES indices */
 export const QUALITY_TO_MODES: Record<string, number[]> = {
   'maj7':  [0, 3],              // Ionian, Lydian
   'm7':    [1, 2, 5, 8],        // Dorian, Phrygian, Aeolian, Dorian ♭2
-  '7':     [4, 10, 11, 15, 13], // Mixolydian, Lydian Dom, Mixo♭6, Phryg Dom, Altered
+  '7':     [4, 10, 11, 15, 13, 17], // Mixolydian, Lydian Dom, Mixo♭6, Phryg Dom, Altered, Dim H-W
   'm7♭5':  [6, 12],             // Locrian, Locrian ♯2
-  'dim':   [6],                 // Locrian (Phase 2: 8-note dim scale)
+  'dim':   [16],                 // Diminished W-H
   'mMaj7': [7, 14],             // Melodic Minor, Harmonic Minor
   'aug':   [9],                 // Lydian Augmented
   '7alt':  [13],                // Altered
-  '7b9':   [15, 13],            // Phrygian Dominant, Altered
+  '7b9':   [15, 13, 17],         // Phrygian Dominant, Altered, Dim H-W
   '7#11':  [10, 13],            // Lydian Dominant, Altered
   '7b13':  [11, 15, 13],         // Mixolydian ♭6, Phrygian Dominant, Altered
 };
@@ -333,7 +333,10 @@ export function computeEffectiveSelections(
     } else {
       const mode = resolveMode(c.rootName, MODE_TEMPLATES[modeIdx]);
       const fretMap = buildFretMap(mode.semi, mode.notes);
-      const curAllPos = generatePositions(fretMap, mode.notes);
+      const is8Note = mode.notes.length > 7;
+      const curAllPos = is8Note
+        ? generateDimPositions(fretMap, mode.semi[0])
+        : generatePositions(fretMap, mode.notes);
 
       let prevPos: Position | null = null;
       if (i > 0) {
@@ -342,7 +345,10 @@ export function computeEffectiveSelections(
         if (QUALITY_TO_MODES[prevChord.quality]) {
           const prevMode = resolveMode(prevChord.rootName, MODE_TEMPLATES[prevEff.modeIdx]);
           const prevFretMap = buildFretMap(prevMode.semi, prevMode.notes);
-          const prevAllPos = generatePositions(prevFretMap, prevMode.notes);
+          const prevIs8 = prevMode.notes.length > 7;
+          const prevAllPos = prevIs8
+            ? generateDimPositions(prevFretMap, prevMode.semi[0])
+            : generatePositions(prevFretMap, prevMode.notes);
           prevPos = prevAllPos.find(p => p.id === prevEff.posId) ?? null;
         }
       }

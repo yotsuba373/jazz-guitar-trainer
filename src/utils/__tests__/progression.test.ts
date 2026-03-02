@@ -250,9 +250,9 @@ describe('QUALITY_TO_MODES', () => {
 
   // Qualities that cross-map to modes with different chordQuality
   const CROSS_MAP_QUALITIES: Record<string, string[]> = {
-    'dim':  ['m7♭5'],                                // dim → Locrian (m7♭5 approx)
+    'dim':  ['dim'],                                   // Dim W-H only
     '7':    ['7', '7#11', '7b13', '7b9', '7alt'],   // generic dom → various dom modes
-    '7b9':  ['7b9', '7alt'],                         // 7b9 → Phryg Dom + Altered
+    '7b9':  ['7b9', '7alt', '7'],                    // 7b9 → Phryg Dom + Altered + Dim H-W
     '7#11': ['7#11', '7alt'],                        // 7#11 → Lydian Dom + Altered
     '7b13': ['7b13', '7b9', '7alt'],                  // 7b13 → Mixo♭6 + Phryg Dom + Altered
   };
@@ -266,15 +266,15 @@ describe('QUALITY_TO_MODES', () => {
     }
   });
 
-  it('dim maps to Locrian (index 6)', () => {
-    expect(QUALITY_TO_MODES['dim']).toEqual([6]);
+  it('dim maps to Diminished W-H (16)', () => {
+    expect(QUALITY_TO_MODES['dim']).toEqual([16]);
   });
 
   it('new qualities map to correct modes', () => {
     expect(QUALITY_TO_MODES['mMaj7']).toEqual([7, 14]);
     expect(QUALITY_TO_MODES['aug']).toEqual([9]);
     expect(QUALITY_TO_MODES['7alt']).toEqual([13]);
-    expect(QUALITY_TO_MODES['7b9']).toEqual([15, 13]);
+    expect(QUALITY_TO_MODES['7b9']).toEqual([15, 13, 17]);
     expect(QUALITY_TO_MODES['7#11']).toEqual([10, 13]);
     expect(QUALITY_TO_MODES['7b13']).toEqual([11, 15, 13]);
   });

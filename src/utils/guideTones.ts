@@ -3,8 +3,8 @@ import { OPEN_STRINGS } from '../constants';
 
 /** Guide tone data for a single chord in context */
 export interface GuideToneInfo {
-  third: string;
-  seventh: string;
+  third: string | null;
+  seventh: string | null;
   nextThird: string | null;
   nextThirdLocations: { stringIdx: number; fret: number }[];
   resolution: ResolutionType | null;

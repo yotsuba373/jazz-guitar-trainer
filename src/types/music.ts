@@ -65,6 +65,7 @@ export interface ModeTemplate {
   chordSub: string;
   chordDegreesIdx: number[];
   chordQuality: string;
+  customDegrees?: string[];  // 8-note scales: degree labels (buildDegreeMap doesn't apply)
 }
 
 /** A single chord slot in a progression */

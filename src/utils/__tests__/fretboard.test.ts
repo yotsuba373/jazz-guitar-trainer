@@ -80,12 +80,13 @@ describe('C Ionian Pos 1 reference', () => {
 
 /* ── degree offset invariant (all 84 patterns) ─────────── */
 
-describe('degree offset invariant: all 12 keys × 7 modes', () => {
+describe('degree offset invariant: all 12 keys × 7-note modes', () => {
   // Expected: E=3, G=5, D=2, A=6 for Pos 1
   const EXPECTED = { e: 3, g: 5, d: 2, a: 6 };
 
   for (const root of ROOTS) {
     for (let mi = 0; mi < MODE_TEMPLATES.length; mi++) {
+      if (MODE_TEMPLATES[mi].semi.length > 7) continue; // skip 8-note scales
       const modeName = MODE_TEMPLATES[mi].name;
 
       it(`${root.name} ${modeName}: eDeg0=3 gDeg0=5 dDeg0=2 aDeg0=6`, () => {
@@ -100,9 +101,10 @@ describe('degree offset invariant: all 12 keys × 7 modes', () => {
 
 /* ── position structure ─────────────────────────────────── */
 
-describe('position structure: all keys × modes', () => {
+describe('position structure: all keys × 7-note modes', () => {
   for (const root of ROOTS) {
     for (let mi = 0; mi < MODE_TEMPLATES.length; mi++) {
+      if (MODE_TEMPLATES[mi].semi.length > 7) continue; // skip 8-note scales
       const modeName = MODE_TEMPLATES[mi].name;
 
       it(`${root.name} ${modeName}: 7 positions, valid note counts`, () => {

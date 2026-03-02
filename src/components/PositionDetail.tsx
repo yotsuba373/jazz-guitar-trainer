@@ -31,17 +31,18 @@ export function PositionDetail({ position, mode, showCT, ctSet, getLabel, rootNo
           {STR_LABELS.map((sl, sIdx) => {
             const notes: FretNote[] | null = inst.strings[sIdx];
             if (!notes) return null;
-            const is2 = sIdx === 1;
+            const is8 = mode.notes.length > 7;
+            const isBRef = sIdx === 1 && !is8;
             return (
-              <div key={sIdx} style={{ color: is2 ? posColor : '#777' }}>
-                <span className="inline-block w-4" style={{ fontWeight: is2 ? 700 : 400 }}>{sl}</span>
+              <div key={sIdx} style={{ color: isBRef ? posColor : '#777' }}>
+                <span className="inline-block w-4" style={{ fontWeight: isBRef ? 700 : 400 }}>{sl}</span>
                 |{notes.map(([n, f]) => {
                   const lbl = getLabel(n);
                   const isRoot = n === rootNote;
                   const isCT = showCT && ctSet.has(n);
                   const m = isRoot ? '●' : (isCT ? '◆' : ' ');
                   return `--${String(f).padStart(2)}(${lbl.padEnd(2)})${m}`;
-                }).join('')}--|{is2 ? ' ★' : ''}
+                }).join('')}--|{isBRef ? ' ★' : ''}
               </div>
             );
           })}

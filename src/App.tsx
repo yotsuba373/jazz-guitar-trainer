@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useCallback } from 'react';
 import type { LabelMode, RootName, Progression, ChordNotationPrefs } from './types';
 import { MODE_TEMPLATES, ROOTS, MODE_COLORS } from './constants';
 import {
-  buildFretMap, generatePositions, resolveMode,
+  buildFretMap, generatePositions, generateDimPositions, resolveMode,
   loadProgressions, saveProgressions, QUALITY_TO_MODES,
   computeEffectiveSelections,
   formatChordSymbol, loadChordNotationPrefs, saveChordNotationPrefs,
@@ -36,8 +36,12 @@ export default function App() {
 
   const template = MODE_TEMPLATES[modeIdx];
   const mode = useMemo(() => resolveMode(rootName, template), [rootName, modeIdx]);
+  const is8Note = mode.notes.length > 7;
   const fretMap = useMemo(() => buildFretMap(mode.semi, mode.notes), [rootName, modeIdx]);
-  const allPos = useMemo(() => generatePositions(fretMap, mode.notes), [fretMap]);
+  const allPos = useMemo(
+    () => is8Note ? generateDimPositions(fretMap, mode.semi[0]) : generatePositions(fretMap, mode.notes),
+    [fretMap, is8Note],
+  );
   const ctSet = useMemo(() => new Set(mode.chordTones), [rootName, modeIdx]);
   const deg = mode.degrees;
   const rootNote = mode.notes[0];
@@ -64,11 +68,19 @@ export default function App() {
     const curEff = effectiveAll[activeChordIdx];
     if (!curEff || !QUALITY_TO_MODES[activeChord.quality]) return null;
 
+    const isDim = activeChord.quality === 'dim';
     const curMode = resolveMode(activeChord.rootName, MODE_TEMPLATES[curEff.modeIdx]);
     const curFretMap = buildFretMap(curMode.semi, curMode.notes);
-    const curAllPos = generatePositions(curFretMap, curMode.notes);
+    const curIs8 = curMode.notes.length > 7;
+    const curAllPos = curIs8
+      ? generateDimPositions(curFretMap, curMode.semi[0])
+      : generatePositions(curFretMap, curMode.notes);
+
+    // dim7 is symmetric (all m3 intervals) — own 3rd/7th are ambiguous
     const currentGT = getGuideTones(curMode);
-    const noNext = { third: currentGT.third, seventh: currentGT.seventh, nextThird: null, nextThirdLocations: [] as { stringIdx: number; fret: number }[], resolution: null };
+    const gtThird = isDim ? null : currentGT.third;
+    const gtSeventh = isDim ? null : currentGT.seventh;
+    const noNext = { third: gtThird, seventh: gtSeventh, nextThird: null, nextThirdLocations: [] as { stringIdx: number; fret: number }[], resolution: null };
 
     const chords = activeProg?.chords;
     if (!chords) return noNext;
@@ -78,9 +90,11 @@ export default function App() {
     const nextEff = effectiveAll[activeChordIdx + 1];
     if (!nextChord || !nextEff || !QUALITY_TO_MODES[nextChord.quality]) return noNext;
 
+    // Skip next-3rd ghost for dim7 (symmetric, no unique 3rd)
+    if (nextChord.quality === 'dim') return noNext;
+
     const nextMode = resolveMode(nextChord.rootName, MODE_TEMPLATES[nextEff.modeIdx]);
     const nextGT = getGuideTones(nextMode);
-    const curSevSemi = curMode.semi[curMode.notes.indexOf(currentGT.seventh)];
     const nextThirdSemi = nextMode.semi[nextMode.notes.indexOf(nextGT.third)];
     const allLocs = findNoteLocations(nextGT.third, curFretMap, nextThirdSemi);
 
@@ -95,8 +109,11 @@ export default function App() {
           }))
       : allLocs;
 
-    const resolution = classifyResolution(curSevSemi, nextThirdSemi);
-    return { third: currentGT.third, seventh: currentGT.seventh, nextThird: nextGT.third, nextThirdLocations, resolution };
+    // Resolution: only compute when current chord has a 7th (not dim)
+    const resolution = !isDim && currentGT.seventh
+      ? classifyResolution(curMode.semi[curMode.notes.indexOf(currentGT.seventh)], nextThirdSemi)
+      : null;
+    return { third: gtThird, seventh: gtSeventh, nextThird: nextGT.third, nextThirdLocations, resolution };
   }, [progMode, showGT, activeChordIdx, effectiveAll, activeProg, activeChord, isSkipped]);
 
   useEffect(() => {
