@@ -441,6 +441,10 @@ export function loadProgressions(): Progression[] {
   }
 }
 
+const cs = (symbol: string, rootName: RootName, quality: string, modeIdx: number): ChordSlot => ({
+  symbol, rootName, quality, modeIdx, posId: 1, posConfirmed: false, modeConfirmed: false,
+});
+
 export const PRESET_PROGRESSIONS: Progression[] = [
   {
     name: 'II-V-I in C',
@@ -468,5 +472,136 @@ export const PRESET_PROGRESSIONS: Progression[] = [
       { symbol: 'F7', rootName: 'F', quality: '7', modeIdx: 4, posId: 1, posConfirmed: false, modeConfirmed: false },
       { symbol: 'B♭M7', rootName: 'B♭', quality: 'maj7', modeIdx: 0, posId: 1, posConfirmed: false, modeConfirmed: false },
     ],
+  },
+  // ── Blues in B♭ (12-bar) ─────────────────────────────────────────────────
+  {
+    name: 'Blues in B♭',
+    songKey: { root: 'B♭', minor: false },
+    chords: [
+      cs('B♭7', 'B♭', '7', 4), cs('E♭7', 'E♭', '7', 4),          // bar 1-2
+      cs('B♭7', 'B♭', '7', 4), cs('B♭7', 'B♭', '7', 4),          // bar 3-4
+      cs('E♭7', 'E♭', '7', 4), cs('E♭7', 'E♭', '7', 4),          // bar 5-6
+      cs('B♭7', 'B♭', '7', 4), cs('G7',  'G',  '7', 4),           // bar 7-8
+      cs('Cm7', 'C',  'm7', 1), cs('F7',  'F',  '7', 4),           // bar 9-10
+      cs('B♭7', 'B♭', '7', 4), cs('G7',  'G',  '7', 4),           // bar 11 (2+2)
+      cs('Cm7', 'C',  'm7', 1), cs('F7',  'F',  '7', 4),           // bar 12 (2+2)
+    ],
+    chartLayout: {
+      barsPerRow: 4,
+      sections: [{
+        label: '',
+        repeats: 1,
+        measures: [
+          { chordIndices: [0] }, { chordIndices: [1] },
+          { chordIndices: [2] }, { chordIndices: [3] },
+          { chordIndices: [4] }, { chordIndices: [5] },
+          { chordIndices: [6] }, { chordIndices: [7] },
+          { chordIndices: [8] }, { chordIndices: [9] },
+          { chordIndices: [10, 11], beatWidths: [2, 2] },
+          { chordIndices: [12, 13], beatWidths: [2, 2] },
+        ],
+      }],
+    },
+  },
+  // ── Blues in F (12-bar) ──────────────────────────────────────────────────
+  {
+    name: 'Blues in F',
+    songKey: { root: 'F', minor: false },
+    chords: [
+      cs('F7',  'F',  '7', 4), cs('B♭7', 'B♭', '7', 4),           // bar 1-2
+      cs('F7',  'F',  '7', 4), cs('F7',  'F',  '7', 4),           // bar 3-4
+      cs('B♭7', 'B♭', '7', 4), cs('B♭7', 'B♭', '7', 4),          // bar 5-6
+      cs('F7',  'F',  '7', 4), cs('D7',  'D',  '7', 4),           // bar 7-8
+      cs('Gm7', 'G',  'm7', 1), cs('C7',  'C',  '7', 4),           // bar 9-10
+      cs('F7',  'F',  '7', 4), cs('D7',  'D',  '7', 4),           // bar 11 (2+2)
+      cs('Gm7', 'G',  'm7', 1), cs('C7',  'C',  '7', 4),           // bar 12 (2+2)
+    ],
+    chartLayout: {
+      barsPerRow: 4,
+      sections: [{
+        label: '',
+        repeats: 1,
+        measures: [
+          { chordIndices: [0] }, { chordIndices: [1] },
+          { chordIndices: [2] }, { chordIndices: [3] },
+          { chordIndices: [4] }, { chordIndices: [5] },
+          { chordIndices: [6] }, { chordIndices: [7] },
+          { chordIndices: [8] }, { chordIndices: [9] },
+          { chordIndices: [10, 11], beatWidths: [2, 2] },
+          { chordIndices: [12, 13], beatWidths: [2, 2] },
+        ],
+      }],
+    },
+  },
+  // ── Rhythm Changes in B♭ (AABA, 32 bars) ────────────────────────────────
+  {
+    name: 'Rhythm Changes in B♭',
+    songKey: { root: 'B♭', minor: false },
+    chords: [
+      // A section (bars 1-8)
+      cs('B♭M7', 'B♭', 'maj7', 0), cs('Gm7', 'G', 'm7', 1),       // bar 1
+      cs('Cm7',  'C',  'm7',   1), cs('F7',  'F', '7',   4),       // bar 2
+      cs('Dm7',  'D',  'm7',   1), cs('G7',  'G', '7',   4),       // bar 3
+      cs('Cm7',  'C',  'm7',   1), cs('F7',  'F', '7',   4),       // bar 4
+      cs('Fm7',  'F',  'm7',   1), cs('B♭7', 'B♭','7',   4),       // bar 5
+      cs('E♭M7', 'E♭', 'maj7', 0),                                  // bar 6
+      cs('Cm7',  'C',  'm7',   1), cs('F7',  'F', '7',   4),       // bar 7
+      cs('B♭M7', 'B♭', 'maj7', 0), cs('Gm7', 'G', 'm7',  1),      // bar 8 (→ repeat)
+      // B section / bridge (bars 1-8)
+      cs('D7', 'D', '7', 4), cs('D7', 'D', '7', 4),                // bar 1-2
+      cs('G7', 'G', '7', 4), cs('G7', 'G', '7', 4),                // bar 3-4
+      cs('C7', 'C', '7', 4), cs('C7', 'C', '7', 4),                // bar 5-6
+      cs('F7', 'F', '7', 4), cs('F7', 'F', '7', 4),                // bar 7-8
+      // Final A section (bars 1-8)
+      cs('B♭M7', 'B♭', 'maj7', 0), cs('Gm7', 'G', 'm7', 1),       // bar 1
+      cs('Cm7',  'C',  'm7',   1), cs('F7',  'F', '7',   4),       // bar 2
+      cs('Dm7',  'D',  'm7',   1), cs('G7',  'G', '7',   4),       // bar 3
+      cs('Cm7',  'C',  'm7',   1), cs('F7',  'F', '7',   4),       // bar 4
+      cs('Fm7',  'F',  'm7',   1), cs('B♭7', 'B♭','7',   4),       // bar 5
+      cs('E♭M7', 'E♭', 'maj7', 0),                                  // bar 6
+      cs('Cm7',  'C',  'm7',   1), cs('F7',  'F', '7',   4),       // bar 7
+      cs('B♭M7', 'B♭', 'maj7', 0),                                  // bar 8 (final)
+    ],
+    chartLayout: {
+      barsPerRow: 4,
+      sections: [
+        {
+          label: 'A',
+          repeats: 1,
+          measures: [
+            { chordIndices: [0,  1],  beatWidths: [2, 2] },
+            { chordIndices: [2,  3],  beatWidths: [2, 2] },
+            { chordIndices: [4,  5],  beatWidths: [2, 2] },
+            { chordIndices: [6,  7],  beatWidths: [2, 2] },
+            { chordIndices: [8,  9],  beatWidths: [2, 2] },
+            { chordIndices: [10] },
+            { chordIndices: [11, 12], beatWidths: [2, 2] },
+            { chordIndices: [13, 14], beatWidths: [2, 2] },
+          ],
+        },
+        {
+          label: 'B',
+          measures: [
+            { chordIndices: [15] }, { chordIndices: [16] },
+            { chordIndices: [17] }, { chordIndices: [18] },
+            { chordIndices: [19] }, { chordIndices: [20] },
+            { chordIndices: [21] }, { chordIndices: [22] },
+          ],
+        },
+        {
+          label: 'A',
+          measures: [
+            { chordIndices: [23, 24], beatWidths: [2, 2] },
+            { chordIndices: [25, 26], beatWidths: [2, 2] },
+            { chordIndices: [27, 28], beatWidths: [2, 2] },
+            { chordIndices: [29, 30], beatWidths: [2, 2] },
+            { chordIndices: [31, 32], beatWidths: [2, 2] },
+            { chordIndices: [33] },
+            { chordIndices: [34, 35], beatWidths: [2, 2] },
+            { chordIndices: [36] },
+          ],
+        },
+      ],
+    },
   },
 ];
