@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import type { Progression, Position, ChordNotationPrefs } from '../../types';
 import { MODE_TEMPLATES, POS_COLORS, MODE_COLORS } from '../../constants';
 import {
@@ -16,6 +16,10 @@ interface ProgressionPlayerProps {
   onModeChange: (chordIdx: number, modeIdx: number) => void;
   onPosChange: (chordIdx: number, posId: number) => void;
   onReset: () => void;
+  isPlaying: boolean;
+  bpm: number;
+  onTogglePlay: () => void;
+  onBpmChange: (bpm: number) => void;
 }
 
 const btnBase = 'rounded cursor-pointer text-[10px] font-mono px-2 py-[3px]';
@@ -23,9 +27,20 @@ const btnBase = 'rounded cursor-pointer text-[10px] font-mono px-2 py-[3px]';
 export function ProgressionPlayer({
   progression, activeChordIdx, allPos, chordPrefs,
   onChordSelect, onModeChange, onPosChange, onReset,
+  isPlaying, bpm, onTogglePlay, onBpmChange,
 }: ProgressionPlayerProps) {
   const chords = progression.chords;
   const activeChord = chords[activeChordIdx];
+
+  // BPM direct input state
+  const [bpmStr, setBpmStr] = useState(String(bpm));
+  useEffect(() => setBpmStr(String(bpm)), [bpm]);
+  function commitBpm() {
+    const v = parseInt(bpmStr, 10);
+    const clamped = isNaN(v) ? bpm : Math.max(40, Math.min(240, v));
+    onBpmChange(clamped);
+    setBpmStr(String(clamped));
+  }
 
   // Compute effective mode/pos for all chords (resolves auto-suggestion chain)
   const effectiveAll = useMemo(
@@ -61,6 +76,42 @@ export function ProgressionPlayer({
 
   return (
     <div className="mb-3">
+      {/* BPM / Playback controls */}
+      <div className="flex items-center gap-2 mb-2">
+        <button
+          onClick={onTogglePlay}
+          className="rounded cursor-pointer font-mono text-[13px] px-3 py-[3px]"
+          style={{
+            border: `1px solid ${isPlaying ? '#E74C3C' : '#27AE60'}`,
+            background: isPlaying ? '#2a1010' : '#102a10',
+            color: isPlaying ? '#E74C3C' : '#27AE60',
+            fontWeight: 700,
+          }}
+        >
+          {isPlaying ? '⏸' : '▶'}
+        </button>
+        <button
+          onClick={() => onBpmChange(Math.max(40, bpm - 1))}
+          className={btnBase}
+          style={{ border: '1px solid #444', background: '#1a1a1a', color: '#AAA' }}
+        >−</button>
+        <input
+          type="number"
+          value={bpmStr}
+          onChange={e => setBpmStr(e.target.value)}
+          onBlur={commitBpm}
+          onKeyDown={e => e.key === 'Enter' && commitBpm()}
+          className="w-14 text-center bg-transparent font-mono text-[12px] rounded border border-[#444] py-[3px] text-white"
+          min={40} max={240}
+        />
+        <span className="text-[10px] text-text-dim">BPM</span>
+        <button
+          onClick={() => onBpmChange(Math.min(240, bpm + 1))}
+          className={btnBase}
+          style={{ border: '1px solid #444', background: '#1a1a1a', color: '#AAA' }}
+        >+</button>
+      </div>
+
       {/* Chord chart grid */}
       <ChordChart
         progression={progression}
