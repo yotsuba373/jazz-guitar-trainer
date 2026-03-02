@@ -33,6 +33,8 @@ export default function App() {
   const [activeProgIdx, setActiveProgIdx] = useState(0);
   const [activeChordIdx, setActiveChordIdx] = useState(0);
   const [editing, setEditing] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [bpm, setBpm] = useState(120);
 
   const template = MODE_TEMPLATES[modeIdx];
   const mode = useMemo(() => resolveMode(rootName, template), [rootName, modeIdx]);
@@ -161,6 +163,29 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleKeyDown]);
 
+  // BPM auto-advance: setTimeout chain for variable beat durations
+  useEffect(() => {
+    if (!isPlaying || !progMode || !activeProg) return;
+    const layout = getChartLayout(activeProg);
+    const beatMap = new Map<number, number>();
+    for (const section of layout.sections) {
+      for (const measure of section.measures) {
+        const count = measure.chordIndices.length;
+        measure.chordIndices.forEach((ci, i) => {
+          beatMap.set(ci, measure.beatWidths?.[i] ?? (4 / count));
+        });
+      }
+    }
+    const beats = beatMap.get(activeChordIdx) ?? 4;
+    const timer = setTimeout(() => {
+      setActiveChordIdx(i => {
+        const next = i + 1;
+        return next >= activeProg.chords.length ? 0 : next;
+      });
+    }, (60000 / bpm) * beats);
+    return () => clearTimeout(timer);
+  }, [isPlaying, activeChordIdx, bpm, activeProg, progMode]);
+
   function handleSaveProgressions(progs: Progression[]) {
     setProgressions(progs);
     saveProgressions(progs);
@@ -213,7 +238,7 @@ export default function App() {
         {/* Mode toggle */}
         <div className="flex gap-1 mb-3">
           <button
-            onClick={() => { setProgMode(false); setEditing(false); }}
+            onClick={() => { setProgMode(false); setEditing(false); setIsPlaying(false); }}
             className="rounded cursor-pointer text-[10px] font-mono px-2.5 py-[5px]"
             style={{
               border: `1px solid ${!progMode ? '#FFF' : '#444'}`,
@@ -224,7 +249,7 @@ export default function App() {
             通常モード
           </button>
           <button
-            onClick={() => { setProgMode(true); setActiveChordIdx(0); }}
+            onClick={() => { setProgMode(true); setActiveChordIdx(0); setIsPlaying(false); }}
             className="rounded cursor-pointer text-[10px] font-mono px-2.5 py-[5px]"
             style={{
               border: `1px solid ${progMode ? '#FFF' : '#444'}`,
@@ -236,7 +261,7 @@ export default function App() {
           </button>
           {progMode && (
             <button
-              onClick={() => setEditing(!editing)}
+              onClick={() => { setEditing(!editing); setIsPlaying(false); }}
               className="rounded cursor-pointer text-[10px] font-mono px-2.5 py-[5px]"
               style={{
                 border: `1px solid ${editing ? '#F1C40F' : '#666'}`,
@@ -257,7 +282,7 @@ export default function App() {
                 activeProgIdx={activeProgIdx}
                 chordPrefs={chordPrefs}
                 onSave={handleSaveProgressions}
-                onSelectProg={(idx) => { setActiveProgIdx(idx); setActiveChordIdx(0); }}
+                onSelectProg={(idx) => { setActiveProgIdx(idx); setActiveChordIdx(0); setIsPlaying(false); }}
                 onClose={() => setEditing(false)}
               />
             )}
@@ -272,6 +297,10 @@ export default function App() {
                 onModeChange={handleChordModeChange}
                 onPosChange={handleChordPosChange}
                 onReset={handleResetSelections}
+                isPlaying={isPlaying}
+                bpm={bpm}
+                onTogglePlay={() => setIsPlaying(p => !p)}
+                onBpmChange={setBpm}
               />
             )}
 
