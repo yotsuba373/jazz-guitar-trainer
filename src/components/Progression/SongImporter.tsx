@@ -89,7 +89,7 @@ export function SongImporter({ onImport, onClose }: SongImporterProps) {
           )}
 
           <p className="text-[8px] text-text-dim mt-1">
-            {songs.length} 曲 · 対応: M7/m7/7/m7♭5 (他はSkip表示)
+            {songs.length} 曲 · ほぼ全コードタイプ対応
           </p>
         </>
       )}

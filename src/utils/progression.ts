@@ -9,6 +9,7 @@ export const QUALITY_TO_MODES: Record<string, number[]> = {
   'm7':   [1, 2, 5], // Dorian, Phrygian, Aeolian
   '7':    [4],       // Mixolydian
   'm7♭5': [6],       // Locrian
+  'dim':  [6],       // Locrian (♭3 ♭5 shared; ♭7 vs ♭♭7 tolerated)
 };
 
 const STORAGE_KEY = 'jazz-guitar-progressions';
@@ -37,6 +38,11 @@ const QUALITY_PATTERNS: [RegExp, string][] = [
   [/^dim/, 'dim'],
   [/^0[7]?$/, 'dim'],
 
+  // --- augmented family → dominant function ---
+  [/^aug/, '7'],
+  [/^\+7/, '7'],
+  [/^\+$/, '7'],
+
   // --- minor family (m/maj7, m6 etc. before generic m7) ---
   [/^m\/maj7/, 'm7'],
   [/^mi7/, 'm7'],
@@ -48,6 +54,7 @@ const QUALITY_PATTERNS: [RegExp, string][] = [
   [/^m69/, 'm7'],
   [/^m7/, 'm7'],
   [/^m$/, 'm7'],
+  [/^-$/, 'm7'],
 
   // --- major family ---
   [/^[△Δ]7/, 'maj7'],
@@ -56,6 +63,10 @@ const QUALITY_PATTERNS: [RegExp, string][] = [
   [/^maj1[13]/, 'maj7'],
   [/^69$/, 'maj7'],
   [/^6$/, 'maj7'],
+  [/^add/, 'maj7'],
+
+  // --- sus → dominant function ---
+  [/^sus[24]?$/, '7'],
 
   // --- dominant family (prefix match covers 7b9, 7#11, 7sus, 7alt, etc.) ---
   [/^7/, '7'],
@@ -86,7 +97,9 @@ export function parseChordSymbol(
 
   // Strip slash bass note (e.g. "m7/Bb" → "m7")
   const qualityStr = trimmed.slice(rootMatch[0].length).replace(/\/[A-G][♭♯#b]?$/, '');
-  if (!qualityStr) return null;
+
+  // Bare major triad (e.g. "C", "F", "Bb") → treat as maj7
+  if (!qualityStr) return { rootName, quality: 'maj7', suffix: '' };
 
   for (const [pattern, quality] of QUALITY_PATTERNS) {
     if (pattern.test(qualityStr)) {
@@ -188,9 +201,9 @@ export function chordRomanNumeral(
   const diatonic = degIdx != null && MODE_TEMPLATES[degIdx]?.chordQuality === quality;
 
   // Case: lowercase for minor qualities
-  const isMinor = quality === 'm7' || quality === 'm7♭5';
+  const isMinor = quality === 'm7' || quality === 'm7♭5' || quality === 'dim';
   let numeral = isMinor ? roman.replace(/[IVX]+/, m => m.toLowerCase()) : roman;
-  if (quality === 'm7♭5') numeral += '\u00B0'; // degree sign °
+  if (quality === 'm7♭5' || quality === 'dim') numeral += '\u00B0'; // degree sign °
 
   return { numeral, diatonic };
 }
@@ -325,8 +338,37 @@ export function computeEffectiveSelections(
 }
 
 /**
+ * For bare triads (suffix === ''), infer the chord quality from the
+ * diatonic context.  e.g. "C" in key of F → V → '7' (Mixolydian),
+ * "D" in key of C → ii → 'm7' (Dorian).
+ * Falls back to 'maj7' when no key is set or the root is non-diatonic.
+ */
+function inferBareTriadQuality(rootName: RootName, songKey?: SongKey): string {
+  if (!songKey) return 'maj7';
+
+  let effectiveRoot = songKey.root;
+  if (songKey.minor) {
+    const rootSemi = ROOTS.find(r => r.name === songKey.root)?.semitone;
+    if (rootSemi == null) return 'maj7';
+    const majorSemi = (rootSemi + 3) % 12;
+    effectiveRoot = ROOTS.find(r => r.semitone === majorSemi)?.name ?? songKey.root;
+  }
+
+  const keySemi = ROOTS.find(r => r.name === effectiveRoot)?.semitone;
+  const chordSemi = ROOTS.find(r => r.name === rootName)?.semitone;
+  if (keySemi == null || chordSemi == null) return 'maj7';
+
+  const interval = (chordSemi - keySemi + 12) % 12;
+  const degIdx = MAJOR_SEMI_TO_DEG[interval];
+  if (degIdx == null) return 'maj7'; // non-diatonic → default major
+
+  return MODE_TEMPLATES[degIdx].chordQuality;
+}
+
+/**
  * Build a default ChordSlot from a parsed chord symbol.
  * modeIdx defaults to suggestMode result, posId defaults to 1.
+ * For bare triads (suffix === ''), the quality is inferred from the song key.
  */
 export function buildChordSlot(
   symbol: string,
@@ -334,11 +376,14 @@ export function buildChordSlot(
   prevPosId?: number,
   songKey?: SongKey,
 ): ChordSlot {
+  const quality = parsed.suffix === ''
+    ? inferBareTriadQuality(parsed.rootName, songKey)
+    : parsed.quality;
   return {
     symbol: normalizeChordSymbol(symbol, parsed),
     rootName: parsed.rootName,
-    quality: parsed.quality,
-    modeIdx: suggestMode(parsed.rootName, parsed.quality, songKey),
+    quality,
+    modeIdx: suggestMode(parsed.rootName, quality, songKey),
     posId: prevPosId ?? 1,
     posConfirmed: false,
     modeConfirmed: false,

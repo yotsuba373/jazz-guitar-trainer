@@ -72,7 +72,7 @@ export function OptionBar({
           }}>
           記号
         </button>
-        {notationOpen && (['maj7', 'm7', 'm7♭5'] as const).map(key => {
+        {notationOpen && (['maj7', 'm7', 'm7♭5', 'dim'] as const).map(key => {
           const opts = CHORD_NOTATION_OPTIONS[key];
           if (opts.length <= 1) return null;
           return (
