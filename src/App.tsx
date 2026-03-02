@@ -7,6 +7,7 @@ import {
   computeEffectiveSelections,
   formatChordSymbol, loadChordNotationPrefs, saveChordNotationPrefs,
   getChartLayout, buildChordRows,
+  getGuideTones, findNoteLocations, classifyResolution,
 } from './utils';
 import { Fretboard } from './components/Fretboard';
 import { RootSelector, ModeSelector, PositionSelector, OptionBar } from './components/Controls';
@@ -23,6 +24,8 @@ export default function App() {
   const [showCT, setShowCT] = useState(true);
   const [labelMode, setLabelMode] = useState<LabelMode>('note');
   const [chordPrefs, setChordPrefs] = useState<ChordNotationPrefs>(() => loadChordNotationPrefs());
+
+  const [showGT, setShowGT] = useState(false);
 
   // Progression mode state
   const [progMode, setProgMode] = useState(false);
@@ -53,6 +56,48 @@ export default function App() {
     () => activeProg ? computeEffectiveSelections(activeProg.chords, activeProg.songKey) : [],
     [activeProg],
   );
+
+  // Guide tone info for fretboard display
+  // Derive mode/fretMap/positions directly from effectiveAll to avoid 1-frame lag
+  const guideToneInfo = useMemo(() => {
+    if (!progMode || !showGT || !activeChord || isSkipped) return null;
+    const curEff = effectiveAll[activeChordIdx];
+    if (!curEff || !QUALITY_TO_MODES[activeChord.quality]) return null;
+
+    const curMode = resolveMode(activeChord.rootName, MODE_TEMPLATES[curEff.modeIdx]);
+    const curFretMap = buildFretMap(curMode.semi, curMode.notes);
+    const curAllPos = generatePositions(curFretMap, curMode.notes);
+    const currentGT = getGuideTones(curMode);
+    const noNext = { third: currentGT.third, seventh: currentGT.seventh, nextThird: null, nextThirdLocations: [] as { stringIdx: number; fret: number }[], resolution: null };
+
+    const chords = activeProg?.chords;
+    if (!chords) return noNext;
+
+    // Look ahead: next chord's 3rd as ghost note
+    const nextChord = chords[activeChordIdx + 1];
+    const nextEff = effectiveAll[activeChordIdx + 1];
+    if (!nextChord || !nextEff || !QUALITY_TO_MODES[nextChord.quality]) return noNext;
+
+    const nextMode = resolveMode(nextChord.rootName, MODE_TEMPLATES[nextEff.modeIdx]);
+    const nextGT = getGuideTones(nextMode);
+    const curSevSemi = curMode.semi[curMode.notes.indexOf(currentGT.seventh)];
+    const nextThirdSemi = nextMode.semi[nextMode.notes.indexOf(nextGT.third)];
+    const allLocs = findNoteLocations(nextGT.third, curFretMap, nextThirdSemi);
+
+    // Filter: only show ghost if same-string note in current position is <3 frets away
+    const curPos = curAllPos.find(p => p.id === curEff.posId);
+    const nextThirdLocations = curPos
+      ? allLocs.filter(loc =>
+          curPos.instances.some(inst => {
+            const strNotes = inst.strings[loc.stringIdx];
+            if (!strNotes) return false;
+            return strNotes.some(([, f]) => Math.abs(f - loc.fret) < 3);
+          }))
+      : allLocs;
+
+    const resolution = classifyResolution(curSevSemi, nextThirdSemi);
+    return { third: currentGT.third, seventh: currentGT.seventh, nextThird: nextGT.third, nextThirdLocations, resolution };
+  }, [progMode, showGT, activeChordIdx, effectiveAll, activeProg, activeChord, isSkipped]);
 
   useEffect(() => {
     if (!progMode || !activeChord || isSkipped) return;
@@ -256,6 +301,9 @@ export default function App() {
           onToggleCT={setShowCT}
           onSetLabelMode={setLabelMode}
           onChordPrefsChange={handleChordPrefsChange}
+          progMode={progMode}
+          showGT={showGT}
+          onToggleGT={setShowGT}
         />
 
         <Fretboard
@@ -266,6 +314,7 @@ export default function App() {
           ctSet={ctSet}
           getLabel={getLabel}
           rootNote={rootNote}
+          guideToneInfo={guideToneInfo}
         />
 
         {selPos && (

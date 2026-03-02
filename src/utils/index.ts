@@ -33,3 +33,9 @@ export {
   getChartLayout,
   buildChordRows,
 } from './chartLayout';
+export {
+  getGuideTones,
+  findNoteLocations,
+  classifyResolution,
+} from './guideTones';
+export type { GuideToneInfo, ResolutionType, GuideToneEntry } from './guideTones';

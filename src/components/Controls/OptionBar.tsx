@@ -10,6 +10,9 @@ interface OptionBarProps {
   onToggleCT: (checked: boolean) => void;
   onSetLabelMode: (mode: LabelMode) => void;
   onChordPrefsChange: (prefs: ChordNotationPrefs) => void;
+  progMode?: boolean;
+  showGT?: boolean;
+  onToggleGT?: (checked: boolean) => void;
 }
 
 const btnBase = 'rounded cursor-pointer font-mono';
@@ -17,6 +20,7 @@ const btnBase = 'rounded cursor-pointer font-mono';
 export function OptionBar({
   mode, showCT, labelMode, chordPrefs,
   onToggleCT, onSetLabelMode, onChordPrefsChange,
+  progMode, showGT, onToggleGT,
 }: OptionBarProps) {
   const [notationOpen, setNotationOpen] = useState(false);
 
@@ -36,6 +40,13 @@ export function OptionBar({
         <input type="checkbox" checked={showCT} onChange={e => onToggleCT(e.target.checked)} />
         {chordDisplay} コードトーン強調
       </label>
+
+      {progMode && onToggleGT && (
+        <label className="text-[10px] text-text-muted cursor-pointer flex items-center gap-1">
+          <input type="checkbox" checked={showGT ?? false} onChange={e => onToggleGT(e.target.checked)} />
+          ガイドトーン (3度/7度)
+        </label>
+      )}
 
       <div className="flex gap-1">
         <span className="text-[10px] text-text-muted">ラベル:</span>
@@ -78,21 +89,41 @@ export function OptionBar({
         })}
       </div>
 
-      {showCT && (
+      {(showCT || showGT) && (
         <div className="flex gap-2.5 items-center text-[10px]">
           <span className="text-text-muted">|</span>
-          <span className="inline-flex items-center gap-[3px]">
-            <span className="inline-block w-[13px] h-[13px] rounded-full bg-white border-2 border-[#888]" />
-            <span className="text-text-label">Root</span>
-          </span>
-          <span className="inline-flex items-center gap-[3px]">
-            <span className="inline-block w-[13px] h-[13px] rounded-full bg-[#888]" />
-            <span className="text-text-label">CT</span>
-          </span>
-          <span className="inline-flex items-center gap-[3px]">
-            <span className="inline-block w-[11px] h-[11px] rounded-full bg-bg-panel border-[1.5px] border-[#888]" />
-            <span className="text-text-muted">非CT</span>
-          </span>
+          {showCT && (
+            <>
+              <span className="inline-flex items-center gap-[3px]">
+                <span className="inline-block w-[13px] h-[13px] rounded-full bg-white border-2 border-[#888]" />
+                <span className="text-text-label">Root</span>
+              </span>
+              <span className="inline-flex items-center gap-[3px]">
+                <span className="inline-block w-[13px] h-[13px] rounded-full bg-[#888]" />
+                <span className="text-text-label">CT</span>
+              </span>
+              <span className="inline-flex items-center gap-[3px]">
+                <span className="inline-block w-[11px] h-[11px] rounded-full bg-bg-panel border-[1.5px] border-[#888]" />
+                <span className="text-text-muted">非CT</span>
+              </span>
+            </>
+          )}
+          {showGT && (
+            <>
+              <span className="inline-flex items-center gap-[3px]">
+                <span className="inline-block w-[10px] h-[10px] bg-[#F1C40F]" style={{ transform: 'rotate(45deg)' }} />
+                <span className="text-text-label">3rd</span>
+              </span>
+              <span className="inline-flex items-center gap-[3px]">
+                <span className="inline-block w-[10px] h-[10px] bg-[#3498DB]" style={{ transform: 'rotate(45deg)' }} />
+                <span className="text-text-label">7th</span>
+              </span>
+              <span className="inline-flex items-center gap-[3px]">
+                <span className="inline-block w-[11px] h-[11px] rounded-full border-2 border-dashed border-[#F1C40F]" />
+                <span className="text-text-muted">次3rd</span>
+              </span>
+            </>
+          )}
         </div>
       )}
     </div>
