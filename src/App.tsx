@@ -20,7 +20,7 @@ import { Footer } from './components/Footer';
 export default function App() {
   const [rootName, setRootName] = useState<RootName>('C');
   const [modeIdx, setModeIdx] = useState(0);
-  const [selPosId, setSelPosId] = useState<number | null>(null);
+  const [selPosIds, setSelPosIds] = useState<number[]>([]);
   const [overlay, setOverlay] = useState(false);
   const [showCT, setShowCT] = useState(true);
   const [labelMode, setLabelMode] = useState<LabelMode>('note');
@@ -49,9 +49,9 @@ export default function App() {
   );
   const ctSet = useMemo(() => new Set(mode.chordTones), [rootName, modeIdx]);
 
-  // Chord form voicings
-  const canShowChordForms = selPosId != null && !overlay && !is8Note && modeIdx <= 6;
-  const selPos = selPosId != null ? allPos.find(p => p.id === selPosId) ?? null : null;
+  // Chord form voicings (only when exactly 1 position selected)
+  const canShowChordForms = selPosIds.length === 1 && !overlay && !is8Note && modeIdx <= 6;
+  const selPos = selPosIds.length === 1 ? allPos.find(p => p.id === selPosIds[0]) ?? null : null;
 
   const availableVoicings = useMemo(() => {
     if (!showChordForms || !selPos || !canShowChordForms) return [];
@@ -77,13 +77,13 @@ export default function App() {
   );
 
   // Reset voicing index when position/mode/root changes
-  useEffect(() => { setSelectedVoicingIdx(0); }, [selPosId, modeIdx, rootName]);
+  useEffect(() => { setSelectedVoicingIdx(0); }, [selPosIds, modeIdx, rootName]);
 
   const deg = mode.degrees;
   const rootNote = mode.notes[0];
 
-  const visible = overlay ? allPos : (selPos ? [selPos] : allPos);
-  const dim = selPos != null && !overlay;
+  const visible = overlay ? allPos : (selPosIds.length > 0 ? allPos.filter(p => selPosIds.includes(p.id)) : allPos);
+  const dim = selPosIds.length > 0 && !overlay;
 
   // Sync display state from active chord in progression mode
   const activeProg = progressions[activeProgIdx];
@@ -176,7 +176,7 @@ export default function App() {
     if (!eff) return;
     setRootName(activeChord.rootName);
     setModeIdx(eff.modeIdx);
-    setSelPosId(eff.posId);
+    setSelPosIds([eff.posId]);
     setOverlay(false);
   }, [progMode, activeChordIdx, effectiveAll, activeChord, isSkipped]);
 
@@ -261,12 +261,18 @@ export default function App() {
     handleSaveProgressions(copy);
   }
 
-  function handleChordPosChange(chordIdx: number, posId: number) {
-    const copy = [...progressions];
-    const prog = { ...copy[activeProgIdx], chords: [...copy[activeProgIdx].chords] };
-    prog.chords[chordIdx] = { ...prog.chords[chordIdx], posId, posConfirmed: true };
-    copy[activeProgIdx] = prog;
-    handleSaveProgressions(copy);
+  function handleChordPosChange(chordIdx: number, posId: number, shiftKey: boolean) {
+    if (shiftKey) {
+      // Shift+click: visual toggle only (don't save to chord)
+      setSelPosIds(prev => prev.includes(posId) ? prev.filter(x => x !== posId) : [...prev, posId]);
+    } else {
+      // Normal click: save to chord data
+      const copy = [...progressions];
+      const prog = { ...copy[activeProgIdx], chords: [...copy[activeProgIdx].chords] };
+      prog.chords[chordIdx] = { ...prog.chords[chordIdx], posId, posConfirmed: true };
+      copy[activeProgIdx] = prog;
+      handleSaveProgressions(copy);
+    }
   }
 
   function handleSelectVoicing(idx: number) {
@@ -376,6 +382,7 @@ export default function App() {
                 bpm={bpm}
                 onTogglePlay={() => setIsPlaying(p => !p)}
                 onBpmChange={setBpm}
+                selPosIds={selPosIds}
                 availableVoicings={showChordForms ? deduplicatedVoicings : undefined}
                 selectedVoicingIdx={effectiveVoicingIdx}
                 onSelectVoicing={handleSelectVoicing}
@@ -409,11 +416,18 @@ export default function App() {
         {!progMode && (
           <PositionSelector
             positions={allPos}
-            selPosId={selPosId}
+            selPosIds={selPosIds}
             overlay={overlay}
-            onSelectAll={() => { setSelPosId(null); setOverlay(false); }}
-            onSelectPosition={(id) => { setSelPosId(id); setOverlay(false); }}
-            onToggleOverlay={() => { setOverlay(true); setSelPosId(null); }}
+            onSelectAll={() => { setSelPosIds([]); setOverlay(false); }}
+            onSelectPosition={(id, shiftKey) => {
+              if (shiftKey) {
+                setSelPosIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+              } else {
+                setSelPosIds([id]);
+              }
+              setOverlay(false);
+            }}
+            onToggleOverlay={() => { setOverlay(true); setSelPosIds([]); }}
             availableVoicings={showChordForms ? deduplicatedVoicings : undefined}
             selectedVoicingIdx={effectiveVoicingIdx}
             onSelectVoicing={handleSelectVoicing}
@@ -438,7 +452,7 @@ export default function App() {
 
         <Fretboard
           visible={visible}
-          selPosId={selPosId}
+          selPosIds={selPosIds}
           dim={dim}
           showCT={showCT}
           ctSet={ctSet}
@@ -463,8 +477,15 @@ export default function App() {
         {!progMode && (
           <PositionGrid
             positions={allPos}
-            selPosId={selPosId}
-            onSelectPosition={(id) => { setSelPosId(id); setOverlay(false); }}
+            selPosIds={selPosIds}
+            onSelectPosition={(id, shiftKey) => {
+              if (shiftKey) {
+                setSelPosIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+              } else {
+                setSelPosIds([id]);
+              }
+              setOverlay(false);
+            }}
           />
         )}
 

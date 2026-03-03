@@ -6,7 +6,7 @@ import { GhostNote } from './GhostNote';
 
 interface FretboardProps {
   visible: Position[];
-  selPosId: number | null;
+  selPosIds: number[];
   dim: boolean;
   showCT: boolean;
   ctSet: Set<string>;
@@ -16,7 +16,7 @@ interface FretboardProps {
   voicingHighlights?: Set<string> | null;
 }
 
-export function Fretboard({ visible, selPosId, dim, showCT, ctSet, getLabel, rootNote, guideToneInfo, voicingHighlights }: FretboardProps) {
+export function Fretboard({ visible, selPosIds, dim, showCT, ctSet, getLabel, rootNote, guideToneInfo, voicingHighlights }: FretboardProps) {
   return (
     <div className="overflow-x-auto mb-[14px]">
       <svg width={SVG_WIDTH} height={SVG_HEIGHT}
@@ -69,7 +69,7 @@ export function Fretboard({ visible, selPosId, dim, showCT, ctSet, getLabel, roo
           const gtThird = guideToneInfo?.third;
           const gtSeventh = guideToneInfo?.seventh;
           return (
-            <g key={pos.id} opacity={(!dim || selPosId === pos.id) ? 1 : 0.07}>
+            <g key={pos.id} opacity={(!dim || selPosIds.includes(pos.id)) ? 1 : 0.07}>
               {pos.instances.map((inst, iIdx) =>
                 inst.strings.map((notes, sIdx) =>
                   notes && notes.map(([n, f]) => (

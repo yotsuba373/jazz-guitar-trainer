@@ -3,20 +3,20 @@ import { POS_COLORS } from '../constants';
 
 interface PositionGridProps {
   positions: Position[];
-  selPosId: number | null;
-  onSelectPosition: (id: number) => void;
+  selPosIds: number[];
+  onSelectPosition: (id: number, shiftKey: boolean) => void;
 }
 
-export function PositionGrid({ positions, selPosId, onSelectPosition }: PositionGridProps) {
+export function PositionGrid({ positions, selPosIds, onSelectPosition }: PositionGridProps) {
   return (
     <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-1.5 mb-[14px]">
       {positions.map((p, i) => {
         const c = POS_COLORS[i];
         return (
-          <div key={p.id} onClick={() => onSelectPosition(p.id)}
+          <div key={p.id} onClick={(e) => onSelectPosition(p.id, e.shiftKey)}
             className="rounded-md px-3 py-2 cursor-pointer transition-all duration-150"
             style={{
-              background: selPosId === p.id ? '#222' : '#181818',
+              background: selPosIds.includes(p.id) ? '#222' : '#181818',
               borderLeft: `3px solid ${c}`,
             }}
           >
