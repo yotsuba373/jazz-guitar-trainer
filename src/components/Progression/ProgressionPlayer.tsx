@@ -15,12 +15,13 @@ interface ProgressionPlayerProps {
   chordPrefs: ChordNotationPrefs;
   onChordSelect: (idx: number) => void;
   onModeChange: (chordIdx: number, modeIdx: number) => void;
-  onPosChange: (chordIdx: number, posId: number) => void;
+  onPosChange: (chordIdx: number, posId: number, shiftKey: boolean) => void;
   onReset: () => void;
   isPlaying: boolean;
   bpm: number;
   onTogglePlay: () => void;
   onBpmChange: (bpm: number) => void;
+  selPosIds: number[];
   availableVoicings?: FoundVoicing[];
   selectedVoicingIdx?: number;
   onSelectVoicing?: (idx: number) => void;
@@ -32,7 +33,7 @@ export function ProgressionPlayer({
   progression, activeChordIdx, allPos, chordPrefs,
   onChordSelect, onModeChange, onPosChange, onReset,
   isPlaying, bpm, onTogglePlay, onBpmChange,
-  availableVoicings, selectedVoicingIdx, onSelectVoicing,
+  selPosIds, availableVoicings, selectedVoicingIdx, onSelectVoicing,
 }: ProgressionPlayerProps) {
   const chords = progression.chords;
   const activeChord = chords[activeChordIdx];
@@ -168,18 +169,19 @@ export function ProgressionPlayer({
               </div>
               <div className="flex gap-1">
                 {rankedPosIds.map(posId => {
-                  const selected = effectivePosId === posId;
+                  const isPrimary = effectivePosId === posId;
+                  const isActive = selPosIds.includes(posId);
                   const color = POS_COLORS[posId - 1];
                   return (
-                    <button key={posId} onClick={() => onPosChange(activeChordIdx, posId)}
+                    <button key={posId} onClick={(e) => onPosChange(activeChordIdx, posId, e.shiftKey)}
                       className={btnBase}
                       style={{
                         border: `1px solid ${color}`,
-                        background: selected
-                          ? (isPosConfirmed ? color : color + '60')
+                        background: isActive
+                          ? (isPrimary && isPosConfirmed ? color : color + '60')
                           : '#1a1a1a',
-                        color: selected ? '#FFF' : color,
-                        fontWeight: selected ? 700 : 400,
+                        color: isActive ? '#FFF' : color,
+                        fontWeight: isActive ? 700 : 400,
                       }}>
                       Pos {posId}
                     </button>
