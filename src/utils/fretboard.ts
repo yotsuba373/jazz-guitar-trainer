@@ -146,7 +146,7 @@ export function generatePositions(fretMap: FretMap, scaleNotes: string[]): Posit
  * Generate 4 positions for diminished scales (W-H / H-W).
  * Notes form adjacent-fret pairs repeating every 3 frets on each string.
  * Each position spans 5 frets, 3 frets apart. Position shape:
- *   e:  xx-x-  (3 notes)    B:  x-xx-  (3 notes)
+ *   e:  xx-xx  (4 notes)    B:  x-xx-  (3 notes)
  *   G:  xx-x-  (3 notes)    D:  x-xx-  (3 notes)
  *   A:  -xx-x  (3 notes)    6E: xx-xx  (4 notes)
  *
@@ -203,8 +203,8 @@ export function generateDimPositions(fretMap: FretMap, rootSemi = 0): Position[]
         if (s === 5) return refWin; // 6E: full xx-xx (4 notes)
         const notes = notesInRange(s, fMin, fMax);
         if (notes.length === 0) return null;
-        // 1E and G share E-phase → naturally 4 notes → trim to 3 (xx-x-)
-        if ((s === 0 || s === 2) && notes.length > 3) return notes.slice(0, 3);
+        // G shares E-phase → naturally 4 notes → trim to 3 (xx-x-)
+        if (s === 2 && notes.length > 3) return notes.slice(0, 3);
         return notes;
       });
 
