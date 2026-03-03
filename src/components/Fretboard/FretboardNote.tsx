@@ -29,6 +29,10 @@ export function FretboardNote({
     const gtColor = guideRole === '3rd' ? '#F1C40F' : '#3498DB';
     return (
       <g key={`${posId}-${stringIndex}-${fret}`}>
+        {isVoicingNote && (
+          <rect x={cx - 15} y={cy - 15} width={30} height={30} rx={5}
+            fill="rgba(0,229,255,0.12)" stroke="#00E5FF" strokeWidth={2.5} />
+        )}
         <rect
           x={cx - d / 2} y={cy - d / 2} width={d} height={d}
           transform={`rotate(45 ${cx} ${cy})`}
