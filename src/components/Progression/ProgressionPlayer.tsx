@@ -3,7 +3,7 @@ import type { Progression, Position, ChordNotationPrefs } from '../../types';
 import { MODE_TEMPLATES, POS_COLORS, MODE_COLORS } from '../../constants';
 import {
   QUALITY_TO_MODES, rankPositionsByProximity, computeEffectiveSelections,
-  resolveMode, buildFretMap, generatePositions,
+  resolveMode, buildFretMap, generatePositions, generateDimPositions,
 } from '../../utils';
 import { ChordChart } from './ChordChart';
 
@@ -62,12 +62,15 @@ export function ProgressionPlayer({
     if (!prevChord || !prevEff || !QUALITY_TO_MODES[prevChord.quality]) return null;
     const prevMode = resolveMode(prevChord.rootName, MODE_TEMPLATES[prevEff.modeIdx]);
     const prevFretMap = buildFretMap(prevMode.semi, prevMode.notes);
-    const prevAllPos = generatePositions(prevFretMap, prevMode.notes);
+    const prevIs8 = prevMode.notes.length > 7;
+    const prevAllPos = prevIs8
+      ? generateDimPositions(prevFretMap, prevMode.semi[0])
+      : generatePositions(prevFretMap, prevMode.notes);
     return prevAllPos.find(p => p.id === prevEff.posId) ?? null;
   }, [activeChordIdx, chords, effectiveAll]);
 
   const rankedPosIds = activeChord
-    ? rankPositionsByProximity(allPos, prevPos)
+    ? rankPositionsByProximity(allPos, prevPos, allPos.length)
     : [];
 
   const compatibleModes = activeChord
