@@ -21,6 +21,8 @@ interface ProgressionPlayerProps {
   bpm: number;
   onTogglePlay: () => void;
   onBpmChange: (bpm: number) => void;
+  isMetronomeOn: boolean;
+  onToggleMetronome: () => void;
   selPosIds: number[];
   availableVoicings?: FoundVoicing[];
   selectedVoicingIdx?: number;
@@ -32,7 +34,7 @@ const btnBase = 'rounded cursor-pointer text-[10px] font-mono px-2 py-[3px]';
 export function ProgressionPlayer({
   progression, activeChordIdx, allPos, chordPrefs,
   onChordSelect, onModeChange, onPosChange, onReset,
-  isPlaying, bpm, onTogglePlay, onBpmChange,
+  isPlaying, bpm, onTogglePlay, onBpmChange, isMetronomeOn, onToggleMetronome,
   selPosIds, availableVoicings, selectedVoicingIdx, onSelectVoicing,
 }: ProgressionPlayerProps) {
   const chords = progression.chords;
@@ -99,6 +101,16 @@ export function ProgressionPlayer({
         >
           {isPlaying ? '⏸' : '▶'}
         </button>
+        <button
+          onClick={onToggleMetronome}
+          title="メトロノーム"
+          className={btnBase}
+          style={{
+            border: `1px solid ${isMetronomeOn ? '#F1C40F' : '#444'}`,
+            background: isMetronomeOn ? '#2a2a1a' : '#1a1a1a',
+            color: isMetronomeOn ? '#F1C40F' : '#888',
+          }}
+        >♩</button>
         <button
           onClick={() => onBpmChange(Math.max(40, bpm - 1))}
           className={btnBase}
