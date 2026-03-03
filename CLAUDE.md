@@ -219,23 +219,60 @@ CSS Grid 描画
 
 ## BPM 自動再生 (`App.tsx`)
 
-`setTimeout` チェーンで各コードの拍数に応じた可変間隔を実現:
+### 再生シーケンス生成 (`buildPlaybackSeq`)
+
+`ChartLayout` から section repeats と volta endings を展開したフラットな再生順リストを生成:
 
 ```typescript
-useEffect(() => {
-  if (!isPlaying || !progMode || !activeProg) return;
-  // beatMap を構築: chordIndex → 実際の拍数 (4拍基準)
-  const layout = getChartLayout(activeProg);
-  // ... addMeasures() で sections + endings を走査
-  const beats = beatMap.get(activeChordIdx) ?? 4;
-  const timer = setTimeout(() => {
-    setActiveChordIdx(i => (i + 1 >= activeProg.chords.length ? 0 : i + 1));
-  }, (60000 / bpm) * beats);
-  return () => clearTimeout(timer);
-}, [isPlaying, activeChordIdx, bpm, activeProg, progMode]);
+// { chordIdx: number, beats: number }[] — 全リピート/エンディングを展開済み
+const seq = buildPlaybackSeq(getChartLayout(activeProg));
+```
+
+- `section.repeats = 1` → そのセクションを2回演奏
+- `section.endings[0]` → 1番括弧（1回目の pass に追加）、`[1]` → 2番括弧（2回目の pass）
+- `beatWidths` はフレックス比率 → `(bw / bwSum) * 4` で4拍基準の拍数に変換
+
+### ドリフトフリータイミング
+
+`setTimeout` の遅延は実際の発火時刻から次を計算するとイベントループ遅延が累積する問題を修正:
+
+```typescript
+const chordStartRef = useRef(0);     // 現コードの「理想開始時刻」
+const wasAutoAdvanceRef = useRef(false); // 自動進行か手動ナビかを区別
+const playPosRef = useRef(0);        // playbackSeq 内の現在位置
+
+// 自動進行時: targetAt (理想時刻) を次コードの anchor に
+// 手動ナビ / BPM変更 / 再生開始時: performance.now() に再アンカー
 ```
 
 停止トリガー: 通常モード切替 / 進行モード切替 / 編集ボタン / 進行選択変更
+
+---
+
+## メトロノーム (`App.tsx`)
+
+### 音生成 (`playClick`)
+
+Web Audio API で単発クリック音を生成。外部依存なし。
+
+```typescript
+function playClick(accent: boolean, ctx: AudioContext, volume: number) {
+  // accent=true: 1200Hz (小節頭アクセント), false: 800Hz (通常クリック)
+  // gain: accent ? volume * 3 : volume * 1.5  (gain > 1.0 で十分な音量)
+}
+```
+
+### タイミング
+
+- `setInterval(60000 / bpm)` — コード進行タイマーとは独立
+- `metBeatRef.current % 4 === 0` でアクセント判定 (小節頭 = 4拍ごと)
+- `metVolumeRef` (useRef) を通じて volume 変更を setInterval 再起動なしに反映
+
+### 音量
+
+- `metVolume` state (0〜1, デフォルト 0.5)
+- `localStorage.setItem('metVolume', ...)` で永続化
+- ProgressionPlayer.tsx に黄色スライダー (w-28) — ♩ ON 時のみ表示
 
 ---
 
@@ -281,7 +318,8 @@ Footer
 - JazzStandards インポート (1382曲)
 - iReal Pro 風譜面: セクションラベル、エンディング、リピート、ビート比例幅
 - プリセット進行: II-V-I (C/F/B♭)、Blues (B♭/F)、Rhythm Changes (B♭)
-- BPM 自動再生: ▶/⏸ トグル、±1 BPM、直接入力、ビート幅正規化タイミング
+- BPM 自動再生: ドリフトフリータイミング、セクションリピート/volta endings 対応、SVG再生ボタン
+- メトロノーム: Web Audio API クリック音、小節頭アクセント、音量スライダー (localStorage 永続化)
 - コードフォーム表示: Drop 2 / Drop 3 ボイシング (20テンプレート)、指板ハイライト、◀/▶ 切替
 
 ---
@@ -289,7 +327,6 @@ Footer
 ## 今後の開発予定
 
 1. ポジション間移動ガイド (共通音ハイライト)
-2. 音声再生 (Web Audio API)
 
 ---
 
