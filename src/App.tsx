@@ -539,7 +539,9 @@ export default function App() {
             {formatChordSymbol(rootNote, mode.chordQuality, chordPrefs)}: {mode.chordTones.map((n, i) => `${n}(${mode.chordSub.split(' ')[i] ?? mode.degrees[n]})`).join(' ')}
           </div>
           <div className="text-[10px] text-text-dim leading-relaxed">
-            {template.description}
+            {template.description.split('♮').flatMap((part, i) =>
+              i === 0 ? [part] : [<span key={i} style={{ fontSize: '1.3em', lineHeight: 1, verticalAlign: '-0.15em' }}>♮</span>, part]
+            )}
           </div>
         </div>
 
