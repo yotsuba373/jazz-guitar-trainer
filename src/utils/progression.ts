@@ -353,7 +353,7 @@ export function computeEffectiveSelections(
         }
       }
 
-      const ranked = rankPositionsByProximity(curAllPos, prevPos);
+      const ranked = rankPositionsByProximity(curAllPos, prevPos, curAllPos.length);
       posId = ranked[0] ?? 1;
     }
 

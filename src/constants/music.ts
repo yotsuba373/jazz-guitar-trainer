@@ -77,7 +77,7 @@ export const MAX_TRIO_GAP = 5;
 
 export const POS_COLORS: string[] = [
   '#E74C3C', '#E67E22', '#E8336F', '#27AE60',
-  '#6EAC00', '#8E44AD', '#16A085',
+  '#6EAC00', '#8E44AD', '#16A085', '#2980B9',
 ];
 
 export const MODE_COLORS: Record<string, string> = {
