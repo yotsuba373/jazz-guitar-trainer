@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import type { LabelMode, RootName, Progression, ChordNotationPrefs, ChartLayout } from './types';
+import type { LabelMode, RootName, Progression, ChordNotationPrefs, ChartLayout, SongKey, ChordSlot } from './types';
 import { MODE_TEMPLATES, ROOTS, MODE_COLORS } from './constants';
 import {
   buildFretMap, generatePositions, generateDimPositions, resolveMode,
@@ -9,6 +9,7 @@ import {
   getChartLayout, buildChordRows,
   getGuideTones, findNoteLocations, classifyResolution,
   findVoicingsInPosition,
+  playKSNote, playChordStrum, fretToFrequency,
 } from './utils';
 import { Fretboard } from './components/Fretboard';
 import { RootSelector, ModeSelector, PositionSelector, OptionBar } from './components/Controls';
@@ -52,6 +53,54 @@ function buildPlaybackSeq(layout: ChartLayout): { chordIdx: number; beats: numbe
   return seq;
 }
 
+/** Determine which notes to strum for a given chord in the progression. */
+function getStrumNotes(
+  chordIdx: number,
+  chords: ChordSlot[],
+  songKey?: SongKey,
+): { stringIdx: number; fret: number }[] {
+  const effAll = computeEffectiveSelections(chords, songKey);
+  const chord = chords[chordIdx];
+  const eff = effAll[chordIdx];
+  if (!chord || !eff || !QUALITY_TO_MODES[chord.quality]) return [];
+
+  const chordMode = resolveMode(chord.rootName, MODE_TEMPLATES[eff.modeIdx]);
+  const chordFretMap = buildFretMap(chordMode.semi, chordMode.notes);
+  const is8 = chordMode.notes.length > 7;
+  const positions = is8
+    ? generateDimPositions(chordFretMap, chordMode.semi[0])
+    : generatePositions(chordFretMap, chordMode.notes);
+  const pos = positions.find(p => p.id === eff.posId);
+
+  // Prefer voicing if set
+  if (chord.voicingKey && pos && !is8 && eff.modeIdx <= 6) {
+    const voicings = findVoicingsInPosition(pos, chordMode);
+    for (const v of voicings) {
+      const key = `${v.template.type}-${v.template.inversion}-${v.template.stringIndices.join(',')}`;
+      if (key === chord.voicingKey) {
+        return v.notes.map(n => ({ stringIdx: n.stringIdx, fret: n.fret }));
+      }
+    }
+  }
+
+  // Fallback: pick one chord tone per string from the position
+  if (pos && pos.instances.length > 0) {
+    const inst = pos.instances[0];
+    const ct = new Set(chordMode.chordTones);
+    const notes: { stringIdx: number; fret: number }[] = [];
+    for (let s = 5; s >= 0; s--) {
+      const strNotes = inst.strings[s];
+      if (!strNotes) continue;
+      const ctNote = strNotes.find(([n]) => ct.has(n));
+      if (ctNote) notes.push({ stringIdx: s, fret: ctNote[1] });
+      if (notes.length >= 4) break;
+    }
+    return notes;
+  }
+
+  return [];
+}
+
 export default function App() {
   const [rootName, setRootName] = useState<RootName>('C');
   const [modeIdx, setModeIdx] = useState(0);
@@ -81,6 +130,15 @@ export default function App() {
   const audioCtxRef = useRef<AudioContext | null>(null);
   const metBeatRef = useRef(0);
   const metVolumeRef = useRef(metVolume);
+  // Chord audio state
+  const [chordAudioOn, setChordAudioOn] = useState(false);
+  const [chordVolume, setChordVolume] = useState<number>(() => {
+    const saved = parseFloat(localStorage.getItem('chordVolume') ?? '');
+    return isNaN(saved) ? 0.5 : saved;
+  });
+  const chordVolumeRef = useRef(chordVolume);
+  const chordAudioOnRef = useRef(chordAudioOn);
+  const activeStrumRef = useRef<{ stop: () => void } | null>(null);
   // Drift-free auto-advance: track ideal chord start time + repeat position
   const chordStartRef = useRef(0);
   const wasAutoAdvanceRef = useRef(false);
@@ -268,11 +326,20 @@ export default function App() {
     localStorage.setItem('metVolume', String(metVolume));
   }, [metVolume]);
 
+  // Chord audio volume + toggle refs
+  useEffect(() => {
+    chordVolumeRef.current = chordVolume;
+    localStorage.setItem('chordVolume', String(chordVolume));
+  }, [chordVolume]);
+  useEffect(() => { chordAudioOnRef.current = chordAudioOn; }, [chordAudioOn]);
+
   // BPM auto-advance: drift-free, respects section repeats and volta endings
   useEffect(() => {
     if (!isPlaying || !progMode || !activeProg) {
       chordStartRef.current = 0;
       wasAutoAdvanceRef.current = false;
+      activeStrumRef.current?.stop();
+      activeStrumRef.current = null;
       return;
     }
     const seq = buildPlaybackSeq(getChartLayout(activeProg));
@@ -281,9 +348,22 @@ export default function App() {
     // On playback start, BPM change, or user navigation: find position in sequence.
     // On auto-advance: playPosRef was already incremented in the timeout callback.
     if (!wasAutoAdvanceRef.current || chordStartRef.current === 0) {
+      const isPlaybackStart = chordStartRef.current === 0;
       const pos = seq.findIndex(s => s.chordIdx === activeChordIdx);
       playPosRef.current = pos >= 0 ? pos : 0;
       chordStartRef.current = performance.now();
+
+      // Play strum for the initial chord on playback start
+      if (isPlaybackStart && chordAudioOnRef.current) {
+        activeStrumRef.current?.stop();
+        if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
+        const ctx = audioCtxRef.current;
+        if (ctx.state === 'suspended') ctx.resume();
+        const strumNotes = getStrumNotes(activeChordIdx, activeProg.chords, activeProg.songKey);
+        if (strumNotes.length > 0) {
+          activeStrumRef.current = playChordStrum(ctx, strumNotes, chordVolumeRef.current, ctx.currentTime);
+        }
+      }
     }
     wasAutoAdvanceRef.current = false;
 
@@ -298,26 +378,62 @@ export default function App() {
       chordStartRef.current = targetAt;
       const nextPos = (playPosRef.current + 1) % seq.length;
       playPosRef.current = nextPos;
-      setActiveChordIdx(seq[nextPos].chordIdx);
+      const nextChordIdx = seq[nextPos].chordIdx;
+
+      // Play chord strum on auto-advance
+      if (chordAudioOnRef.current && activeProg) {
+        activeStrumRef.current?.stop();
+        if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
+        const ctx = audioCtxRef.current;
+        if (ctx.state === 'suspended') ctx.resume();
+        const strumNotes = getStrumNotes(nextChordIdx, activeProg.chords, activeProg.songKey);
+        if (strumNotes.length > 0) {
+          activeStrumRef.current = playChordStrum(ctx, strumNotes, chordVolumeRef.current, ctx.currentTime);
+        }
+      }
+
+      setActiveChordIdx(nextChordIdx);
     }, delay);
     return () => clearTimeout(timer);
   }, [isPlaying, activeChordIdx, bpm, activeProg, progMode]);
 
-  // Metronome: independent setInterval, accent on measure downbeat (every 4 beats)
+  // Metronome: waits for next beat on the grid, then setInterval.
+  // Computes global beat from playback sequence so accent aligns to measure downbeat
+  // even when toggled ON mid-playback.
   useEffect(() => {
-    if (!isPlaying || !isMetronomeOn || !progMode) return;
+    if (!isPlaying || !isMetronomeOn || !progMode || !activeProg) return;
     if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
     const ctx = audioCtxRef.current;
-    metBeatRef.current = 0;
-    playClick(true, ctx, metVolumeRef.current);   // beat 1 accent
-    metBeatRef.current = 1;
-    const id = setInterval(() => {
+
+    // Compute global beat position from playback sequence
+    const beatMs = 60000 / bpm;
+    const seq = buildPlaybackSeq(getChartLayout(activeProg));
+    let cumBeats = 0;
+    for (let i = 0; i < playPosRef.current && i < seq.length; i++) {
+      cumBeats += seq[i].beats;
+    }
+    const elapsedMs = chordStartRef.current > 0 ? performance.now() - chordStartRef.current : 0;
+    const globalBeat = cumBeats + elapsedMs / beatMs;
+
+    // Next integer beat (within 15ms tolerance = treat as that beat)
+    const nextBeat = Math.ceil(globalBeat - 15 / beatMs);
+    metBeatRef.current = nextBeat;
+    const delayToNext = Math.max(0, (nextBeat - globalBeat) * beatMs);
+
+    // Wait until the next beat on the grid, then fire + start interval
+    let intervalId: ReturnType<typeof setInterval>;
+    const timerId = setTimeout(() => {
       const accent = metBeatRef.current % 4 === 0;
       playClick(accent, ctx, metVolumeRef.current);
       metBeatRef.current++;
-    }, 60000 / bpm);
-    return () => clearInterval(id);
-  }, [isPlaying, isMetronomeOn, progMode, bpm]);
+      intervalId = setInterval(() => {
+        const a = metBeatRef.current % 4 === 0;
+        playClick(a, ctx, metVolumeRef.current);
+        metBeatRef.current++;
+      }, beatMs);
+    }, delayToNext);
+    return () => { clearTimeout(timerId); clearInterval(intervalId); };
+  }, [isPlaying, isMetronomeOn, progMode, bpm, activeProg]);
 
   function handleSaveProgressions(progs: Progression[]) {
     setProgressions(progs);
@@ -372,6 +488,13 @@ export default function App() {
     setChordPrefs(prefs);
     saveChordNotationPrefs(prefs);
   }
+
+  const handleNoteClick = useCallback((stringIdx: number, fret: number) => {
+    if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
+    const ctx = audioCtxRef.current;
+    if (ctx.state === 'suspended') ctx.resume();
+    playKSNote(ctx, fretToFrequency(stringIdx, fret), 0.7, ctx.currentTime);
+  }, []);
 
   function getLabel(nn: string): string {
     return labelMode === 'degree' ? (deg[nn] || nn) : nn;
@@ -457,6 +580,10 @@ export default function App() {
                 onToggleMetronome={() => setIsMetronomeOn(p => !p)}
                 metVolume={metVolume}
                 onMetVolumeChange={setMetVolume}
+                chordAudioOn={chordAudioOn}
+                onToggleChordAudio={() => setChordAudioOn(p => !p)}
+                chordVolume={chordVolume}
+                onChordVolumeChange={setChordVolume}
                 selPosIds={selPosIds}
                 availableVoicings={showChordForms ? deduplicatedVoicings : undefined}
                 selectedVoicingIdx={effectiveVoicingIdx}
@@ -527,6 +654,7 @@ export default function App() {
           rootNote={rootNote}
           guideToneInfo={guideToneInfo}
           voicingHighlights={voicingHighlights}
+          onNoteClick={handleNoteClick}
         />
 
         {/* Mode description section */}
