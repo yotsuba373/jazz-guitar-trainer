@@ -12,7 +12,6 @@ import {
 } from './utils';
 import { Fretboard } from './components/Fretboard';
 import { RootSelector, ModeSelector, PositionSelector, OptionBar } from './components/Controls';
-import { PositionDetail } from './components/PositionDetail';
 import { PositionGrid } from './components/PositionGrid';
 import { ProgressionEditor, ProgressionPlayer } from './components/Progression';
 import { Footer } from './components/Footer';
@@ -426,14 +425,6 @@ export default function App() {
           />
         )}
 
-        <div className="text-[11px] text-text-secondary mb-1">
-          <span className="font-bold" style={{ color: MODE_COLORS[mode.key] }}>{rootNote} {mode.name}</span>
-          <span className="text-text-dim ml-2">{mode.notes.map(n => `${n}(${mode.degrees[n]})`).join(' ')}</span>
-        </div>
-        <div className="text-[10px] text-text-dim mb-2.5">
-          {formatChordSymbol(rootNote, mode.chordQuality, chordPrefs)}: {mode.chordTones.map((n, i) => `${n}(${mode.chordSub.split(' ')[i] ?? mode.degrees[n]})`).join(' ')}
-        </div>
-
         <OptionBar
           mode={mode}
           showCT={showCT}
@@ -462,17 +453,19 @@ export default function App() {
           voicingHighlights={voicingHighlights}
         />
 
-        {selPos && (
-          <PositionDetail
-            position={selPos}
-            mode={mode}
-            showCT={showCT}
-            ctSet={ctSet}
-            getLabel={getLabel}
-            rootNote={rootNote}
-            chordPrefs={chordPrefs}
-          />
-        )}
+        {/* Mode description section */}
+        <div className="mt-2 mb-3 rounded-md px-3 py-2" style={{ background: '#1a1a1a', borderLeft: `3px solid ${MODE_COLORS[mode.key]}` }}>
+          <div className="text-[11px] text-text-secondary mb-1">
+            <span className="font-bold" style={{ color: MODE_COLORS[mode.key] }}>{rootNote} {mode.name}</span>
+            <span className="text-text-dim ml-2">{mode.notes.map(n => `${n}(${mode.degrees[n]})`).join(' ')}</span>
+          </div>
+          <div className="text-[10px] text-text-dim mb-1.5">
+            {formatChordSymbol(rootNote, mode.chordQuality, chordPrefs)}: {mode.chordTones.map((n, i) => `${n}(${mode.chordSub.split(' ')[i] ?? mode.degrees[n]})`).join(' ')}
+          </div>
+          <div className="text-[10px] text-text-dim leading-relaxed">
+            {template.description}
+          </div>
+        </div>
 
         {!progMode && (
           <PositionGrid
