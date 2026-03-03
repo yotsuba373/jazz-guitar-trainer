@@ -65,7 +65,7 @@ export function Fretboard({ visible, selPosId, dim, showCT, ctSet, getLabel, roo
         {/* Notes */}
         {visible.map(pos => {
           const gtActive = guideToneInfo != null;
-          const c = gtActive ? '#AAA' : POS_COLORS[pos.id - 1];
+          const c = POS_COLORS[pos.id - 1];
           const gtThird = guideToneInfo?.third;
           const gtSeventh = guideToneInfo?.seventh;
           return (
