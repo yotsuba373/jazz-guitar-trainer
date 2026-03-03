@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import type { Mode, LabelMode, ChordNotationPrefs } from '../../types';
-import { formatChordSymbol, CHORD_NOTATION_OPTIONS } from '../../utils';
+import type { Mode, LabelMode, ChordNotationPrefs, FoundVoicing } from '../../types';
+import { formatChordSymbol, CHORD_NOTATION_OPTIONS, formatVoicingLabel } from '../../utils';
 
 interface OptionBarProps {
   mode: Mode;
@@ -13,6 +13,12 @@ interface OptionBarProps {
   progMode?: boolean;
   showGT?: boolean;
   onToggleGT?: (checked: boolean) => void;
+  canShowChordForms?: boolean;
+  showChordForms?: boolean;
+  onToggleChordForms?: (checked: boolean) => void;
+  availableVoicings?: FoundVoicing[];
+  selectedVoicingIdx?: number;
+  onSelectVoicing?: (idx: number) => void;
 }
 
 const btnBase = 'rounded cursor-pointer font-mono';
@@ -21,6 +27,8 @@ export function OptionBar({
   mode, showCT, labelMode, chordPrefs,
   onToggleCT, onSetLabelMode, onChordPrefsChange,
   progMode, showGT, onToggleGT,
+  canShowChordForms, showChordForms, onToggleChordForms,
+  availableVoicings, selectedVoicingIdx, onSelectVoicing,
 }: OptionBarProps) {
   const [notationOpen, setNotationOpen] = useState(false);
 
@@ -50,6 +58,34 @@ export function OptionBar({
           <input type="checkbox" checked={showGT ?? false} onChange={e => onToggleGT(e.target.checked)} />
           ガイドトーン (3度/7度)
         </label>
+      )}
+
+      {canShowChordForms && onToggleChordForms && (
+        <label className="text-[10px] text-text-muted cursor-pointer flex items-center gap-1">
+          <input type="checkbox" checked={showChordForms ?? false} onChange={e => onToggleChordForms(e.target.checked)} />
+          コードフォーム
+        </label>
+      )}
+
+      {showChordForms && availableVoicings && availableVoicings.length > 0 && onSelectVoicing && (
+        <div className="flex gap-1 items-center">
+          <button
+            onClick={() => onSelectVoicing(Math.max(0, (selectedVoicingIdx ?? 0) - 1))}
+            className={`${btnBase} text-[9px] px-1.5 py-[3px]`}
+            style={{ border: '1px solid #444', background: '#1a1a1a', color: '#CCC' }}>
+            ◀
+          </button>
+          <span className="text-[10px] text-text-muted whitespace-nowrap">
+            {formatVoicingLabel(availableVoicings[selectedVoicingIdx ?? 0])}
+            {' '}({(selectedVoicingIdx ?? 0) + 1}/{availableVoicings.length})
+          </span>
+          <button
+            onClick={() => onSelectVoicing(Math.min(availableVoicings.length - 1, (selectedVoicingIdx ?? 0) + 1))}
+            className={`${btnBase} text-[9px] px-1.5 py-[3px]`}
+            style={{ border: '1px solid #444', background: '#1a1a1a', color: '#CCC' }}>
+            ▶
+          </button>
+        </div>
       )}
 
       <div className="flex gap-1">
@@ -93,7 +129,7 @@ export function OptionBar({
         })}
       </div>
 
-      {(showCT || showGT) && (
+      {(showCT || showGT || showChordForms) && (
         <div className="flex gap-2.5 items-center text-[10px]">
           <span className="text-text-muted">|</span>
           {showCT && (
@@ -127,6 +163,13 @@ export function OptionBar({
                 <span className="text-text-muted">次3rd</span>
               </span>
             </>
+          )}
+          {showChordForms && (
+            <span className="inline-flex items-center gap-[3px]">
+              <span className="inline-block w-[13px] h-[13px] rounded-sm border-2 border-[#00E5FF]"
+                style={{ background: 'rgba(0,229,255,0.15)' }} />
+              <span className="text-text-label">Form</span>
+            </span>
           )}
         </div>
       )}

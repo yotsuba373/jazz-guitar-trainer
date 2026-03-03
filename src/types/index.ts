@@ -18,4 +18,7 @@ export type {
   Progression,
   RawJazzStandard,
   RawSection,
+  VoicingType,
+  VoicingTemplate,
+  FoundVoicing,
 } from './music';

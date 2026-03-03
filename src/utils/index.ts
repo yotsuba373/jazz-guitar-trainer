@@ -39,3 +39,8 @@ export {
   classifyResolution,
 } from './guideTones';
 export type { GuideToneInfo, ResolutionType, GuideToneEntry } from './guideTones';
+export {
+  findVoicingsInPosition,
+  formatVoicingLabel,
+  VOICING_TEMPLATES,
+} from './chordForms';

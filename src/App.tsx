@@ -8,6 +8,7 @@ import {
   formatChordSymbol, loadChordNotationPrefs, saveChordNotationPrefs,
   getChartLayout, buildChordRows,
   getGuideTones, findNoteLocations, classifyResolution,
+  findVoicingsInPosition,
 } from './utils';
 import { Fretboard } from './components/Fretboard';
 import { RootSelector, ModeSelector, PositionSelector, OptionBar } from './components/Controls';
@@ -26,6 +27,8 @@ export default function App() {
   const [chordPrefs, setChordPrefs] = useState<ChordNotationPrefs>(() => loadChordNotationPrefs());
 
   const [showGT, setShowGT] = useState(false);
+  const [showChordForms, setShowChordForms] = useState(false);
+  const [selectedVoicingIdx, setSelectedVoicingIdx] = useState(0);
 
   // Progression mode state
   const [progMode, setProgMode] = useState(false);
@@ -45,9 +48,27 @@ export default function App() {
     [fretMap, is8Note],
   );
   const ctSet = useMemo(() => new Set(mode.chordTones), [rootName, modeIdx]);
+
+  // Chord form voicings
+  const canShowChordForms = selPosId != null && !overlay && !is8Note && modeIdx <= 6 && !progMode;
+  const selPos = selPosId != null ? allPos.find(p => p.id === selPosId) ?? null : null;
+
+  const availableVoicings = useMemo(() => {
+    if (!showChordForms || !selPos || !canShowChordForms) return [];
+    return findVoicingsInPosition(selPos, mode);
+  }, [showChordForms, selPos, canShowChordForms, mode]);
+
+  // Reset voicing index when position/mode/root changes
+  useEffect(() => { setSelectedVoicingIdx(0); }, [selPosId, modeIdx, rootName]);
+
+  const voicingHighlights = useMemo(() => {
+    if (!availableVoicings.length || selectedVoicingIdx >= availableVoicings.length) return null;
+    const v = availableVoicings[selectedVoicingIdx];
+    return new Set(v.notes.map(n => `${n.stringIdx}:${n.fret}`));
+  }, [availableVoicings, selectedVoicingIdx]);
+
   const deg = mode.degrees;
   const rootNote = mode.notes[0];
-  const selPos = selPosId != null ? allPos.find(p => p.id === selPosId) ?? null : null;
 
   const visible = overlay ? allPos : (selPos ? [selPos] : allPos);
   const dim = selPos != null && !overlay;
@@ -360,6 +381,12 @@ export default function App() {
           progMode={progMode}
           showGT={showGT}
           onToggleGT={setShowGT}
+          canShowChordForms={canShowChordForms}
+          showChordForms={showChordForms}
+          onToggleChordForms={setShowChordForms}
+          availableVoicings={availableVoicings}
+          selectedVoicingIdx={selectedVoicingIdx}
+          onSelectVoicing={setSelectedVoicingIdx}
         />
 
         <Fretboard
@@ -371,6 +398,7 @@ export default function App() {
           getLabel={getLabel}
           rootNote={rootNote}
           guideToneInfo={guideToneInfo}
+          voicingHighlights={voicingHighlights}
         />
 
         {selPos && (

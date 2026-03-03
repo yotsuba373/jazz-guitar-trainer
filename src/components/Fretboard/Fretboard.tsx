@@ -13,9 +13,10 @@ interface FretboardProps {
   getLabel: (nn: string) => string;
   rootNote: string;
   guideToneInfo?: GuideToneInfo | null;
+  voicingHighlights?: Set<string> | null;
 }
 
-export function Fretboard({ visible, selPosId, dim, showCT, ctSet, getLabel, rootNote, guideToneInfo }: FretboardProps) {
+export function Fretboard({ visible, selPosId, dim, showCT, ctSet, getLabel, rootNote, guideToneInfo, voicingHighlights }: FretboardProps) {
   return (
     <div className="overflow-x-auto mb-[14px]">
       <svg width={SVG_WIDTH} height={SVG_HEIGHT}
@@ -85,6 +86,7 @@ export function Fretboard({ visible, selPosId, dim, showCT, ctSet, getLabel, roo
                       label={getLabel(n)}
                       isGuideTone={gtActive && (n === gtThird || n === gtSeventh)}
                       guideRole={n === gtThird ? '3rd' : n === gtSeventh ? '7th' : undefined}
+                      isVoicingNote={voicingHighlights?.has(`${sIdx}:${f}`) ?? false}
                     />
                   ))
                 )
