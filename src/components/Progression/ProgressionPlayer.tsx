@@ -1,11 +1,12 @@
 import { useMemo, useState, useEffect } from 'react';
-import type { Progression, Position, ChordNotationPrefs } from '../../types';
+import type { Progression, Position, ChordNotationPrefs, FoundVoicing } from '../../types';
 import { MODE_TEMPLATES, POS_COLORS, MODE_COLORS } from '../../constants';
 import {
   QUALITY_TO_MODES, rankPositionsByProximity, computeEffectiveSelections,
   resolveMode, buildFretMap, generatePositions, generateDimPositions,
 } from '../../utils';
 import { ChordChart } from './ChordChart';
+import { VoicingGrid } from '../Controls/VoicingGrid';
 
 interface ProgressionPlayerProps {
   progression: Progression;
@@ -20,6 +21,9 @@ interface ProgressionPlayerProps {
   bpm: number;
   onTogglePlay: () => void;
   onBpmChange: (bpm: number) => void;
+  availableVoicings?: FoundVoicing[];
+  selectedVoicingIdx?: number;
+  onSelectVoicing?: (idx: number) => void;
 }
 
 const btnBase = 'rounded cursor-pointer text-[10px] font-mono px-2 py-[3px]';
@@ -28,6 +32,7 @@ export function ProgressionPlayer({
   progression, activeChordIdx, allPos, chordPrefs,
   onChordSelect, onModeChange, onPosChange, onReset,
   isPlaying, bpm, onTogglePlay, onBpmChange,
+  availableVoicings, selectedVoicingIdx, onSelectVoicing,
 }: ProgressionPlayerProps) {
   const chords = progression.chords;
   const activeChord = chords[activeChordIdx];
@@ -126,13 +131,13 @@ export function ProgressionPlayer({
 
       {/* Active chord controls */}
       {activeChord && QUALITY_TO_MODES[activeChord.quality] && (
-        <div className="flex flex-wrap items-start gap-3">
-          {/* Mode selection */}
+        <>
+          {/* Row 1: Mode selection */}
           <div>
             <div className="text-[9px] text-text-dim mb-0.5">
               モード{!isModeConfirmed && ' — 自動提案中'}
             </div>
-            <div className="flex gap-1">
+            <div className="flex flex-wrap gap-1">
               {compatibleModes.map(mi => {
                 const tmpl = MODE_TEMPLATES[mi];
                 const active = effectiveModeIdx === mi;
@@ -155,33 +160,43 @@ export function ProgressionPlayer({
             </div>
           </div>
 
-          {/* Position selection */}
-          <div>
-            <div className="text-[9px] text-text-dim mb-0.5">
-              ポジション (近接順){!isPosConfirmed && ' — 自動提案中'}
+          {/* Row 2: Position + Chord form */}
+          <div className="flex items-start gap-3 mt-1">
+            <div>
+              <div className="text-[9px] text-text-dim mb-0.5">
+                ポジション (近接順){!isPosConfirmed && ' — 自動提案中'}
+              </div>
+              <div className="flex gap-1">
+                {rankedPosIds.map(posId => {
+                  const selected = effectivePosId === posId;
+                  const color = POS_COLORS[posId - 1];
+                  return (
+                    <button key={posId} onClick={() => onPosChange(activeChordIdx, posId)}
+                      className={btnBase}
+                      style={{
+                        border: `1px solid ${color}`,
+                        background: selected
+                          ? (isPosConfirmed ? color : color + '60')
+                          : '#1a1a1a',
+                        color: selected ? '#FFF' : color,
+                        fontWeight: selected ? 700 : 400,
+                      }}>
+                      Pos {posId}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-            <div className="flex gap-1">
-              {rankedPosIds.map(posId => {
-                const selected = effectivePosId === posId;
-                const color = POS_COLORS[posId - 1];
-                return (
-                  <button key={posId} onClick={() => onPosChange(activeChordIdx, posId)}
-                    className={btnBase}
-                    style={{
-                      border: `1px solid ${color}`,
-                      background: selected
-                        ? (isPosConfirmed ? color : color + '60')
-                        : '#1a1a1a',
-                      color: selected ? '#FFF' : color,
-                      fontWeight: selected ? 700 : 400,
-                    }}>
-                    Pos {posId}
-                  </button>
-                );
-              })}
-            </div>
+
+            {availableVoicings && availableVoicings.length > 0 && onSelectVoicing && (
+              <VoicingGrid
+                availableVoicings={availableVoicings}
+                selectedVoicingIdx={selectedVoicingIdx ?? 0}
+                onSelectVoicing={onSelectVoicing}
+              />
+            )}
           </div>
-        </div>
+        </>
       )}
 
       {/* Keyboard hint + reset */}
