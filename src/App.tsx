@@ -493,7 +493,7 @@ export default function App() {
     if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
     const ctx = audioCtxRef.current;
     if (ctx.state === 'suspended') ctx.resume();
-    playKSNote(ctx, fretToFrequency(stringIdx, fret), 0.7, ctx.currentTime);
+    playKSNote(ctx, fretToFrequency(stringIdx, fret), chordVolumeRef.current, ctx.currentTime);
   }, []);
 
   function getLabel(nn: string): string {

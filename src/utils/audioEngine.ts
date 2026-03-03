@@ -39,28 +39,52 @@ export function playKSNote(
   const buffer = ctx.createBuffer(1, totalSamples, sampleRate);
   const data = buffer.getChannelData(0);
 
-  // Initialise delay line with band-limited noise (excitation burst)
+  // Initialise delay line with heavily filtered noise (jazz-like soft excitation)
   const delayLine = new Float32Array(N);
   for (let i = 0; i < N; i++) {
     delayLine[i] = Math.random() * 2 - 1;
   }
+  // Pre-filter: 6-pass moving average — kills high-freq transients for round attack
+  for (let pass = 0; pass < 6; pass++) {
+    for (let i = 0; i < N - 1; i++) {
+      delayLine[i] = 0.5 * (delayLine[i] + delayLine[i + 1]);
+    }
+  }
 
-  // KS loop: averaging low-pass + decay
+  // KS loop: weighted low-pass (0.4/0.6 bias = darker sustain) + decay
   const decay = 0.996;
   let idx = 0;
   for (let i = 0; i < totalSamples; i++) {
     data[i] = delayLine[idx];
     const next = (idx + 1) % N;
-    delayLine[idx] = decay * 0.5 * (delayLine[idx] + delayLine[next]);
+    delayLine[idx] = decay * (0.4 * delayLine[idx] + 0.6 * delayLine[next]);
     idx = next;
   }
 
   const source = ctx.createBufferSource();
   source.buffer = buffer;
+
+  // Soft attack envelope (fade in over 3ms to remove click)
   const gain = ctx.createGain();
-  gain.gain.value = volume;
+  gain.gain.setValueAtTime(0, startTime);
+  gain.gain.linearRampToValueAtTime(volume * 1.0, startTime + 0.003);
   source.connect(gain);
-  gain.connect(ctx.destination);
+
+  // Low-pass: aggressive treble cut for warm jazz tone
+  const lp = ctx.createBiquadFilter();
+  lp.type = 'lowpass';
+  lp.frequency.value = Math.min(frequency * 2.5, 2200);
+  lp.Q.value = 0.7;
+  gain.connect(lp);
+
+  // High-shelf: further tame brightness above 1.5 kHz
+  const hs = ctx.createBiquadFilter();
+  hs.type = 'highshelf';
+  hs.frequency.value = 1500;
+  hs.gain.value = -6;
+  lp.connect(hs);
+
+  hs.connect(ctx.destination);
   source.start(startTime);
 
   return {
