@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import type { LabelMode, RootName, Progression, ChordNotationPrefs } from './types';
+import type { LabelMode, RootName, Progression, ChordNotationPrefs, ChartLayout } from './types';
 import { MODE_TEMPLATES, ROOTS, MODE_COLORS } from './constants';
 import {
   buildFretMap, generatePositions, generateDimPositions, resolveMode,
@@ -16,17 +16,40 @@ import { PositionGrid } from './components/PositionGrid';
 import { ProgressionEditor, ProgressionPlayer } from './components/Progression';
 import { Footer } from './components/Footer';
 
-function playClick(accent: boolean, ctx: AudioContext) {
+function playClick(accent: boolean, ctx: AudioContext, volume: number) {
   if (ctx.state === 'suspended') ctx.resume();
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
   osc.connect(gain);
   gain.connect(ctx.destination);
   osc.frequency.value = accent ? 1200 : 800;
-  gain.gain.setValueAtTime(accent ? 0.7 : 0.35, ctx.currentTime);
+  gain.gain.setValueAtTime(accent ? volume * 3 : volume * 1.5, ctx.currentTime);
   gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.04);
   osc.start(ctx.currentTime);
   osc.stop(ctx.currentTime + 0.04);
+}
+
+/** Build a flat playback sequence respecting section repeats and volta endings. */
+function buildPlaybackSeq(layout: ChartLayout): { chordIdx: number; beats: number }[] {
+  const seq: { chordIdx: number; beats: number }[] = [];
+  function addMeasure(m: { chordIndices: number[]; beatWidths?: number[] }) {
+    const count = m.chordIndices.length;
+    const bwSum = m.beatWidths ? m.beatWidths.reduce((a, b) => a + b, 0) : count;
+    m.chordIndices.forEach((ci, i) => {
+      const bw = m.beatWidths?.[i] ?? 1;
+      seq.push({ chordIdx: ci, beats: (bw / bwSum) * 4 });
+    });
+  }
+  for (const section of layout.sections) {
+    const passes = (section.repeats ?? 0) + 1;
+    for (let pass = 0; pass < passes; pass++) {
+      for (const m of section.measures) addMeasure(m);
+      if (section.endings?.[pass]) {
+        for (const m of section.endings[pass]) addMeasure(m);
+      }
+    }
+  }
+  return seq;
 }
 
 export default function App() {
@@ -51,8 +74,17 @@ export default function App() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [bpm, setBpm] = useState(120);
   const [isMetronomeOn, setIsMetronomeOn] = useState(false);
+  const [metVolume, setMetVolume] = useState<number>(() => {
+    const saved = parseFloat(localStorage.getItem('metVolume') ?? '');
+    return isNaN(saved) ? 0.5 : saved;
+  });
   const audioCtxRef = useRef<AudioContext | null>(null);
   const metBeatRef = useRef(0);
+  const metVolumeRef = useRef(metVolume);
+  // Drift-free auto-advance: track ideal chord start time + repeat position
+  const chordStartRef = useRef(0);
+  const wasAutoAdvanceRef = useRef(false);
+  const playPosRef = useRef(0);
 
   const template = MODE_TEMPLATES[modeIdx];
   const mode = useMemo(() => resolveMode(rootName, template), [rootName, modeIdx]);
@@ -230,52 +262,58 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleKeyDown]);
 
-  // BPM auto-advance: setTimeout chain for variable beat durations
+  // Keep metVolumeRef in sync and persist to localStorage
   useEffect(() => {
-    if (!isPlaying || !progMode || !activeProg) return;
-    const layout = getChartLayout(activeProg);
-    const beatMap = new Map<number, number>();
-    function addMeasures(measures: typeof layout.sections[0]['measures']) {
-      for (const measure of measures) {
-        const count = measure.chordIndices.length;
-        const bwSum = measure.beatWidths
-          ? measure.beatWidths.reduce((a, b) => a + b, 0)
-          : count;
-        measure.chordIndices.forEach((ci, i) => {
-          const bw = measure.beatWidths?.[i] ?? 1;
-          beatMap.set(ci, (bw / bwSum) * 4);
-        });
-      }
+    metVolumeRef.current = metVolume;
+    localStorage.setItem('metVolume', String(metVolume));
+  }, [metVolume]);
+
+  // BPM auto-advance: drift-free, respects section repeats and volta endings
+  useEffect(() => {
+    if (!isPlaying || !progMode || !activeProg) {
+      chordStartRef.current = 0;
+      wasAutoAdvanceRef.current = false;
+      return;
     }
-    for (const section of layout.sections) {
-      addMeasures(section.measures);
-      if (section.endings) {
-        for (const ending of section.endings) addMeasures(ending);
-      }
+    const seq = buildPlaybackSeq(getChartLayout(activeProg));
+    if (!seq.length) return;
+
+    // On playback start, BPM change, or user navigation: find position in sequence.
+    // On auto-advance: playPosRef was already incremented in the timeout callback.
+    if (!wasAutoAdvanceRef.current || chordStartRef.current === 0) {
+      const pos = seq.findIndex(s => s.chordIdx === activeChordIdx);
+      playPosRef.current = pos >= 0 ? pos : 0;
+      chordStartRef.current = performance.now();
     }
-    const beats = beatMap.get(activeChordIdx) ?? 4;
+    wasAutoAdvanceRef.current = false;
+
+    const step = seq[playPosRef.current];
+    if (!step) return;
+
+    const targetAt = chordStartRef.current + (60000 / bpm) * step.beats;
+    const delay = Math.max(0, targetAt - performance.now());
+
     const timer = setTimeout(() => {
-      setActiveChordIdx(i => {
-        const next = i + 1;
-        return next >= activeProg.chords.length ? 0 : next;
-      });
-    }, (60000 / bpm) * beats);
+      wasAutoAdvanceRef.current = true;
+      chordStartRef.current = targetAt;
+      const nextPos = (playPosRef.current + 1) % seq.length;
+      playPosRef.current = nextPos;
+      setActiveChordIdx(seq[nextPos].chordIdx);
+    }, delay);
     return () => clearTimeout(timer);
   }, [isPlaying, activeChordIdx, bpm, activeProg, progMode]);
 
-  // Reset metronome beat counter on chord change (so next tick is accented)
-  useEffect(() => { metBeatRef.current = 0; }, [activeChordIdx]);
-
-  // Metronome: independent setInterval, accent on beat 1 of each chord
+  // Metronome: independent setInterval, accent on measure downbeat (every 4 beats)
   useEffect(() => {
     if (!isPlaying || !isMetronomeOn || !progMode) return;
     if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
     const ctx = audioCtxRef.current;
-    playClick(true, ctx);
+    metBeatRef.current = 0;
+    playClick(true, ctx, metVolumeRef.current);   // beat 1 accent
     metBeatRef.current = 1;
     const id = setInterval(() => {
-      const accent = metBeatRef.current === 0;
-      playClick(accent, ctx);
+      const accent = metBeatRef.current % 4 === 0;
+      playClick(accent, ctx, metVolumeRef.current);
       metBeatRef.current++;
     }, 60000 / bpm);
     return () => clearInterval(id);
@@ -417,6 +455,8 @@ export default function App() {
                 onBpmChange={setBpm}
                 isMetronomeOn={isMetronomeOn}
                 onToggleMetronome={() => setIsMetronomeOn(p => !p)}
+                metVolume={metVolume}
+                onMetVolumeChange={setMetVolume}
                 selPosIds={selPosIds}
                 availableVoicings={showChordForms ? deduplicatedVoicings : undefined}
                 selectedVoicingIdx={effectiveVoicingIdx}
