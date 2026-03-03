@@ -38,3 +38,7 @@
   /* Fonts */
   --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
 }
+
+html {
+  scrollbar-gutter: stable;
+}
