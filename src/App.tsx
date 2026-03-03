@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import type { LabelMode, RootName, Progression, ChordNotationPrefs } from './types';
 import { MODE_TEMPLATES, ROOTS, MODE_COLORS } from './constants';
 import {
@@ -15,6 +15,19 @@ import { RootSelector, ModeSelector, PositionSelector, OptionBar } from './compo
 import { PositionGrid } from './components/PositionGrid';
 import { ProgressionEditor, ProgressionPlayer } from './components/Progression';
 import { Footer } from './components/Footer';
+
+function playClick(accent: boolean, ctx: AudioContext) {
+  if (ctx.state === 'suspended') ctx.resume();
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.frequency.value = accent ? 1200 : 800;
+  gain.gain.setValueAtTime(accent ? 0.7 : 0.35, ctx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.04);
+  osc.start(ctx.currentTime);
+  osc.stop(ctx.currentTime + 0.04);
+}
 
 export default function App() {
   const [rootName, setRootName] = useState<RootName>('C');
@@ -37,6 +50,9 @@ export default function App() {
   const [editing, setEditing] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [bpm, setBpm] = useState(120);
+  const [isMetronomeOn, setIsMetronomeOn] = useState(false);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const metBeatRef = useRef(0);
 
   const template = MODE_TEMPLATES[modeIdx];
   const mode = useMemo(() => resolveMode(rootName, template), [rootName, modeIdx]);
@@ -247,6 +263,24 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [isPlaying, activeChordIdx, bpm, activeProg, progMode]);
 
+  // Reset metronome beat counter on chord change (so next tick is accented)
+  useEffect(() => { metBeatRef.current = 0; }, [activeChordIdx]);
+
+  // Metronome: independent setInterval, accent on beat 1 of each chord
+  useEffect(() => {
+    if (!isPlaying || !isMetronomeOn || !progMode) return;
+    if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
+    const ctx = audioCtxRef.current;
+    playClick(true, ctx);
+    metBeatRef.current = 1;
+    const id = setInterval(() => {
+      const accent = metBeatRef.current === 0;
+      playClick(accent, ctx);
+      metBeatRef.current++;
+    }, 60000 / bpm);
+    return () => clearInterval(id);
+  }, [isPlaying, isMetronomeOn, progMode, bpm]);
+
   function handleSaveProgressions(progs: Progression[]) {
     setProgressions(progs);
     saveProgressions(progs);
@@ -381,6 +415,8 @@ export default function App() {
                 bpm={bpm}
                 onTogglePlay={() => setIsPlaying(p => !p)}
                 onBpmChange={setBpm}
+                isMetronomeOn={isMetronomeOn}
+                onToggleMetronome={() => setIsMetronomeOn(p => !p)}
                 selPosIds={selPosIds}
                 availableVoicings={showChordForms ? deduplicatedVoicings : undefined}
                 selectedVoicingIdx={effectiveVoicingIdx}
