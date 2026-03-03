@@ -77,6 +77,7 @@ export interface ChordSlot {
   posId: number;        // position id (auto-suggested or user-selected)
   posConfirmed: boolean; // true = user explicitly chose this position
   modeConfirmed?: boolean; // true = user explicitly chose this mode
+  voicingKey?: string;  // e.g. "drop2-0-5,4,3,2" — saved voicing template selection
 }
 
 /** Song key with major/minor quality */

@@ -76,22 +76,8 @@ export default function App() {
     [groupedVoicings],
   );
 
-  // Clamp index synchronously so OptionBar never receives an out-of-bounds index
-  // (useEffect reset fires after render, so stale index can cause a crash on position switch)
-  const safeVoicingIdx = Math.min(
-    selectedVoicingIdx,
-    Math.max(0, deduplicatedVoicings.length - 1),
-  );
-
   // Reset voicing index when position/mode/root changes
   useEffect(() => { setSelectedVoicingIdx(0); }, [selPosId, modeIdx, rootName]);
-
-  const voicingHighlights = useMemo(() => {
-    if (!groupedVoicings.length) return null;
-    // Union of all instances sharing the same template
-    const group = groupedVoicings[safeVoicingIdx];
-    return new Set(group.flatMap(v => v.notes.map(n => `${n.stringIdx}:${n.fret}`)));
-  }, [groupedVoicings, safeVoicingIdx]);
 
   const deg = mode.degrees;
   const rootNote = mode.notes[0];
@@ -103,6 +89,25 @@ export default function App() {
   const activeProg = progressions[activeProgIdx];
   const activeChord = activeProg?.chords[activeChordIdx];
   const isSkipped = activeChord && !QUALITY_TO_MODES[activeChord.quality];
+
+  // In progression mode: restore voicing index from saved key on the active chord.
+  // In normal mode: clamp synchronously to prevent out-of-bounds after position switch.
+  const effectiveVoicingIdx = useMemo(() => {
+    if (progMode && activeChord?.voicingKey && deduplicatedVoicings.length > 0) {
+      const idx = deduplicatedVoicings.findIndex(v =>
+        `${v.template.type}-${v.template.inversion}-${v.template.stringIndices.join(',')}` === activeChord.voicingKey
+      );
+      return idx >= 0 ? idx : 0;
+    }
+    return Math.min(selectedVoicingIdx, Math.max(0, deduplicatedVoicings.length - 1));
+  }, [progMode, activeChord?.voicingKey, deduplicatedVoicings, selectedVoicingIdx]);
+
+  const voicingHighlights = useMemo(() => {
+    if (!groupedVoicings.length) return null;
+    // Union of all instances sharing the same template
+    const group = groupedVoicings[effectiveVoicingIdx];
+    return new Set(group.flatMap(v => v.notes.map(n => `${n.stringIdx}:${n.fret}`)));
+  }, [groupedVoicings, effectiveVoicingIdx]);
 
   // Compute effective selections for the whole progression (resolves auto-suggestion chain)
   const effectiveAll = useMemo(
@@ -264,10 +269,23 @@ export default function App() {
     handleSaveProgressions(copy);
   }
 
+  function handleSelectVoicing(idx: number) {
+    setSelectedVoicingIdx(idx);
+    if (progMode && deduplicatedVoicings[idx]) {
+      const v = deduplicatedVoicings[idx];
+      const key = `${v.template.type}-${v.template.inversion}-${v.template.stringIndices.join(',')}`;
+      const copy = [...progressions];
+      const prog = { ...copy[activeProgIdx], chords: [...copy[activeProgIdx].chords] };
+      prog.chords[activeChordIdx] = { ...prog.chords[activeChordIdx], voicingKey: key };
+      copy[activeProgIdx] = prog;
+      handleSaveProgressions(copy);
+    }
+  }
+
   function handleResetSelections() {
     const copy = [...progressions];
     const prog = { ...copy[activeProgIdx], chords: copy[activeProgIdx].chords.map(c => ({
-      ...c, posConfirmed: false, modeConfirmed: false,
+      ...c, posConfirmed: false, modeConfirmed: false, voicingKey: undefined,
     }))};
     copy[activeProgIdx] = prog;
     handleSaveProgressions(copy);
@@ -358,6 +376,9 @@ export default function App() {
                 bpm={bpm}
                 onTogglePlay={() => setIsPlaying(p => !p)}
                 onBpmChange={setBpm}
+                availableVoicings={showChordForms ? deduplicatedVoicings : undefined}
+                selectedVoicingIdx={effectiveVoicingIdx}
+                onSelectVoicing={handleSelectVoicing}
               />
             )}
 
@@ -393,6 +414,9 @@ export default function App() {
             onSelectAll={() => { setSelPosId(null); setOverlay(false); }}
             onSelectPosition={(id) => { setSelPosId(id); setOverlay(false); }}
             onToggleOverlay={() => { setOverlay(true); setSelPosId(null); }}
+            availableVoicings={showChordForms ? deduplicatedVoicings : undefined}
+            selectedVoicingIdx={effectiveVoicingIdx}
+            onSelectVoicing={handleSelectVoicing}
           />
         )}
 
@@ -410,9 +434,6 @@ export default function App() {
           canShowChordForms={canShowChordForms}
           showChordForms={showChordForms}
           onToggleChordForms={setShowChordForms}
-          availableVoicings={deduplicatedVoicings}
-          selectedVoicingIdx={safeVoicingIdx}
-          onSelectVoicing={setSelectedVoicingIdx}
         />
 
         <Fretboard
