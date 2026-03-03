@@ -13,11 +13,12 @@ interface FretboardNoteProps {
   isGuideTone?: boolean;
   guideRole?: '3rd' | '7th';
   isVoicingNote?: boolean;
+  onClick?: () => void;
 }
 
 export function FretboardNote({
   posId, stringIndex, noteName: _noteName, fret, posColor,
-  isRoot, isCT, showCT, label, isGuideTone, guideRole, isVoicingNote,
+  isRoot, isCT, showCT, label, isGuideTone, guideRole, isVoicingNote, onClick,
 }: FretboardNoteProps) {
   const cx = LP + (fret - 0.5) * FW;
   const cy = TP + stringIndex * SG;
@@ -28,7 +29,7 @@ export function FretboardNote({
     const d = 16;
     const gtColor = guideRole === '3rd' ? '#F1C40F' : '#3498DB';
     return (
-      <g key={`${posId}-${stringIndex}-${fret}`}>
+      <g key={`${posId}-${stringIndex}-${fret}`} onClick={onClick} style={onClick ? { cursor: 'pointer' } : undefined}>
         {isVoicingNote && (
           <rect x={cx - 15} y={cy - 15} width={30} height={30} rx={5}
             fill="rgba(0,229,255,0.12)" stroke="#00E5FF" strokeWidth={2.5} />
@@ -51,7 +52,7 @@ export function FretboardNote({
   else if (showCT && !isCT) { fill = '#1a1a1a'; tc = '#555'; sk = posColor; sw = 1.5; r = 11; }
 
   return (
-    <g key={`${posId}-${stringIndex}-${fret}`}>
+    <g key={`${posId}-${stringIndex}-${fret}`} onClick={onClick} style={onClick ? { cursor: 'pointer' } : undefined}>
       {isVoicingNote && (
         <rect x={cx - 15} y={cy - 15} width={30} height={30} rx={5}
           fill="rgba(0,229,255,0.12)" stroke="#00E5FF" strokeWidth={2.5} />

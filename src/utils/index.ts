@@ -44,3 +44,9 @@ export {
   formatVoicingLabel,
   VOICING_TEMPLATES,
 } from './chordForms';
+export {
+  OPEN_STRING_MIDI,
+  fretToFrequency,
+  playKSNote,
+  playChordStrum,
+} from './audioEngine';

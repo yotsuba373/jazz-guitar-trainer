@@ -25,6 +25,10 @@ interface ProgressionPlayerProps {
   onToggleMetronome: () => void;
   metVolume: number;
   onMetVolumeChange: (v: number) => void;
+  chordAudioOn: boolean;
+  onToggleChordAudio: () => void;
+  chordVolume: number;
+  onChordVolumeChange: (v: number) => void;
   selPosIds: number[];
   availableVoicings?: FoundVoicing[];
   selectedVoicingIdx?: number;
@@ -38,6 +42,7 @@ export function ProgressionPlayer({
   onChordSelect, onModeChange, onPosChange, onReset,
   isPlaying, bpm, onTogglePlay, onBpmChange, isMetronomeOn, onToggleMetronome,
   metVolume, onMetVolumeChange,
+  chordAudioOn, onToggleChordAudio, chordVolume, onChordVolumeChange,
   selPosIds, availableVoicings, selectedVoicingIdx, onSelectVoicing,
 }: ProgressionPlayerProps) {
   const chords = progression.chords;
@@ -136,6 +141,31 @@ export function ProgressionPlayer({
             title={`音量 ${Math.round(metVolume * 100)}%`}
             className="w-28"
             style={{ accentColor: '#F1C40F' }}
+          />
+        )}
+        <button
+          onClick={onToggleChordAudio}
+          title="コード音"
+          className={btnBase}
+          style={{
+            border: `1px solid ${chordAudioOn ? '#27AE60' : '#444'}`,
+            background: chordAudioOn ? '#102a10' : '#1a1a1a',
+            color: chordAudioOn ? '#27AE60' : '#888',
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M9 18V5l12-2v13"/>
+            <circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
+          </svg>
+        </button>
+        {chordAudioOn && (
+          <input
+            type="range" min={0} max={1} step={0.05}
+            value={chordVolume}
+            onChange={e => onChordVolumeChange(Number(e.target.value))}
+            title={`コード音量 ${Math.round(chordVolume * 100)}%`}
+            className="w-28"
+            style={{ accentColor: '#27AE60' }}
           />
         )}
         <button

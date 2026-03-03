@@ -14,9 +14,10 @@ interface FretboardProps {
   rootNote: string;
   guideToneInfo?: GuideToneInfo | null;
   voicingHighlights?: Set<string> | null;
+  onNoteClick?: (stringIdx: number, fret: number) => void;
 }
 
-export function Fretboard({ visible, selPosIds, dim, showCT, ctSet, getLabel, rootNote, guideToneInfo, voicingHighlights }: FretboardProps) {
+export function Fretboard({ visible, selPosIds, dim, showCT, ctSet, getLabel, rootNote, guideToneInfo, voicingHighlights, onNoteClick }: FretboardProps) {
   return (
     <div className="overflow-x-auto mb-[14px]">
       <svg width={SVG_WIDTH} height={SVG_HEIGHT}
@@ -87,6 +88,7 @@ export function Fretboard({ visible, selPosIds, dim, showCT, ctSet, getLabel, ro
                       isGuideTone={gtActive && (n === gtThird || n === gtSeventh)}
                       guideRole={n === gtThird ? '3rd' : n === gtSeventh ? '7th' : undefined}
                       isVoicingNote={voicingHighlights?.has(`${sIdx}:${f}`) ?? false}
+                      onClick={onNoteClick ? () => onNoteClick(sIdx, f) : undefined}
                     />
                   ))
                 )
