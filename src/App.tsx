@@ -659,16 +659,16 @@ export default function App() {
 
         {/* Mode description section */}
         <div className="mt-2 mb-3 rounded-md px-3 py-2" style={{ background: '#1a1a1a', borderLeft: `3px solid ${MODE_COLORS[mode.key]}` }}>
-          <div className="text-[11px] text-text-secondary mb-1">
+          <div className="text-[12px] text-text-secondary mb-1">
             <span className="font-bold" style={{ color: MODE_COLORS[mode.key] }}>{rootNote} {mode.name}</span>
             <span className="text-text-dim ml-2">{mode.notes.map(n => `${n}(${mode.degrees[n]})`).join(' ')}</span>
           </div>
-          <div className="text-[10px] text-text-dim mb-1.5">
+          <div className="text-[11px] text-text-dim mb-1.5">
             {formatChordSymbol(rootNote, mode.chordQuality, chordPrefs)}: {mode.chordTones.map((n, i) => `${n}(${mode.chordSub.split(' ')[i] ?? mode.degrees[n]})`).join(' ')}
           </div>
-          <div className="text-[10px] text-text-dim leading-relaxed">
+          <div className="text-[11px] text-text-dim leading-relaxed">
             {template.description.split('♮').flatMap((part, i) =>
-              i === 0 ? [part] : [<span key={i} style={{ fontSize: '1.3em', lineHeight: 1, verticalAlign: '-0.15em' }}>♮</span>, part]
+              i === 0 ? [part] : [<span key={i} style={{ fontSize: '1.25em', lineHeight: 1, verticalAlign: '-0.12em' }}>♮</span>, part]
             )}
           </div>
         </div>
