@@ -76,15 +76,22 @@ export default function App() {
     [groupedVoicings],
   );
 
+  // Clamp index synchronously so OptionBar never receives an out-of-bounds index
+  // (useEffect reset fires after render, so stale index can cause a crash on position switch)
+  const safeVoicingIdx = Math.min(
+    selectedVoicingIdx,
+    Math.max(0, deduplicatedVoicings.length - 1),
+  );
+
   // Reset voicing index when position/mode/root changes
   useEffect(() => { setSelectedVoicingIdx(0); }, [selPosId, modeIdx, rootName]);
 
   const voicingHighlights = useMemo(() => {
-    if (!groupedVoicings.length || selectedVoicingIdx >= groupedVoicings.length) return null;
+    if (!groupedVoicings.length) return null;
     // Union of all instances sharing the same template
-    const group = groupedVoicings[selectedVoicingIdx];
+    const group = groupedVoicings[safeVoicingIdx];
     return new Set(group.flatMap(v => v.notes.map(n => `${n.stringIdx}:${n.fret}`)));
-  }, [groupedVoicings, selectedVoicingIdx]);
+  }, [groupedVoicings, safeVoicingIdx]);
 
   const deg = mode.degrees;
   const rootNote = mode.notes[0];
@@ -404,7 +411,7 @@ export default function App() {
           showChordForms={showChordForms}
           onToggleChordForms={setShowChordForms}
           availableVoicings={deduplicatedVoicings}
-          selectedVoicingIdx={selectedVoicingIdx}
+          selectedVoicingIdx={safeVoicingIdx}
           onSelectVoicing={setSelectedVoicingIdx}
         />
 
