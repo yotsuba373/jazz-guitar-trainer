@@ -58,14 +58,33 @@ export default function App() {
     return findVoicingsInPosition(selPos, mode);
   }, [showChordForms, selPos, canShowChordForms, mode]);
 
+  // Group voicings by template (type + inversion + string set) across all instances
+  // so the same shape in different octaves is shown simultaneously
+  const groupedVoicings = useMemo(() => {
+    const map = new Map<string, typeof availableVoicings>();
+    for (const v of availableVoicings) {
+      const key = `${v.template.type}-${v.template.inversion}-${v.template.stringIndices.join(',')}`;
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(v);
+    }
+    return Array.from(map.values());
+  }, [availableVoicings]);
+
+  // One representative per group for display (◀/▶ count)
+  const deduplicatedVoicings = useMemo(
+    () => groupedVoicings.map(g => g[0]),
+    [groupedVoicings],
+  );
+
   // Reset voicing index when position/mode/root changes
   useEffect(() => { setSelectedVoicingIdx(0); }, [selPosId, modeIdx, rootName]);
 
   const voicingHighlights = useMemo(() => {
-    if (!availableVoicings.length || selectedVoicingIdx >= availableVoicings.length) return null;
-    const v = availableVoicings[selectedVoicingIdx];
-    return new Set(v.notes.map(n => `${n.stringIdx}:${n.fret}`));
-  }, [availableVoicings, selectedVoicingIdx]);
+    if (!groupedVoicings.length || selectedVoicingIdx >= groupedVoicings.length) return null;
+    // Union of all instances sharing the same template
+    const group = groupedVoicings[selectedVoicingIdx];
+    return new Set(group.flatMap(v => v.notes.map(n => `${n.stringIdx}:${n.fret}`)));
+  }, [groupedVoicings, selectedVoicingIdx]);
 
   const deg = mode.degrees;
   const rootNote = mode.notes[0];
@@ -384,7 +403,7 @@ export default function App() {
           canShowChordForms={canShowChordForms}
           showChordForms={showChordForms}
           onToggleChordForms={setShowChordForms}
-          availableVoicings={availableVoicings}
+          availableVoicings={deduplicatedVoicings}
           selectedVoicingIdx={selectedVoicingIdx}
           onSelectVoicing={setSelectedVoicingIdx}
         />
