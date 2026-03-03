@@ -31,7 +31,7 @@ interface ProgressionPlayerProps {
   onSelectVoicing?: (idx: number) => void;
 }
 
-const btnBase = 'rounded cursor-pointer text-[10px] font-mono px-2 py-[3px]';
+const btnBase = 'rounded cursor-pointer text-[10px] font-mono px-2 h-[24px] inline-flex items-center';
 
 export function ProgressionPlayer({
   progression, activeChordIdx, allPos, chordPrefs,
@@ -94,15 +94,23 @@ export function ProgressionPlayer({
       <div className="flex items-center gap-2 mb-2">
         <button
           onClick={onTogglePlay}
-          className="rounded cursor-pointer font-mono text-[13px] px-3 py-[3px]"
+          className="rounded cursor-pointer px-3 h-[24px] inline-flex items-center"
           style={{
             border: `1px solid ${isPlaying ? '#E74C3C' : '#27AE60'}`,
             background: isPlaying ? '#2a1010' : '#102a10',
             color: isPlaying ? '#E74C3C' : '#27AE60',
-            fontWeight: 700,
           }}
         >
-          {isPlaying ? '⏸' : '▶'}
+          {isPlaying ? (
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
+              <rect x="1" y="1" width="3.5" height="10" rx="1"/>
+              <rect x="7.5" y="1" width="3.5" height="10" rx="1"/>
+            </svg>
+          ) : (
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
+              <polygon points="2,1 11,6 2,11"/>
+            </svg>
+          )}
         </button>
         <button
           onClick={onToggleMetronome}
@@ -113,7 +121,13 @@ export function ProgressionPlayer({
             background: isMetronomeOn ? '#2a2a1a' : '#1a1a1a',
             color: isMetronomeOn ? '#F1C40F' : '#888',
           }}
-        >♩</button>
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+            <path d="M14.153 8.188l-.72 -3.236a2.493 2.493 0 0 0 -4.867 0l-3.025 13.614a2 2 0 0 0 1.952 2.434h7.014a2 2 0 0 0 1.952 -2.434l-.524 -2.357m-4.935 1.791l9 -13" />
+            <path d="M19 5a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />
+          </svg>
+        </button>
         {isMetronomeOn && (
           <input
             type="range" min={0} max={1} step={0.05}
@@ -135,7 +149,7 @@ export function ProgressionPlayer({
           onChange={e => setBpmStr(e.target.value)}
           onBlur={commitBpm}
           onKeyDown={e => e.key === 'Enter' && commitBpm()}
-          className="w-14 text-center bg-transparent font-mono text-[12px] rounded border border-[#444] py-[3px] text-white"
+          className="w-10 text-center bg-transparent font-mono text-[12px] rounded border border-[#444] h-[24px] text-white"
           min={40} max={240}
         />
         <span className="text-[10px] text-text-dim">BPM</span>
