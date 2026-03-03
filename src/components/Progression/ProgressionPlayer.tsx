@@ -23,6 +23,8 @@ interface ProgressionPlayerProps {
   onBpmChange: (bpm: number) => void;
   isMetronomeOn: boolean;
   onToggleMetronome: () => void;
+  metVolume: number;
+  onMetVolumeChange: (v: number) => void;
   selPosIds: number[];
   availableVoicings?: FoundVoicing[];
   selectedVoicingIdx?: number;
@@ -35,6 +37,7 @@ export function ProgressionPlayer({
   progression, activeChordIdx, allPos, chordPrefs,
   onChordSelect, onModeChange, onPosChange, onReset,
   isPlaying, bpm, onTogglePlay, onBpmChange, isMetronomeOn, onToggleMetronome,
+  metVolume, onMetVolumeChange,
   selPosIds, availableVoicings, selectedVoicingIdx, onSelectVoicing,
 }: ProgressionPlayerProps) {
   const chords = progression.chords;
@@ -111,6 +114,16 @@ export function ProgressionPlayer({
             color: isMetronomeOn ? '#F1C40F' : '#888',
           }}
         >♩</button>
+        {isMetronomeOn && (
+          <input
+            type="range" min={0} max={1} step={0.05}
+            value={metVolume}
+            onChange={e => onMetVolumeChange(Number(e.target.value))}
+            title={`音量 ${Math.round(metVolume * 100)}%`}
+            className="w-28"
+            style={{ accentColor: '#F1C40F' }}
+          />
+        )}
         <button
           onClick={() => onBpmChange(Math.max(40, bpm - 1))}
           className={btnBase}
