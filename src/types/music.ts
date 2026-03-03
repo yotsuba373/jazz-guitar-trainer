@@ -127,3 +127,23 @@ export interface RawSection {
   Repeats?: number;
   Endings?: { Chords: string }[];
 }
+
+/** Voicing type: Drop 2 or Drop 3 */
+export type VoicingType = 'drop2' | 'drop3';
+
+/** A voicing template defining which chord tone goes on which string */
+export interface VoicingTemplate {
+  type: VoicingType;
+  inversion: number;         // 0=Root, 1=1st, 2=2nd, 3=3rd (named by bass note)
+  inversionName: string;     // "Root" | "1st" | "2nd" | "3rd"
+  stringIndices: number[];   // 4 string indices bass→treble (e.g., [5,4,3,2])
+  chordToneOrder: number[];  // chord tone index per string bass→treble (0=R,1=3rd,2=5th,3=7th)
+}
+
+/** A concrete voicing found within a position instance */
+export interface FoundVoicing {
+  template: VoicingTemplate;
+  notes: { stringIdx: number; fret: number; noteName: string; chordToneIdx: number }[];
+  instanceIdx: number;
+  fretSpan: number;
+}

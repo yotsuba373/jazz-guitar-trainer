@@ -12,11 +12,12 @@ interface FretboardNoteProps {
   label: string;
   isGuideTone?: boolean;
   guideRole?: '3rd' | '7th';
+  isVoicingNote?: boolean;
 }
 
 export function FretboardNote({
   posId, stringIndex, noteName: _noteName, fret, posColor,
-  isRoot, isCT, showCT, label, isGuideTone, guideRole,
+  isRoot, isCT, showCT, label, isGuideTone, guideRole, isVoicingNote,
 }: FretboardNoteProps) {
   const cx = LP + (fret - 0.5) * FW;
   const cy = TP + stringIndex * SG;
@@ -47,6 +48,10 @@ export function FretboardNote({
 
   return (
     <g key={`${posId}-${stringIndex}-${fret}`}>
+      {isVoicingNote && (
+        <rect x={cx - 15} y={cy - 15} width={30} height={30} rx={5}
+          fill="rgba(0,229,255,0.12)" stroke="#00E5FF" strokeWidth={2.5} />
+      )}
       <circle cx={cx} cy={cy} r={r} fill={fill} stroke={sk} strokeWidth={sw} />
       <text
         x={cx} y={cy + 3.5} textAnchor="middle"
