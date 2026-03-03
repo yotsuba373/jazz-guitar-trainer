@@ -50,7 +50,7 @@ export default function App() {
   const ctSet = useMemo(() => new Set(mode.chordTones), [rootName, modeIdx]);
 
   // Chord form voicings
-  const canShowChordForms = selPosId != null && !overlay && !is8Note && modeIdx <= 6 && !progMode;
+  const canShowChordForms = selPosId != null && !overlay && !is8Note && modeIdx <= 6;
   const selPos = selPosId != null ? allPos.find(p => p.id === selPosId) ?? null : null;
 
   const availableVoicings = useMemo(() => {
