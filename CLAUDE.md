@@ -14,7 +14,7 @@ npm install
 npm run dev       # 開発サーバー起動 → http://localhost:5173
 npm run build     # tsc + vite build
 npm run lint      # ESLint
-npm test          # vitest run (855 テスト)
+npm test          # vitest run (906 テスト)
 ```
 
 Node.js が未インストールの場合は fnm を使用:

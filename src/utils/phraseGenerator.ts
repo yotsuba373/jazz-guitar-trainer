@@ -487,19 +487,39 @@ export function generatePhrase(
       score -= strDist * 15;
 
       // Large interval penalty (keep Parker-like compactness)
-      if (interval >= 6) score -= 20;
-      if (interval >= 8) score -= 30;
+      if (interval >= 6) score -= 25;
+      if (interval >= 8) score -= 35;
+      if (interval >= 10) score -= 20; // extra penalty for 10+ semitones
 
       // Penalise returning to the same pitch as 2 notes ago (A→B→A oscillation)
-      // -80 ensures net negative even with stepwise(60) + dirChange(15) bonuses
+      // -90 ensures net negative even with stepwise(60) + dirChange(15) + passing(10) bonuses
       if (prevPrevNote && absolutePitch(c) === absolutePitch(prevPrevNote)) {
-        score -= 80;
+        score -= 90;
       }
 
       // Extended oscillation: also check 3 notes back (A→B→C→A)
       if (notes.length >= 3) {
         const threeBack = notes[notes.length - 3];
-        if (absolutePitch(c) === absolutePitch(threeBack)) score -= 40;
+        if (absolutePitch(c) === absolutePitch(threeBack)) score -= 45;
+      }
+
+      // Near-oscillation: returning within 1 semitone of 2-back note
+      // (e.g. C→D→C# still sounds like aimless motion)
+      if (prevPrevNote) {
+        const ppDist = Math.abs(absolutePitch(c) - absolutePitch(prevPrevNote));
+        if (ppDist === 1) score -= 15;
+      }
+
+      // Weak-beat echo: on weak beats, avoid returning to the same note name
+      // as the previous weak beat (prevents D→E→D→E alternation patterns)
+      if (!strong && notes.length >= 3) {
+        // Find last weak-beat note
+        for (let k = notes.length - 1; k >= Math.max(0, notes.length - 3); k--) {
+          if (!isStrongBeat(notes[k].beatPosition) && notes[k].noteName === c.noteName) {
+            score -= 25;
+            break;
+          }
+        }
       }
 
       // CT variety: penalise reusing the same CT on consecutive strong beats
@@ -539,11 +559,15 @@ export function generatePhrase(
       }
 
       // Skeleton adherence: strong bonus for matching the pre-planned CT
+      // But scale down if it would require a large leap from previous note
       if (strong) {
         const skeletonTarget = beat === 3 ? skeleton.beat3
           : beat === 5 ? skeleton.beat5 : null;
         if (skeletonTarget && c.noteName === skeletonTarget.noteName) {
-          score += 40;
+          // Reduce skeleton bonus when leap from prev note is large
+          const leapToSkel = interval;
+          const skelBonus = leapToSkel >= 7 ? 20 : 40; // halve bonus for large leaps
+          score += skelBonus;
           // Extra bonus for the exact planned instance (same string/fret region)
           const skelDist = Math.abs(absolutePitch(c) - absolutePitch(skeletonTarget));
           if (skelDist <= 2) score += 15;
@@ -560,7 +584,14 @@ export function generatePhrase(
         ];
         const hi = Math.max(...recent);
         const lo = Math.min(...recent);
-        if (hi - lo <= 3) score -= 30;
+        if (hi - lo <= 3) score -= 35;
+        // Extended stagnation: 5 notes within 4 semitones
+        if (notes.length >= 4) {
+          const ext = [absolutePitch(notes[notes.length - 4]), ...recent];
+          const ehi = Math.max(...ext);
+          const elo = Math.min(...ext);
+          if (ehi - elo <= 4) score -= 20;
+        }
       }
 
       // Passing tone quality: weak beats should move towards the next skeleton CT
@@ -571,6 +602,31 @@ export function generatePhrase(
         const prevDist = Math.abs(absolutePitch(prevNote) - targetPitch);
         const curDist = Math.abs(absolutePitch(c) - targetPitch);
         if (curDist < prevDist) score += 10;
+      }
+
+      // Late-phrase goal approach: beats 6-7 should move monotonically towards goal
+      // This reduces oscillation near the phrase end (Parker's lines resolve smoothly)
+      if (beat >= 6) {
+        const goalInstances = activeCtPool.filter(n => n.noteName === goalNote.noteName);
+        if (goalInstances.length > 0) {
+          const nearestGoalPitch = goalInstances.reduce((best, n) =>
+            Math.abs(absolutePitch(n) - absolutePitch(prevNote)) <
+            Math.abs(absolutePitch(best) - absolutePitch(prevNote)) ? n : best
+          );
+          const goalP = absolutePitch(nearestGoalPitch);
+          const prevP = absolutePitch(prevNote);
+          const curP = absolutePitch(c);
+          // Reward moving closer to goal (monotonic approach)
+          if (Math.abs(curP - goalP) < Math.abs(prevP - goalP)) score += 15;
+          // Penalise moving away from goal in late beats
+          if (Math.abs(curP - goalP) > Math.abs(prevP - goalP)) {
+            score -= beat === 7 ? 15 : 8;
+          }
+          // Strong bonus for being exactly 1-2 semitones from goal (setup for resolution)
+          if (beat === 7 && Math.abs(curP - goalP) <= 2 && Math.abs(curP - goalP) > 0) {
+            score += 20;
+          }
+        }
       }
 
       return Math.max(1, score);

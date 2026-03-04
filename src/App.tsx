@@ -715,6 +715,7 @@ export default function App() {
             onPhraseNav={setActivePhraseIdx}
             animSpeed={phraseAnimSpeed}
             onAnimSpeedChange={v => { setPhraseAnimSpeed(v); localStorage.setItem('phraseAnimSpeed', String(v)); }}
+            chordQuality={template.chordQuality}
           />
         )}
 
