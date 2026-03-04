@@ -1,0 +1,1475 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Jazz Guitar Trainer — Documentation</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --bg-secondary: #161b22;
+      --bg-card: #1c2128;
+      --border: #30363d;
+      --text: #e6edf3;
+      --text-muted: #8b949e;
+      --accent: #58a6ff;
+      --accent-hover: #79c0ff;
+      --green: #3fb950;
+      --orange: #d29922;
+      --red: #f85149;
+      --purple: #bc8cff;
+      --pink: #ff6b9d;
+      --cyan: #00e5ff;
+      --yellow: #f1c40f;
+      --blue: #3498db;
+      --sidebar-w: 280px;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.7;
+      font-size: 15px;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { color: var(--accent-hover); text-decoration: underline; }
+
+    /* Sidebar */
+    .sidebar {
+      position: fixed; top: 0; left: 0;
+      width: var(--sidebar-w); height: 100vh;
+      background: var(--bg-secondary);
+      border-right: 1px solid var(--border);
+      overflow-y: auto; padding: 20px 0;
+      z-index: 100;
+    }
+    .sidebar-title {
+      padding: 0 20px 16px;
+      font-size: 16px; font-weight: 700;
+      color: var(--pink);
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 12px;
+    }
+    .sidebar-title small { display: block; font-size: 11px; color: var(--text-muted); font-weight: 400; margin-top: 4px; }
+    .nav-group { margin-bottom: 8px; }
+    .nav-group-title {
+      padding: 6px 20px; font-size: 11px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.08em;
+      color: var(--text-muted);
+    }
+    .nav-link {
+      display: block; padding: 4px 20px 4px 28px;
+      font-size: 13px; color: var(--text-muted);
+      transition: all 0.15s;
+    }
+    .nav-link:hover { color: var(--accent); text-decoration: none; background: rgba(88,166,255,0.06); }
+    .nav-link.active { color: var(--accent); background: rgba(88,166,255,0.1); border-left: 2px solid var(--accent); padding-left: 26px; }
+    .nav-link.sub { padding-left: 40px; font-size: 12px; }
+
+    /* Main */
+    .main { margin-left: var(--sidebar-w); padding: 40px 48px 80px; max-width: 960px; }
+
+    /* Hero */
+    .hero {
+      background: linear-gradient(135deg, #161b22, #1a1f2e);
+      border: 1px solid var(--border);
+      border-radius: 12px; padding: 40px;
+      margin-bottom: 48px;
+    }
+    .hero h1 { font-size: 32px; font-weight: 800; margin-bottom: 8px; }
+    .hero h1 span { color: var(--pink); }
+    .hero p { color: var(--text-muted); font-size: 16px; }
+    .badge {
+      display: inline-block; padding: 3px 10px;
+      border-radius: 12px; font-size: 11px; font-weight: 600;
+      margin-right: 6px; margin-top: 12px;
+    }
+    .badge-blue { background: rgba(88,166,255,0.15); color: var(--accent); }
+    .badge-green { background: rgba(63,185,80,0.15); color: var(--green); }
+    .badge-purple { background: rgba(188,140,255,0.15); color: var(--purple); }
+    .badge-pink { background: rgba(255,107,157,0.15); color: var(--pink); }
+
+    /* Sections */
+    h2 {
+      font-size: 24px; font-weight: 700;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+      margin: 48px 0 20px;
+    }
+    h2:first-of-type { margin-top: 0; }
+    h3 { font-size: 18px; font-weight: 600; margin: 32px 0 12px; color: var(--accent); }
+    h4 { font-size: 15px; font-weight: 600; margin: 24px 0 8px; color: var(--purple); }
+    p { margin-bottom: 12px; }
+
+    /* Code */
+    code {
+      background: var(--bg-card); padding: 2px 6px;
+      border-radius: 4px; font-size: 13px;
+      font-family: 'Fira Code', 'JetBrains Mono', 'Consolas', monospace;
+    }
+    pre {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 8px; padding: 16px 20px;
+      overflow-x: auto; margin: 12px 0 16px;
+      font-size: 13px; line-height: 1.6;
+      font-family: 'Fira Code', 'JetBrains Mono', 'Consolas', monospace;
+    }
+
+    /* Tables */
+    table {
+      width: 100%; border-collapse: collapse;
+      margin: 12px 0 20px;
+      font-size: 13px;
+    }
+    th, td {
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      text-align: left;
+    }
+    th {
+      background: var(--bg-card);
+      font-weight: 600;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--text-muted);
+    }
+    td code { font-size: 12px; }
+
+    /* Cards */
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px;
+      margin: 16px 0;
+    }
+    .card-title { font-weight: 600; margin-bottom: 8px; }
+
+    /* Flow diagrams */
+    .flow {
+      display: flex; flex-wrap: wrap; gap: 8px;
+      align-items: center; margin: 16px 0 20px;
+    }
+    .flow-step {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 14px;
+      font-size: 13px; font-weight: 500;
+      white-space: nowrap;
+    }
+    .flow-step.highlight { border-color: var(--accent); color: var(--accent); }
+    .flow-arrow { color: var(--text-muted); font-size: 18px; }
+
+    /* Callouts */
+    .callout {
+      border-left: 3px solid var(--accent);
+      background: rgba(88,166,255,0.06);
+      padding: 12px 16px;
+      border-radius: 0 6px 6px 0;
+      margin: 16px 0;
+    }
+    .callout.warn { border-color: var(--orange); background: rgba(210,153,34,0.06); }
+    .callout.danger { border-color: var(--red); background: rgba(248,81,73,0.06); }
+    .callout.success { border-color: var(--green); background: rgba(63,185,80,0.06); }
+    .callout.design { border-color: #bc8cff; background: rgba(188,140,255,0.08); }
+    .callout-label { font-weight: 600; font-size: 13px; margin-bottom: 4px; }
+
+    /* Color swatch */
+    .swatch {
+      display: inline-block; width: 14px; height: 14px;
+      border-radius: 3px; vertical-align: middle;
+      margin-right: 4px;
+    }
+
+    /* Lists */
+    ul, ol { margin: 8px 0 16px 24px; }
+    li { margin-bottom: 4px; }
+
+    /* Scoring table special */
+    .score-positive { color: var(--green); font-weight: 600; }
+    .score-negative { color: var(--red); font-weight: 600; }
+    .score-neutral { color: var(--text-muted); }
+
+    /* Responsive */
+    @media (max-width: 900px) {
+      .sidebar { display: none; }
+      .main { margin-left: 0; padding: 24px; }
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    /* Section anchors */
+    h2[id], h3[id], h4[id] { scroll-margin-top: 20px; }
+
+    /* Diagram */
+    .diagram {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 24px;
+      margin: 16px 0;
+      font-family: 'Fira Code', monospace;
+      font-size: 13px;
+      line-height: 1.8;
+      white-space: pre;
+      overflow-x: auto;
+    }
+
+    /* Toggle */
+    details { margin: 12px 0; }
+    details summary {
+      cursor: pointer; font-weight: 600;
+      padding: 8px 12px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 14px;
+    }
+    details summary:hover { border-color: var(--accent); }
+    details[open] summary { border-radius: 6px 6px 0 0; border-bottom: none; }
+    details .detail-content {
+      border: 1px solid var(--border);
+      border-top: none;
+      border-radius: 0 0 6px 6px;
+      padding: 16px;
+      background: var(--bg-card);
+    }
+  </style>
+</head>
+<body>
+
+<!-- Sidebar -->
+<nav class="sidebar">
+  <div class="sidebar-title">
+    Jazz Guitar Trainer
+    <small>Technical Documentation v1.0</small>
+  </div>
+
+  <div class="nav-group">
+    <div class="nav-group-title">Overview</div>
+    <a href="#overview" class="nav-link">Project Overview</a>
+    <a href="#tech-stack" class="nav-link">Tech Stack</a>
+    <a href="#architecture" class="nav-link">Architecture</a>
+    <a href="#file-structure" class="nav-link">File Structure</a>
+  </div>
+
+  <div class="nav-group">
+    <div class="nav-group-title">Core Algorithms</div>
+    <a href="#position-gen" class="nav-link">Position Generation</a>
+    <a href="#dim-positions" class="nav-link">Diminished Positions</a>
+    <a href="#mode-system" class="nav-link">18-Mode System</a>
+  </div>
+
+  <div class="nav-group">
+    <div class="nav-group-title">Phrase Generator</div>
+    <a href="#phrase-overview" class="nav-link">Overview &amp; Flow</a>
+    <a href="#phrase-notepool" class="nav-link">Note Pool</a>
+    <a href="#phrase-contour" class="nav-link">Contour System</a>
+    <a href="#phrase-goal" class="nav-link">Goal Note Selection</a>
+    <a href="#phrase-skeleton" class="nav-link">Harmonic Skeleton</a>
+    <a href="#phrase-digital" class="nav-link">Digital Patterns</a>
+    <a href="#phrase-approach" class="nav-link">Approach Patterns</a>
+    <a href="#phrase-scoring" class="nav-link">Scoring System</a>
+    <a href="#phrase-extensions" class="nav-link">Extensions &amp; Bebop</a>
+    <a href="#phrase-voiceleading" class="nav-link">Voice Leading</a>
+    <a href="#phrase-motif" class="nav-link">Motif Memory</a>
+    <a href="#phrase-postprocess" class="nav-link">Post-Processing</a>
+    <a href="#phrase-analysis" class="nav-link">Analysis</a>
+    <a href="#phrase-quality" class="nav-link">Quality Audit</a>
+  </div>
+
+  <div class="nav-group">
+    <div class="nav-group-title">Harmony</div>
+    <a href="#guide-tones" class="nav-link">Guide Tones</a>
+    <a href="#chord-forms" class="nav-link">Chord Forms (Drop 2/3)</a>
+    <a href="#progression" class="nav-link">Chord Progressions</a>
+  </div>
+
+  <div class="nav-group">
+    <div class="nav-group-title">Audio &amp; Playback</div>
+    <a href="#audio-engine" class="nav-link">Audio Engine</a>
+    <a href="#bpm-playback" class="nav-link">BPM Playback</a>
+    <a href="#metronome" class="nav-link">Metronome</a>
+    <a href="#volume-mixer" class="nav-link">Volume Mixer</a>
+  </div>
+
+  <div class="nav-group">
+    <div class="nav-group-title">UI &amp; Display</div>
+    <a href="#chart-layout" class="nav-link">Chart Layout</a>
+    <a href="#fretboard-svg" class="nav-link">Fretboard SVG</a>
+    <a href="#phrase-path" class="nav-link">Phrase Path Rendering</a>
+    <a href="#ui-layout" class="nav-link">UI Layout</a>
+    <a href="#color-system" class="nav-link">Color System</a>
+  </div>
+
+  <div class="nav-group">
+    <div class="nav-group-title">Data &amp; Types</div>
+    <a href="#type-defs" class="nav-link">Type Definitions</a>
+    <a href="#constants" class="nav-link">Constants</a>
+    <a href="#jazz-standards" class="nav-link">Jazz Standards (1382)</a>
+  </div>
+
+  <div class="nav-group">
+    <div class="nav-group-title">Testing</div>
+    <a href="#testing" class="nav-link">Test Suite</a>
+  </div>
+</nav>
+
+<!-- Main Content -->
+<div class="main">
+
+<!-- Hero -->
+<div class="hero">
+  <h1>Jazz Guitar Trainer <span>Documentation</span></h1>
+  <p>Berklee 7-Position System に基づくインタラクティブなギター指板ビジュアライザー。<br>
+    ビバップフレーズの自動生成、コード進行の分析、ガイドトーンのボイスリーディングまでカバー。</p>
+  <div>
+    <span class="badge badge-blue">React 19</span>
+    <span class="badge badge-green">TypeScript 5</span>
+    <span class="badge badge-purple">Vite 7</span>
+    <span class="badge badge-pink">Tailwind CSS v4</span>
+  </div>
+</div>
+
+<!-- ==================== OVERVIEW ==================== -->
+<h2 id="overview">Project Overview</h2>
+<p>
+  Jazz Guitar Trainer は、Berklee College of Music の <strong>7-Position System</strong> を完全に実装した
+  ウェブベースの指板ビジュアライザーです。ギタリストがスケール、コードフォーム、ビバップフレーズを
+  体系的に学習できることを目的としています。
+</p>
+
+<div class="card">
+  <div class="card-title">主要機能</div>
+  <ul>
+    <li><strong>18モード対応</strong> — Diatonic 7 + Melodic Minor 7 + Harmonic Minor 2 + Diminished 2</li>
+    <li><strong>7ポジション生成</strong> — 12キー × 18モード = 216パターンの指板マッピング</li>
+    <li><strong>コード進行モード</strong> — 1382曲のJazz Standards インポート、iReal Pro風譜面</li>
+    <li><strong>ビバップフレーズ自動生成</strong> — Charlie Parker スタイルの8音フレーズ</li>
+    <li><strong>Drop 2/3 ボイシング</strong> — 20テンプレートによるコードフォーム表示</li>
+    <li><strong>ガイドトーン表示</strong> — 3rd/7th のボイスリーディング可視化</li>
+    <li><strong>BPM自動再生</strong> — メトロノーム、コード音声、フレーズ再生</li>
+  </ul>
+</div>
+
+<h2 id="tech-stack">Tech Stack</h2>
+<table>
+  <tr><th>カテゴリ</th><th>技術</th><th>バージョン</th></tr>
+  <tr><td>UI フレームワーク</td><td>React</td><td>19.2</td></tr>
+  <tr><td>言語</td><td>TypeScript (strict)</td><td>5.9</td></tr>
+  <tr><td>ビルドツール</td><td>Vite</td><td>7.3</td></tr>
+  <tr><td>スタイル</td><td>Tailwind CSS</td><td>4.2</td></tr>
+  <tr><td>テスト</td><td>Vitest</td><td>4.0</td></tr>
+  <tr><td>音声</td><td>Web Audio API</td><td>Built-in</td></tr>
+  <tr><td>外部依存</td><td colspan="2">なし（React + Tailwind のみ）</td></tr>
+</table>
+
+<pre>npm install       # 依存インストール
+npm run dev       # 開発サーバー → http://localhost:5173
+npm run build     # tsc + vite build
+npm test          # vitest run (1077 tests)
+npm run lint      # ESLint</pre>
+
+<h2 id="architecture">Architecture</h2>
+<p><code>App.tsx</code> が単一の状態管理ハブとして機能し、全コンポーネントに props を配布する Lifting State Up パターンを採用。</p>
+
+<div class="diagram">┌─────────────────────────────────────────────────────┐
+│                     App.tsx                          │
+│  ┌────────────────────────────────────────────────┐  │
+│  │  State: root, mode, positions, progression,    │  │
+│  │         phrases, playback, audio volumes       │  │
+│  └──────────────┬─────────────────────────────────┘  │
+│                 │                                     │
+│    ┌────────────┼──────────────┐                     │
+│    ▼            ▼              ▼                     │
+│ Controls/   Fretboard/    Progression/               │
+│ ├ Root      ├ Fretboard   ├ ChordChart               │
+│ ├ Mode      ├ FretNote    ├ ProgressionEditor        │
+│ ├ Position  ├ GhostNote   ├ ProgressionPlayer        │
+│ ├ OptionBar ├ PhrasePath  ├ GuideToneLine            │
+│ ├ Voicing   │             └ SongImporter             │
+│ ├ Phrase    │                                        │
+│ └ Analysis  │                                        │
+└─────────────────────────────────────────────────────┘
+
+Utils Layer (pure functions):
+┌──────────┬──────────┬───────────┬─────────────┐
+│fretboard │guideTones│chordForms │phraseGen    │
+│noteSpell │progress  │chartLayout│phraseAnalyse│
+└──────────┴──────────┴───────────┴─────────────┘</div>
+
+<h2 id="file-structure">File Structure</h2>
+<pre>src/
+├── App.tsx                       — 状態管理ハブ (通常モード + 進行モード + BPM自動再生)
+├── types/music.ts                — 全型定義 (30+ types)
+├── constants/music.ts            — MODE_TEMPLATES(18), ROOTS(12), STRING_DEG_OFFSETS, 色定義
+├── utils/
+│   ├── fretboard.ts              — buildFretMap(), generatePositions(), generateDimPositions()
+│   ├── noteSpelling.ts           — spellScale(), buildDegreeMap(), resolveMode()
+│   ├── progression.ts            — parseChordSymbol(), rankPositionsByProximity(), presets
+│   ├── guideTones.ts             — getGuideTones(), findNoteLocations(), classifyResolution()
+│   ├── jazzStandards.ts          — fetchJazzStandards(), songToProgression()
+│   ├── chartLayout.ts            — deriveChartLayout(), getChartLayout(), buildChordRows()
+│   ├── chordForms.ts             — findVoicingsInPosition(), VOICING_TEMPLATES(20)
+│   ├── phraseGenerator.ts        — generatePhrase(), 全フレーズ生成ロジック (~1100行)
+│   ├── phraseAnalysis.ts         — analyzePhrase(), computeSummary()
+│   └── __tests__/                — 1077 テスト
+├── components/
+│   ├── Fretboard/                — SVG指板 (Fretboard, FretboardNote, GhostNote, PhrasePath)
+│   ├── Controls/                 — 全コントロールUI
+│   └── Progression/              — 進行関連 (ChordChart, Editor, Player, SongImporter)</pre>
+
+<!-- ==================== CORE ALGORITHMS ==================== -->
+<h2 id="position-gen">Position Generation (7-Note Scales)</h2>
+<p>Berklee 7ポジションシステムの核心は <strong>B弦（2弦）が各ポジションで2音のみ</strong> という点。
+他弦は全て3音。これはB-G弦間の長3度チューニング（他は完全4度）に起因します。</p>
+
+<h3>Step 1: Fret Map 生成 — <code>buildFretMap()</code></h3>
+<p>6弦すべてについて、フレット0〜22のどこにスケール音があるかをマッピング。</p>
+<pre>開放弦チューニング (半音値): [4, 11, 7, 2, 9, 4]
+                              1E   B   G   D   A   6E</pre>
+<p>各弦の各フレットについて <code>(openString + fret) % 12</code> がスケール音に含まれるか判定し、
+<code>FretNote = [noteName, fret, semitone]</code> のタプル配列として返します。</p>
+
+<h3>Step 2: Position 生成 — <code>generatePositions()</code></h3>
+<div class="callout danger">
+  <div class="callout-label">不変ルール</div>
+  このアルゴリズムは変更禁止。過去の失敗（Greedy matcher, ローテート, offset変更）を経て、
+  現在の「1:1順次割当」が唯一の正解として確立されています。
+</div>
+
+<ol>
+  <li><strong>B弦ペア取得</strong>: ルートペアをスキップし、2度ペアから7つの連続2音ペアを取得</li>
+  <li><strong>他弦トリオ列挙</strong>: 各弦で最低フレットから3音の連続トリオを昇順に列挙</li>
+  <li><strong>1:1 順次割当</strong>: <code>trio[i]</code> → <code>pair[i]</code> の単純マッピング</li>
+  <li><strong>STRING_DEG_OFFSETS</strong> を使って各弦の開始度数を決定: <code>{ e:3, g:5, d:2, a:6 }</code></li>
+  <li><strong>findClosestTrio()</strong>: フレット重複に基づきB弦ペアに最も近いトリオを選択 (maxGap=5)</li>
+</ol>
+
+<h4>C Ionian Pos 1 リファレンス</h4>
+<pre>1E: F(1), G(3), A(5)     ← 3音
+B:  D(3), E(5)           ← 2音 (常に)
+G:  A(2), B(4), C(5)     ← 3音
+D:  E(2), F(3), G(5)     ← 3音
+A:  B(2), C(3), D(5)     ← 3音
+6E: F(1), G(3), A(5)     ← 3音</pre>
+
+<h2 id="dim-positions">Diminished Positions (8-Note Scales)</h2>
+<p>ディミニッシュ (W-H / H-W) は対称スケールのため <strong>4ポジション × 2フェーズ = 8ポジション</strong> を生成。
+dim7 の構成音 (Root, ♭3, ♭5, 6) は短3度間隔で等分布。</p>
+<ul>
+  <li>各ポジションは5フレット幅、3フレット間隔</li>
+  <li>ポジション順: Pos 1=Root, Pos 2=♭3, Pos 3=♭5, Pos 4=6</li>
+  <li>6E弦のみ4音、他弦は3音</li>
+</ul>
+
+<h2 id="mode-system">18-Mode System</h2>
+<p>4つのスケールファミリーから合計18モードを定義。各モードは半音パターン、コードクオリティ、
+degree ラベル、フレーバーテキストを持ちます。</p>
+
+<h4>Diatonic Modes (7)</h4>
+<table>
+  <tr><th>#</th><th>Mode</th><th>Quality</th><th>Semitones</th></tr>
+  <tr><td>0</td><td>Ionian (Major)</td><td>maj7</td><td>[0,2,4,5,7,9,11]</td></tr>
+  <tr><td>1</td><td>Dorian</td><td>m7</td><td>[0,2,3,5,7,9,10]</td></tr>
+  <tr><td>2</td><td>Phrygian</td><td>m7</td><td>[0,1,3,5,7,8,10]</td></tr>
+  <tr><td>3</td><td>Lydian</td><td>maj7</td><td>[0,2,4,6,7,9,11]</td></tr>
+  <tr><td>4</td><td>Mixolydian</td><td>7</td><td>[0,2,4,5,7,9,10]</td></tr>
+  <tr><td>5</td><td>Aeolian (Natural Minor)</td><td>m7</td><td>[0,2,3,5,7,8,10]</td></tr>
+  <tr><td>6</td><td>Locrian</td><td>m7♭5</td><td>[0,1,3,5,6,8,10]</td></tr>
+</table>
+
+<h4>Melodic Minor Modes (7)</h4>
+<table>
+  <tr><th>#</th><th>Mode</th><th>Quality</th><th>Semitones</th></tr>
+  <tr><td>7</td><td>Melodic Minor</td><td>mMaj7</td><td>[0,2,3,5,7,9,11]</td></tr>
+  <tr><td>8</td><td>Dorian ♭2</td><td>m7</td><td>[0,1,3,5,7,9,10]</td></tr>
+  <tr><td>9</td><td>Lydian Augmented</td><td>aug</td><td>[0,2,4,6,8,9,11]</td></tr>
+  <tr><td>10</td><td>Lydian Dominant</td><td>7#11</td><td>[0,2,4,6,7,9,10]</td></tr>
+  <tr><td>11</td><td>Mixolydian ♭6</td><td>7b13</td><td>[0,2,4,5,7,8,10]</td></tr>
+  <tr><td>12</td><td>Locrian ♯2</td><td>m7♭5</td><td>[0,2,3,5,6,8,10]</td></tr>
+  <tr><td>13</td><td>Altered</td><td>7alt</td><td>[0,1,3,4,6,8,10]</td></tr>
+</table>
+
+<h4>Harmonic Minor Modes (2)</h4>
+<table>
+  <tr><th>#</th><th>Mode</th><th>Quality</th><th>Semitones</th></tr>
+  <tr><td>14</td><td>Harmonic Minor</td><td>mMaj7</td><td>[0,2,3,5,7,8,11]</td></tr>
+  <tr><td>15</td><td>Phrygian Dominant</td><td>7b9</td><td>[0,1,4,5,7,8,10]</td></tr>
+</table>
+
+<h4>Diminished Modes (2, 8-note)</h4>
+<table>
+  <tr><th>#</th><th>Mode</th><th>Quality</th><th>Semitones</th></tr>
+  <tr><td>16</td><td>Diminished W-H</td><td>dim</td><td>[0,2,3,5,6,8,9,11]</td></tr>
+  <tr><td>17</td><td>Diminished H-W</td><td>7</td><td>[0,1,3,4,6,7,9,10]</td></tr>
+</table>
+
+<!-- ==================== PHRASE GENERATOR ==================== -->
+<h2 id="phrase-overview">Phrase Generator — Overview</h2>
+<p>
+  フレーズジェネレーターは、<strong>ビバップスタイルの8分音符8音フレーズ</strong>を指板座標ベースで生成する
+  アルゴリズムです。Charlie Parker のソロラインを模倣するため、複数のレイヤーが協調して動作します。
+</p>
+
+<div class="callout success">
+  <div class="callout-label">設計哲学</div>
+  「理論的に正しいフレーズ」よりも「ギター指板上で実際に弾けるフレーズ」を優先。
+  弦距離・フレット距離に基づく物理的制約がスコアリングの中核にあります。
+</div>
+
+<h3>生成フロー全体像</h3>
+<div class="flow">
+  <span class="flow-step highlight">1. Note Pool</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-step highlight">2. Instance Scope</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-step">3. Contour</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-step highlight">4. Goal Note</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-step highlight">5. CT Skeleton</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-step">6. Beat 1 + Digital</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-step highlight">7. Sequential Gen</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-step">8. Goal Resolve</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-step">9. Post-Process</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-step">10. Motif Extract</span>
+</div>
+
+<div class="diagram">generatePhrase(position, mode, fretMap, config, targetThirdNote?)
+│
+├─ Step 1: buildNotePool()
+│   └─ スケール音 + クロマチックアプローチ音を全インスタンスから収集
+│
+├─ Step 2: Instance Scope Restriction
+│   └─ 第1インスタンスの fretMin-1 ~ fretMax+1 に制限
+│
+├─ Step 3: Contour Selection
+│   └─ config / prevContour遷移 / ランダム選択
+│
+├─ Step 4: chooseGoalNote()
+│   ├─ 進行モード: nextChordContext → 7th→3rd 半音解決 (70%)
+│   └─ 通常モード: STRONG_RESOLUTION_DEGREE_IDX で推定
+│
+├─ Step 5: planCtSkeleton()
+│   └─ ARPEGGIO_PATTERNS から方向親和パターンを選択
+│       beats 1, 3, 5, 8 の強拍CTを事前決定
+│
+├─ Step 6: Beat 1 配置 + tryDigitalPattern()
+│   └─ 35% の確率でデジタルパターンを一括コミット
+│
+├─ Step 7: Sequential Generation (beats 2-7)
+│   ├─ 強拍: CT必須 + デジタルパターン試行
+│   ├─ 弱拍: tryApproachCommitment() → 複数音一括確定
+│   └─ 通常: getCandidates() → weightedScoring → pickWeighted()
+│
+├─ Step 8: Goal Beat Resolution
+│   └─ nearestInstance() + 距離ガード (>5st でフォールバック)
+│
+├─ Step 9: Post-Processing
+│   └─ 同音反復修正 + エクステンションマーキング
+│
+└─ Step 10: Motif Extraction
+    └─ beats 1→2→3 のインターバル列を記録</div>
+
+<h2 id="phrase-notepool">Step 1-2: Note Pool &amp; Instance Scope</h2>
+
+<h3><code>buildNotePool()</code></h3>
+<p>ポジション内の全スケール音を収集し、オプションでクロマチックアプローチ音を追加します。</p>
+
+<div class="card">
+  <div class="card-title">PoolNote の構造</div>
+<pre>{
+  noteName: string,       // "C", "D♭", etc.
+  stringIdx: number,      // 0 (1E) ~ 5 (6E)
+  fret: number,           // フレット番号
+  semitone: number,       // 0-11 のピッチクラス
+  isChordTone: boolean,   // コードトーン (R, 3rd, 5th, 7th)
+  isApproach: boolean,    // クロマチックアプローチ音
+  degreeIdx?: number      // スケール度数インデックス (0-6)
+}</pre>
+</div>
+
+<h3>Instance Scope Restriction</h3>
+<p>音域をコンパクトに保つため、<strong>第1インスタンスの範囲</strong>に制限します。</p>
+<ul>
+  <li><code>activePool</code>: <code>instFretMin - 1</code> 〜 <code>instFretMax + 1</code> のノートのみ</li>
+  <li><code>activeCtPool</code>: activePool のうちコードトーンのみ</li>
+  <li>プール不足時 (≤6音 or CT<2) は全プールにフォールバック</li>
+</ul>
+
+<h2 id="phrase-contour">Step 3: Contour System</h2>
+<p>フレーズの全体的な「形」を決定する輪郭システム。4種類のコンターがあり、
+各ビートでの理想的なピッチ高さ（0.0〜1.0の正規化値）を定義します。</p>
+
+<h4>4 Contour Types</h4>
+<table>
+  <tr><th>Contour</th><th>UI 表示名</th><th>Shape</th><th>Beat 1→8 のピッチカーブ</th></tr>
+  <tr><td><strong>Arch</strong></td><td>アーチ</td><td>山型（上昇→下降）</td><td>0.3, 0.5, 0.7, 1.0, 0.9, 0.7, 0.5, 0.3</td></tr>
+  <tr><td><strong>Reverse-Arch</strong></td><td>逆アーチ</td><td>谷型（下降→上昇）</td><td>0.7, 0.5, 0.3, 0.0, 0.1, 0.3, 0.5, 0.7</td></tr>
+  <tr><td><strong>Descending</strong></td><td>下行</td><td>下降型</td><td>1.0, 0.9, 0.8, 0.65, 0.5, 0.4, 0.25, 0.1</td></tr>
+  <tr><td><strong>Wave</strong></td><td>波形</td><td>波型（上下動）</td><td>0.4, 0.8, 0.3, 0.7, 0.2, 0.6, 0.35, 0.5</td></tr>
+</table>
+
+<h4>Contour Transitions</h4>
+<p>前のフレーズのコンターに基づき、次のコンターを重み付き確率で選択（3:2:1）:</p>
+<table>
+  <tr><th>前のコンター</th><th>優先 (3)</th><th>次点 (2)</th><th>低 (1)</th></tr>
+  <tr><td>Arch</td><td>Descending</td><td>Wave</td><td>Reverse-Arch</td></tr>
+  <tr><td>Reverse-Arch</td><td>Arch</td><td>Wave</td><td>Descending</td></tr>
+  <tr><td>Descending</td><td>Reverse-Arch</td><td>Arch</td><td>Wave</td></tr>
+  <tr><td>Wave</td><td>Arch</td><td>Descending</td><td>Reverse-Arch</td></tr>
+</table>
+
+<h2 id="phrase-goal">Step 4: Goal Note Selection</h2>
+<p>フレーズの最終音（beat 8）を最初に決定します。これが全体の方向性を決めます。</p>
+
+<div class="callout design">
+  <div class="callout-label">設計根拠</div>
+  <ul style="margin:4px 0 0;padding-left:20px">
+    <li><strong>70% の理由</strong>: パーカーの実際のソロでは ii-V-I フレーズ境界で 60-80% 程度の 7th→3rd 半音解決が観察される。100% だとフレーズが画一化するため 30% の変化余地を残す。</li>
+    <li><strong>半音（1 semitone）のみ</strong>: <code>diff === 1 || diff === 11</code> で厳密に半音差のみチェック。全音は含まない。ii→V、V→I のような典型進行でのみ発動し、半音解決がない進行ではフォールバックが機能する。</li>
+    <li><strong>通常モードのゴール音</strong>: 次コードの 3rd そのものではなく、<code>STRONG_RESOLUTION_DEGREE_IDX</code> で推定した解決先の度数に最も近い<strong>現コードの CT</strong>（特に 3rd/7th）をゴールにする。ビバップでは現コード内で解決方向を示唆するのが定石。</li>
+  </ul>
+</div>
+
+<h4><code>chooseGoalNote()</code> の決定ロジック</h4>
+<div class="card">
+  <div class="card-title">進行モード（nextChordContext あり）</div>
+  <ol>
+    <li>現コードの7thが次コードの3rdに半音で解決する場合 → <strong>70%の確率</strong>で現コードの7thをゴールに</li>
+    <li>次コードの3rdと1半音差のCTを優先検索</li>
+    <li>フォールバック: 次コードの3rdと同名のCTを選択</li>
+  </ol>
+</div>
+
+<div class="card">
+  <div class="card-title">通常モード</div>
+  <p><code>STRONG_RESOLUTION_DEGREE_IDX</code> で「このモードが解決する先のコードの3rd」を推定。実際のゴール音は<strong>現コードのCT</strong>から選択:</p>
+  <table>
+    <tr><th>Mode</th><th>Resolution</th><th>Target</th></tr>
+    <tr><td>Ionian</td><td>I → IV</td><td>IVの3rd (scale deg 6)</td></tr>
+    <tr><td>Dorian</td><td>ii → V</td><td>Vの3rd (scale deg 7)</td></tr>
+    <tr><td>Mixolydian</td><td>V → I</td><td>Iの3rd (scale deg 3)</td></tr>
+    <tr><td>Aeolian</td><td>vi → ii</td><td>iiの3rd (scale deg 4)</td></tr>
+  </table>
+</div>
+
+<h2 id="phrase-skeleton">Step 5: Harmonic Skeleton (CT Skeleton)</h2>
+<p>
+  フレーズの骨格を形成する最も重要なステップ。<strong>強拍 (beats 1, 3, 5, 8) に配置するコードトーンを
+  事前に計画</strong>し、フレーズ全体のハーモニック構造を確保します。
+</p>
+
+<h3>Arpeggio Patterns (9パターン)</h3>
+<p>コードトーンの並び順を定義。各パターンには方向性（ascending/descending/mixed）があります。</p>
+
+<div class="callout design">
+  <div class="callout-label">設計根拠: 9パターンの選定</div>
+  4つのCT (R, 3rd, 5th, 7th) の順列は 4!=24 通り存在するが、音楽的に意味のある配列に絞り込んだ。
+  3方向 (ascending / descending / mixed) × 各3ローテーション = <strong>9パターン</strong>。
+  上行は R→7th に向かう連続的な上昇、下行はその逆、mixed は跳躍を含むジグザグ配列。
+  これらは実際のビバップソロで最も頻出するアルペジオ輪郭をカバーする。
+</div>
+
+<table>
+  <tr><th>#</th><th>CT Indices</th><th>Direction</th><th>CT Names (beat1→3→5→8)</th></tr>
+  <tr><td>0</td><td>[0,1,2,3]</td><td>asc</td><td>R → 3rd → 5th → 7th</td></tr>
+  <tr><td>1</td><td>[1,2,3,0]</td><td>asc</td><td>3rd → 5th → 7th → R</td></tr>
+  <tr><td>2</td><td>[2,3,0,1]</td><td>asc</td><td>5th → 7th → R → 3rd</td></tr>
+  <tr><td>3</td><td>[3,2,1,0]</td><td>desc</td><td>7th → 5th → 3rd → R</td></tr>
+  <tr><td>4</td><td>[0,3,2,1]</td><td>desc</td><td>R → 7th → 5th → 3rd</td></tr>
+  <tr><td>5</td><td>[1,0,3,2]</td><td>desc</td><td>3rd → R → 7th → 5th</td></tr>
+  <tr><td>6</td><td>[0,2,1,3]</td><td>mixed</td><td>R → 5th → 3rd → 7th</td></tr>
+  <tr><td>7</td><td>[3,1,2,0]</td><td>mixed</td><td>7th → 3rd → 5th → R</td></tr>
+  <tr><td>8</td><td>[1,3,0,2]</td><td>mixed</td><td>3rd → 7th → R → 5th</td></tr>
+</table>
+
+<h3><code>planCtSkeleton()</code> のパターン選択</h3>
+<p>重み付きランダム選択で最適なパターンを決定:</p>
+<table>
+  <tr><th>ファクター</th><th>ボーナス</th><th>説明</th></tr>
+  <tr><td>方向親和</td><td>Base weight</td><td>CONTOUR_PATTERN_AFFINITY でコンター方向と一致するパターンを優先</td></tr>
+  <tr><td>ゴールCT一致</td><td>+4</td><td>パターンのゴールCTインデックスがゴール音と一致</td></tr>
+  <tr><td>ガイドトーン</td><td>+3</td><td>beats 1, 3 で 3rd (idx=1) または 7th (idx=3) を配置</td></tr>
+  <tr><td>startHint 近接</td><td>+3 / +1</td><td>最寄りインスタンスが ≤3st: +3, ≤5st: +1</td></tr>
+</table>
+
+<h3><code>resolveSkeletonBeat()</code></h3>
+<p>各強拍について、skeleton で決められたCTインデックスを <strong>物理的な指板位置に解決</strong> します。
+近接クラスター（ピッチ差 ≤2st）を避けつつ、最もピッチ的に近い候補を選択します。</p>
+
+<h2 id="phrase-digital">Step 6: Digital Patterns</h2>
+<p>
+  Charlie Parker の語彙から抽出した <strong>33個のデジタルパターン</strong>（音列テンプレート）。
+  強拍を起点に一括でコミットされ、パーカー的なフレージングを実現します。
+</p>
+
+<div class="callout">
+  <div class="callout-label">発火条件</div>
+  42%の確率で発火。1フレーズにつき最大1回。強拍CT一致 + 物理的到達可能性をチェック。
+</div>
+
+<div class="callout design">
+  <div class="callout-label">設計根拠</div>
+  <ul style="margin:4px 0 0;padding-left:20px">
+    <li><strong>42% の発火率</strong>: 品質監査テスト (N=5000) で検証済みの経験値。高すぎるとフレーズが画一的になり、低すぎるとパーカー語彙が不足する。33パターンへの拡充により同一パターン出現頻度が下がったため、21パターン時代の35%から引き上げた。</li>
+    <li><strong>デジタルパターン ≒ リック</strong>: パーカーのソロから抽出した定型フレーズ（リック）をスケール度数ベースのテンプレートに変換したもの。キーやポジションに依存しない汎用性を持つ。</li>
+    <li><strong>方向保証</strong>: <code>pickByDirection()</code> がパターンの <code>dir</code> (asc/desc) に応じて候補をフィルタリングし、上行パターンでは現在位置より高い音、下行では低い音のみを選択。mixed はフィルタなし。</li>
+  </ul>
+</div>
+
+<h4>Group A: Ascending 4-Note (4パターン)</h4>
+<table>
+  <tr><th>Name</th><th>Start</th><th>Steps</th><th>Description</th></tr>
+  <tr><td>1-2-3-5</td><td>Root</td><td>scaleDeg+1, scaleDeg+1, CT(5th)</td><td>基本上行スケールからの跳躍</td></tr>
+  <tr><td>3-5-7-9</td><td>3rd</td><td>CT(5th), CT(7th), scaleDeg+1</td><td>アルペジオ上行＋9th</td></tr>
+  <tr><td>5-7-R-2</td><td>5th</td><td>CT(7th), CT(Root), scaleDeg+1</td><td>上部構造からの下降解決</td></tr>
+  <tr><td>7-R-2-3</td><td>7th</td><td>CT(Root), scaleDeg+1, CT(3rd)</td><td>7thからの上行解決</td></tr>
+</table>
+
+<h4>Group B: Descending 4-Note (7パターン)</h4>
+<table>
+  <tr><th>Name</th><th>Start</th><th>Steps</th><th>Description</th></tr>
+  <tr><td>7-5-3-R</td><td>7th</td><td>CT(5th), CT(3rd), CT(Root)</td><td>完全下行アルペジオ</td></tr>
+  <tr><td>5-3-R-7</td><td>5th</td><td>CT(3rd), CT(Root), CT(7th)</td><td>5thからの周回</td></tr>
+  <tr><td>R-7-5-3</td><td>Root</td><td>CT(7th), CT(5th), CT(3rd)</td><td>ルートからの下行</td></tr>
+  <tr><td>9-7-5-3</td><td>Root</td><td>scaleDeg-1, CT(5th), CT(3rd)</td><td>9thからの連続下行</td></tr>
+  <tr><td>3-R-7-5</td><td>3rd</td><td>CT(Root), CT(7th), CT(5th)</td><td>Bird turnaround figure</td></tr>
+  <tr><td>5-3-R-2</td><td>5th</td><td>CT(3rd), CT(Root), scaleDeg-1</td><td>下行アルペジオ＋ステップダウン</td></tr>
+  <tr><td>3-2-R-7</td><td>3rd</td><td>scaleDeg-1, CT(Root), CT(7th)</td><td>Anthropology-style descent</td></tr>
+</table>
+
+<h4>Group C: Scalar Runs (2パターン)</h4>
+<table>
+  <tr><th>Name</th><th>Start</th><th>Steps</th></tr>
+  <tr><td>scale-asc-3</td><td>Any CT</td><td>scaleDeg+1 × 3</td></tr>
+  <tr><td>scale-desc-3</td><td>Any CT</td><td>scaleDeg-1 × 3</td></tr>
+</table>
+
+<h4>Group D: Hybrid / Parker Signature (6パターン)</h4>
+<table>
+  <tr><th>Name</th><th>Start</th><th>Steps</th><th>Description</th></tr>
+  <tr><td>R-3-5-step-down</td><td>Root</td><td>CT(3rd), CT(5th), scaleDeg-1</td><td>上行アルペジオ→ステップダウン</td></tr>
+  <tr><td>3-5-7-step-down</td><td>3rd</td><td>CT(5th), CT(7th), scaleDeg-1</td><td>上部アルペジオ→ステップダウン</td></tr>
+  <tr><td>R-pivot-5-3</td><td>Root</td><td>scaleDeg-1, CT(5th), CT(3rd)</td><td>ピボット経由の方向転換</td></tr>
+  <tr><td>R-3-5-step-up</td><td>Root</td><td>CT(3rd), CT(5th), scaleDeg+1</td><td>上行アルペジオ→ステップアップ</td></tr>
+  <tr><td>7-5-step-up-3</td><td>7th</td><td>CT(5th), scaleDeg+1, CT(3rd)</td><td>ジグザグ解決</td></tr>
+  <tr><td>5-6-7-R</td><td>5th</td><td>scaleDeg+1, CT(7th), CT(Root)</td><td>スカラー接続→アルペジオ</td></tr>
+</table>
+
+<h4>Group E: Extended 5-Note (10パターン)</h4>
+<table>
+  <tr><th>Name</th><th>Steps</th></tr>
+  <tr><td>R-2-3-5-7</td><td>Root → scaleDeg+1 → CT(3rd) → CT(5th) → CT(7th)</td></tr>
+  <tr><td>R-3-5-7-9</td><td>Root → CT(3rd) → CT(5th) → CT(7th) → scaleDeg+1</td></tr>
+  <tr><td>7-5-3-R-below7</td><td>7th → CT(5th) → CT(3rd) → CT(Root) → CT(7th)</td></tr>
+  <tr><td>3-5-7-R-step-down</td><td>3rd → CT(5th) → CT(7th) → CT(Root) → scaleDeg-1</td></tr>
+  <tr><td>scale-asc-4</td><td>Any CT → scaleDeg+1 × 4</td></tr>
+  <tr><td>scale-desc-4</td><td>Any CT → scaleDeg-1 × 4</td></tr>
+  <tr><td>R-3-5-3-7</td><td>Root → CT(3rd) → CT(5th) → CT(3rd) → CT(7th) [mixed: バウンス→上行解決]</td></tr>
+  <tr><td>7-5-3-step-up-R</td><td>7th → CT(5th) → CT(3rd) → scaleDeg+1 → CT(Root) [desc: 下行→ターン→解決]</td></tr>
+  <tr><td>5-7-R-2-3</td><td>5th → CT(7th) → CT(Root) → scaleDeg+1 → CT(3rd) [asc: 上行アルペジオ拡張]</td></tr>
+  <tr><td>3-5-3-R-7</td><td>3rd → CT(5th) → CT(3rd) → CT(Root) → CT(7th) [mixed: ターン→ワイドドロップ]</td></tr>
+</table>
+
+<h4>Group F: Extended 6-Note (4パターン)</h4>
+<table>
+  <tr><th>Name</th><th>Steps</th></tr>
+  <tr><td>R-2-3-5-7-R</td><td>Root → scaleDeg+1 → CT(3rd) → CT(5th) → CT(7th) → CT(Root)</td></tr>
+  <tr><td>scale-desc-5</td><td>Any CT → scaleDeg-1 × 5</td></tr>
+  <tr><td>7-5-3-R-2-3</td><td>7th → CT(5th) → CT(3rd) → CT(Root) → scaleDeg+1 → CT(3rd) [desc: 下行→ターンアラウンド]</td></tr>
+  <tr><td>R-3-5-7-5-3</td><td>Root → CT(3rd) → CT(5th) → CT(7th) → CT(5th) → CT(3rd) [mixed: アーチ型アルペジオ]</td></tr>
+</table>
+
+<h3>Digital Pattern Helper Functions</h3>
+<ul>
+  <li><code>tryDigitalPattern()</code> — 42%発火率で呼び出し、強拍CT一致+到達可能性をチェック</li>
+  <li><code>pickByDirection()</code> — パターンの方向に応じて最寄りインスタンスを選択</li>
+  <li><code>findScaleDegreeNeighbor()</code> — スケール度数オフセットで隣接音を検索</li>
+</ul>
+
+<h2 id="phrase-approach">Approach Patterns</h2>
+<p>
+  ビバップ語法の核心。ターゲット音（主にコードトーン）への <strong>クロマチック/ダイアトニックな接近</strong> を
+  弱拍に挿入し、ジャズらしい推進力を生み出します。
+</p>
+
+<div class="callout design">
+  <div class="callout-label">設計根拠: 3rd/7th 優先ターゲティング</div>
+  アプローチのターゲットとして 3rd と 7th を優先するのは<strong>ガイドトーン理論</strong>に基づく。
+  3rd はコードのメジャー/マイナーを、7th はコードクオリティ（maj7/dom7/m7）を定義する最重要音。
+  これらの音へのクロマチックアプローチはビバップ語法の核心であり、コードの機能を強調しつつ
+  半音の緊張→解決の推進力を生み出す。<code>tryApproachCommitment()</code> 内で近傍CTを探索する際、
+  3rd/7th に <code>+12</code> のスコアボーナスを付与して優先度を高めている。
+</div>
+
+<h3>5種類のアプローチパターン</h3>
+
+<div class="card">
+  <div class="card-title">1. Single Below (半音下からの接近)</div>
+  <p>ターゲットの1フレット下からの単音アプローチ。最もシンプルで頻出。</p>
+  <pre>Pattern: [target - 1 fret] → TARGET
+Example: F# → G (G is the target CT)</pre>
+</div>
+
+<div class="card">
+  <div class="card-title">2. Single Above (半音上からの接近)</div>
+  <p>ターゲットの1フレット上からの単音アプローチ。</p>
+  <pre>Pattern: [target + 1 fret] → TARGET
+Example: A♭ → G</pre>
+</div>
+
+<div class="card">
+  <div class="card-title">3. Enclosure (エンクロージャー)</div>
+  <p>ターゲットを上下から挟み込む2音アプローチ。上は最寄りのダイアトニック音、下は半音。</p>
+  <pre>Pattern: [diatonic above] → [chromatic below] → TARGET
+Example: A → F# → G</pre>
+</div>
+
+<div class="card">
+  <div class="card-title">4. Parker Enclosure (パーカー・エンクロージャー)</div>
+  <p>Charlie Parker が多用した3音エンクロージャー。半音上→2フレット下→半音下。</p>
+  <pre>Pattern: [target + 1] → [target - 2] → [target - 1] → TARGET
+Example: A♭ → F → F# → G</pre>
+</div>
+
+<div class="card">
+  <div class="card-title">5. ♭9 Arpeggio (♭9アルペジオ)</div>
+  <p>Dom7コード専用の4音アプローチ。ルートの♭9thから始まるdiminishedアルペジオ。</p>
+  <pre>Pattern: [♭9] → [3rd] → [5th] → [♭7th]
+Example (G7): A♭ → B → D → F → (next chord's CT)</pre>
+</div>
+
+<h3>アプローチ発火確率</h3>
+<table>
+  <tr><th>Target Beat</th><th>確率</th><th>説明</th></tr>
+  <tr><td>Goal beat (8)</td><td>100%</td><td>常にアプローチを試みる</td></tr>
+  <tr><td>Beat 5 前</td><td>50%</td><td>中間の強拍</td></tr>
+  <tr><td>Beat 3 前</td><td>35%</td><td>序盤の強拍</td></tr>
+  <tr><td>Default</td><td>45%</td><td>その他の弱拍</td></tr>
+</table>
+
+<h3><code>tryApproachCommitment()</code></h3>
+<p>弱拍で発動。近くのCT（3rd/7th を優先）をターゲットとして、
+アプローチタイプをシャッフルして試行し、最初に成功したものを一括コミットします。</p>
+
+<h2 id="phrase-scoring">Scoring System</h2>
+<p>
+  フレーズ生成の心臓部。各候補ノートに対して <strong>多次元のスコアリング</strong> を行い、
+  重み付きランダム選択 (<code>pickWeighted</code>) で次の音を決定します。
+</p>
+
+<div class="callout">
+  <div class="callout-label">選択方式</div>
+  最高スコアの音を常に選ぶのではなく、スコアを確率の重みとして使用。
+  これにより決定論的すぎないバリエーション豊かなフレーズが生成されます。
+</div>
+
+<h3>Melodic Scoring (メロディ品質)</h3>
+<table>
+  <tr><th>Factor</th><th>Score</th><th>Condition</th></tr>
+  <tr><td>Stepwise motion</td><td class="score-positive">+60</td><td>インターバル ≤ 2半音</td></tr>
+  <tr><td>Thirds</td><td class="score-positive">+25</td><td>3-4半音</td></tr>
+  <tr><td>Fourths</td><td class="score-positive">+10</td><td>5半音</td></tr>
+  <tr><td>Large intervals</td><td class="score-positive">+5</td><td>6半音以上</td></tr>
+  <tr><td>Direction change</td><td class="score-positive">+15</td><td>前の音からの方向転換</td></tr>
+  <tr><td>Same direction 2-3</td><td class="score-positive">+5</td><td>同方向の連続が2-3音</td></tr>
+  <tr><td>Same direction 5+</td><td class="score-negative">-25</td><td>同方向5音以上の連続</td></tr>
+  <tr><td>Scalar run continuation</td><td class="score-positive">+14</td><td>スカラーパッセージの延長</td></tr>
+  <tr><td>Pitch variety</td><td class="score-positive">+8</td><td>フレーズ中で初出のピッチクラス</td></tr>
+</table>
+
+<h3>Physical Constraint (物理的制約)</h3>
+<table>
+  <tr><th>Factor</th><th>Score</th><th>Condition</th></tr>
+  <tr><td>String distance</td><td class="score-negative">-15</td><td>弦1本あたりのペナルティ</td></tr>
+  <tr><td>Large leap (6+st)</td><td class="score-negative">-25</td><td>6半音以上の跳躍</td></tr>
+  <tr><td>Large leap (8+st)</td><td class="score-negative">-35</td><td>8半音以上の跳躍</td></tr>
+  <tr><td>Large leap (10+st)</td><td class="score-negative">-20</td><td>10半音以上（累積）</td></tr>
+</table>
+
+<h3>Oscillation Prevention (振動防止)</h3>
+<table>
+  <tr><th>Factor</th><th>Score</th><th>Condition</th></tr>
+  <tr><td>2-back same pitch</td><td class="score-negative">-90</td><td>A→B→A パターン</td></tr>
+  <tr><td>2-back same name</td><td class="score-negative">-35</td><td>同音名のオクターブ違い</td></tr>
+  <tr><td>3-back same pitch</td><td class="score-negative">-45</td><td>A→B→C→A パターン</td></tr>
+  <tr><td>Near oscillation</td><td class="score-negative">-15</td><td>2-back と1半音以内</td></tr>
+  <tr><td>Weak-beat echo</td><td class="score-negative">-25</td><td>最近の弱拍と同音名</td></tr>
+</table>
+
+<h3>Harmonic Quality (和声品質)</h3>
+<table>
+  <tr><th>Factor</th><th>Score</th><th>Condition</th></tr>
+  <tr><td>Guide tone on strong beat</td><td class="score-positive">+25</td><td>強拍で 3rd or 7th</td></tr>
+  <tr><td>Guide tone on beat 1/3</td><td class="score-positive">+10</td><td>beat 1 または 3 での追加ボーナス</td></tr>
+  <tr><td>Extension on strong beat</td><td class="score-negative">-10</td><td>9th/13th の低優先度</td></tr>
+  <tr><td>CT variety penalty</td><td class="score-negative">-50</td><td>連続強拍で同一CT</td></tr>
+  <tr><td>CT outline (adjacent)</td><td class="score-positive">+12</td><td>前の強拍から隣接CTへの進行</td></tr>
+  <tr><td>CT outline (skip)</td><td class="score-positive">+6</td><td>前の強拍からスキップCTへ</td></tr>
+</table>
+
+<h3>Skeleton Adherence (骨格追従)</h3>
+<table>
+  <tr><th>Factor</th><th>Score</th><th>Condition</th></tr>
+  <tr><td>CT name match</td><td class="score-positive">+50</td><td>骨格で計画されたCT名と一致</td></tr>
+  <tr><td>— if large interval</td><td class="score-positive">+25</td><td>前音から ≥7st の場合は半減</td></tr>
+  <tr><td>Same region (±2st)</td><td class="score-positive">+25</td><td>骨格位置と同じピッチ領域</td></tr>
+</table>
+
+<h3>Arpeggio Fragments (アルペジオ断片)</h3>
+<table>
+  <tr><th>Factor</th><th>Score</th><th>Condition</th></tr>
+  <tr><td>3 distinct CTs in row</td><td class="score-positive">+18</td><td>3連続で異なるCT名</td></tr>
+  <tr><td>Direction consistent</td><td class="score-positive">+8</td><td>アルペジオの方向が一貫</td></tr>
+</table>
+
+<h3>Stagnation Prevention (停滞防止)</h3>
+<table>
+  <tr><th>Factor</th><th>Score</th><th>Condition</th></tr>
+  <tr><td>4-note ≤2st range</td><td class="score-negative">-20</td><td>直近4音が2半音以内</td></tr>
+  <tr><td>4-note ≤3st range</td><td class="score-negative">-35</td><td>直近4音が3半音以内</td></tr>
+  <tr><td>5-note ≤4st range</td><td class="score-negative">-20</td><td>直近5音が4半音以内</td></tr>
+  <tr><td>Pitch-class monotony (3)</td><td class="score-negative">-55</td><td>直近3音で2種以下の音名</td></tr>
+  <tr><td>Semitone-adjacent pair</td><td class="score-negative">-15</td><td>上記に加え半音ペア</td></tr>
+  <tr><td>4-note window monotony</td><td class="score-negative">-30</td><td>4音窓で2種以下の音名</td></tr>
+</table>
+
+<h3>Passing Tone Quality (弱拍のパッシングトーン品質)</h3>
+<table>
+  <tr><th>Factor</th><th>Score</th><th>Condition</th></tr>
+  <tr><td>Toward next skeleton CT</td><td class="score-positive">+18</td><td>次の骨格ピッチに接近</td></tr>
+  <tr><td>Half-step approach</td><td class="score-positive">+10</td><td>次の骨格CTの1st以内</td></tr>
+  <tr><td>Moving away</td><td class="score-negative">-10</td><td>骨格CTから離反 (>2st)</td></tr>
+</table>
+
+<h3>Goal Approach (ゴールへの接近)</h3>
+<table>
+  <tr><th>Factor</th><th>Score</th><th>Condition</th></tr>
+  <tr><td>Moving toward goal</td><td class="score-positive">+15</td><td>ゴール拍の近傍で接近中</td></tr>
+  <tr><td>Penultimate ≤2st</td><td class="score-positive">+20</td><td>直前拍でゴールまで1-2半音</td></tr>
+  <tr><td>Half-step resolution</td><td class="score-positive">+15</td><td>半音解決ボーナス</td></tr>
+  <tr><td>Moving away (early)</td><td class="score-negative">-8</td><td>接近ゾーンでゴールから離反</td></tr>
+  <tr><td>Moving away (penultimate)</td><td class="score-negative">-15</td><td>直前拍でゴールから離反</td></tr>
+</table>
+
+<h3>Contour Adherence (コンター追従)</h3>
+<table>
+  <tr><th>Factor</th><th>Score</th><th>Condition</th></tr>
+  <tr><td>Contour match</td><td class="score-positive">max +22</td><td>コンターカーブとのピッチ偏差に応じて</td></tr>
+</table>
+
+<h2 id="phrase-extensions">Extensions &amp; Bebop Scale Passing Tones</h2>
+
+<h3>Extension Degrees (9th / 13th)</h3>
+<p>特定のコードクオリティに対して、強拍でのエクステンション音の使用を許可します。
+ただし、CTよりも低い優先度（-10）で制御されます。</p>
+<table>
+  <tr><th>Chord Quality</th><th>Extensions</th><th>Notes</th></tr>
+  <tr><td>maj7</td><td>9th, 13th</td><td>degree indices [1, 5]</td></tr>
+  <tr><td>7 (dominant)</td><td>9th, 13th</td><td>degree indices [1, 5]</td></tr>
+  <tr><td>m7</td><td>9th</td><td>degree index [1]</td></tr>
+  <tr><td>mMaj7</td><td>9th</td><td>degree index [1]</td></tr>
+  <tr><td>7alt / dim7</td><td>なし</td><td>対称構造のため不要</td></tr>
+</table>
+
+<h3>Bebop Passing Tones</h3>
+<p>ビバップスケールの特徴的なクロマチック経過音。弱拍かつスカラーパッセージ中に <strong>+20 ボーナス</strong>。</p>
+<table>
+  <tr><th>Mode</th><th>Passing Tone</th><th>Semitone</th><th>機能</th></tr>
+  <tr><td>Mixolydian</td><td>Natural 7th</td><td>11</td><td>♭7 と Root の間の経過音</td></tr>
+  <tr><td>Dorian</td><td>Natural 3rd</td><td>3</td><td>♭3 と 4th の間の経過音</td></tr>
+  <tr><td>Ionian</td><td>♭7</td><td>10</td><td>6th と 7th の間の経過音</td></tr>
+</table>
+
+<h2 id="phrase-voiceleading">Voice Leading (Cross-Chord)</h2>
+<p>進行モードでのフレーズ間の声部進行。<code>PhraseConfig.nextChordContext</code> で次コード情報を受け取り、
+フレーズ後半（goalBeat-2 以降）で次コードの3rdへの接近をスコアリングします。</p>
+
+<table>
+  <tr><th>Condition</th><th>Score</th><th>適用範囲</th></tr>
+  <tr><td>次コード3rdへ半音接近</td><td class="score-positive">+20</td><td>後半ビート</td></tr>
+  <tr><td>次コード3rdと共通音</td><td class="score-positive">+10</td><td>後半ビート</td></tr>
+  <tr><td>7th→3rd 解決選択</td><td>70% probability</td><td>ゴール音選択時</td></tr>
+</table>
+
+<h2 id="phrase-motif">Motif Memory</h2>
+<p>フレーズ間の動機的一貫性。前フレーズの開始2音のインターバル列を記録し、
+次フレーズの beats 2-4 で類似度ボーナスを付与します。</p>
+
+<table>
+  <tr><th>Match Type</th><th>Bonus</th><th>Condition</th></tr>
+  <tr><td>Exact interval match</td><td class="score-positive">+12</td><td>prevMotif と完全一致</td></tr>
+  <tr><td>Near match</td><td class="score-positive">+6</td><td>±1半音の誤差内</td></tr>
+</table>
+
+<h2 id="phrase-postprocess">Post-Processing</h2>
+<ol>
+  <li><strong>ビート順ソート</strong>: notes を beatPosition 順に整列</li>
+  <li><strong>同音反復修正</strong>: 連続する同一弦+フレットのペアを最寄りの別音に置換</li>
+  <li><strong>スケルトンビートマーキング</strong>: beat 1, 3, 5, goalBeat のノートに <code>isSkeletonBeat = true</code> フラグ設定</li>
+  <li><strong>エクステンションマーキング</strong>: 強拍のノートに <code>isExtension = true</code> フラグ設定</li>
+  <li><strong>ゴール距離ガード</strong>: beat 8 が beat 7 から >5st 離れている場合、最寄りCTにフォールバック</li>
+</ol>
+
+<h2 id="phrase-analysis">Phrase Analysis</h2>
+<p><code>analyzePhrase()</code> がフレーズの各ノートを分析し、PhraseAnalysisPanel で表示します。
+全ラベルは日本語にローカライズ済みです。</p>
+
+<h4>PhraseAnalysisPanel UI ラベル (日本語化)</h4>
+<table>
+  <tr><th>UI 要素</th><th>ラベル</th><th>説明</th></tr>
+  <tr><td>サマリーバー Row 1</td><td>分析, 音形, 音域, 順次, 3度, 方向転換, パターン (なし)</td><td>統計情報の折りたたみヘッダー</td></tr>
+  <tr><td>サマリーバー Row 2</td><td>骨格, デジタルP, モチーフ, ゴール</td><td>生成メタデータ</td></tr>
+  <tr><td>詳細テーブル列ヘッダー</td><td>拍, 音名, 度数, 音程, 機能</td><td>8ノート詳細テーブル</td></tr>
+  <tr><td>機能ラベル</td><td>半音アプローチ↑/↓, エンクロージャー上/下, パーカーEncl., ♭9アルペジオ, クロマチック, スケール音, ビバップ経過音, テンション</td><td>各ノートの音楽的機能</td></tr>
+  <tr><td>下部サマリー</td><td>CT, アプローチ, スケール, ビバップ, テンション</td><td>音の分類内訳</td></tr>
+  <tr><td>コンター名</td><td>アーチ, 逆アーチ, 下行, 波形</td><td>フレーズの音形パターン</td></tr>
+</table>
+<p>全ラベルには <code>title</code> 属性で日本語のツールチップ解説が付与されています。ナラティブ（自然言語要約）も全て日本語で出力されます。</p>
+
+<h4>Per-Note Analysis</h4>
+<table>
+  <tr><th>Field</th><th>Description</th></tr>
+  <tr><td><code>scaleDegree</code></td><td>"1", "♭3", "chr." (クロマチック) 等</td></tr>
+  <tr><td><code>intervalFromPrev</code></td><td>前音からの半音数</td></tr>
+  <tr><td><code>intervalDirection</code></td><td>"up", "down", "same"</td></tr>
+  <tr><td><code>intervalLabel</code></td><td>"↑m2", "↓M3", "—" 等</td></tr>
+  <tr><td><code>functionLabel</code></td><td>"CT (3rd)", "半音アプローチ↑/↓", "エンクロージャー上/下", "パーカーEncl.", "♭9アルペジオ", "ビバップ経過音 (7)", "テンション (2)", "クロマチック", "スケール音" 等（全て日本語化済み）</td></tr>
+  <tr><td><code>digitalPattern?</code></td><td>デジタルパターンのタグ (name, position, size)</td></tr>
+  <tr><td><code>isBebopPassing?</code></td><td>ビバップスケール経過音フラグ</td></tr>
+  <tr><td><code>isExtension?</code></td><td>エクステンション音フラグ</td></tr>
+  <tr><td><code>isSkeletonBeat?</code></td><td>スケルトン拍フラグ (beat 1, 3, 5, goal)</td></tr>
+</table>
+
+<h4>Summary Statistics</h4>
+<table>
+  <tr><th>Metric</th><th>Description</th></tr>
+  <tr><td>stepwisePct</td><td>インターバル ≤2st の割合</td></tr>
+  <tr><td>thirdsPct</td><td>3-4st の割合</td></tr>
+  <tr><td>fourthsPct</td><td>5st の割合</td></tr>
+  <tr><td>leapsPct</td><td>6st+ の割合</td></tr>
+  <tr><td>rangeSemitones</td><td>フレーズ全体の音域幅</td></tr>
+  <tr><td>directionChanges</td><td>方向転換の回数</td></tr>
+  <tr><td>approachPatternsUsed</td><td>使用されたアプローチパターン数</td></tr>
+  <tr><td>skeletonLabel</td><td>ハーモニック・スケルトン (例: "R→3→5→7 ↑")</td></tr>
+  <tr><td>digitalPatternUsed</td><td>デジタルパターン名 (例: "1-2-3-5")</td></tr>
+  <tr><td>digitalPatternBeats</td><td>デジタルパターンの拍範囲 (例: "3-6")</td></tr>
+  <tr><td>goalReason</td><td>ゴール音の選択理由</td></tr>
+  <tr><td>motifLabel</td><td>モチーフパターン (例: "+3, -2")</td></tr>
+  <tr><td>bebopPassingCount</td><td>ビバップ経過音の数</td></tr>
+  <tr><td>extensionCount</td><td>エクステンション音の数</td></tr>
+</table>
+
+<h4>Generation Metadata</h4>
+<p>フレーズジェネレーターは生成過程のメタデータを <code>GeneratedPhrase</code> に記録し、分析パネルで可視化します。</p>
+<table>
+  <tr><th>Metadata</th><th>Source</th><th>Description</th></tr>
+  <tr><td><code>skeleton</code></td><td><code>planCtSkeleton()</code></td><td>選択されたアルペジオパターンのラベルと方向 (SkeletonMeta)</td></tr>
+  <tr><td><code>goalReason</code></td><td><code>chooseGoalNote()</code></td><td>ゴール音の選択理由 (例: "7th→次3rd半音解決", "強進行→半音解決")</td></tr>
+  <tr><td><code>PhraseNote.digitalPattern</code></td><td><code>tryDigitalPattern()</code></td><td>デジタルパターンのタグ (DigitalPatternTag)</td></tr>
+  <tr><td><code>PhraseNote.isBebopPassing</code></td><td>逐次生成ループ</td><td>ビバップスケール経過音の識別</td></tr>
+  <tr><td><code>PhraseNote.isSkeletonBeat</code></td><td>ポスト処理</td><td>スケルトン拍のマーキング</td></tr>
+</table>
+
+<h4>Narrative (自然言語要約)</h4>
+<p><code>buildNarrative()</code> がスケルトン・デジタルパターン・アプローチ・ゴール理由を組み合わせた1行テキストを日本語で生成。</p>
+<p>例: "R→3→5→7 ↑骨格。拍3-6でデジタルP '1-2-3-5'。エンクロージャー。ゴール: 7th→次3rd半音解決。"</p>
+
+<h2 id="phrase-quality">Quality Audit (品質テスト)</h2>
+<p>N=5000 のフレーズを生成し、統計的に品質閾値を検証する自動テストスイート。</p>
+<table>
+  <tr><th>Metric</th><th>閾値</th><th>Description</th></tr>
+  <tr><td>stepwise</td><td>≥ 40%</td><td>順次進行の割合</td></tr>
+  <tr><td>leaps</td><td>≤ 46%</td><td>大跳躍の割合</td></tr>
+  <tr><td>oscillation</td><td>< 50%</td><td>振動パターンの割合</td></tr>
+  <tr><td>guideTone</td><td>≥ 32%</td><td>ガイドトーンの出現率</td></tr>
+  <tr><td>scalarRuns</td><td>≥ 25%</td><td>スカラーランの割合</td></tr>
+  <tr><td>halfStepRes</td><td>≥ 18%</td><td>半音解決の割合</td></tr>
+  <tr><td>uniqueStrongCTs</td><td>≥ 2.8</td><td>強拍のユニークCT数の平均</td></tr>
+  <tr><td>ctOutlineRange</td><td>≥ 5</td><td>CTアウトラインの音域</td></tr>
+  <tr><td>stagnation</td><td>≤ 50%</td><td>停滞パターンの割合</td></tr>
+  <tr><td>arpeggioFragments</td><td>≥ 0.3</td><td>アルペジオ断片の平均数</td></tr>
+  <tr><td>weakBeatFunction</td><td>≥ 60%</td><td>弱拍の機能音率</td></tr>
+</table>
+
+<!-- ==================== HARMONY ==================== -->
+<h2 id="guide-tones">Guide Tones &amp; Voice Leading</h2>
+<p>コード進行の声部進行を可視化。各コードの3rd と 7th（ガイドトーン）を追跡し、
+次のコードへの解決パターンを分類します。</p>
+
+<h4>Resolution Types</h4>
+<table>
+  <tr><th>Type</th><th>半音差</th><th>品質</th></tr>
+  <tr><td><code>half-step-down</code></td><td>-1 (11 mod 12)</td><td>理想的（ii-V-I の典型）</td></tr>
+  <tr><td><code>half-step-up</code></td><td>+1</td><td>良好</td></tr>
+  <tr><td><code>common-tone</code></td><td>0</td><td>共通音保持</td></tr>
+  <tr><td><code>other</code></td><td>その他</td><td>—</td></tr>
+</table>
+
+<h4>Color System</h4>
+<p>
+  <span class="swatch" style="background:#F1C40F"></span> <strong>3rd</strong>: #F1C40F (黄色)
+  &nbsp;&nbsp;
+  <span class="swatch" style="background:#3498DB"></span> <strong>7th</strong>: #3498DB (青)
+</p>
+
+<h2 id="chord-forms">Chord Forms (Drop 2 / Drop 3 Voicings)</h2>
+<p>各ポジション内で弾ける Drop 2 / Drop 3 ボイシングを自動検出し、指板上にハイライト表示。</p>
+
+<h4>ボイシング理論</h4>
+<ul>
+  <li><strong>Drop 2</strong>: 4-way close voicing の上から2番目の音を1オクターブ下げる → 4連続弦</li>
+  <li><strong>Drop 3</strong>: 上から3番目を1オクターブ下げる → 1弦スキップの4弦</li>
+  <li>転回形はベース音で命名（ジャズ標準）: Root, 1st (3rdベース), 2nd (5thベース), 3rd (7thベース)</li>
+</ul>
+
+<h4>テンプレート数</h4>
+<table>
+  <tr><th>Type</th><th>Inversions</th><th>String Sets</th><th>Total</th></tr>
+  <tr><td>Drop 2</td><td>4</td><td>[5-4-3-2], [4-3-2-1], [3-2-1-0]</td><td>12</td></tr>
+  <tr><td>Drop 3</td><td>4</td><td>[5-3-2-1], [4-2-1-0]</td><td>8</td></tr>
+  <tr><td colspan="3"><strong>Total</strong></td><td><strong>20</strong></td></tr>
+</table>
+
+<h4>Drop 2 CT Order (bass → top)</h4>
+<table>
+  <tr><th>Inversion</th><th>CT Order</th><th>Notes</th></tr>
+  <tr><td>Root</td><td>[0,2,3,1]</td><td>R-5-7-3</td></tr>
+  <tr><td>1st</td><td>[1,3,0,2]</td><td>3-7-R-5</td></tr>
+  <tr><td>2nd</td><td>[2,0,1,3]</td><td>5-R-3-7</td></tr>
+  <tr><td>3rd</td><td>[3,1,2,0]</td><td>7-3-5-R</td></tr>
+</table>
+
+<h4>Drop 3 CT Order (bass → top)</h4>
+<table>
+  <tr><th>Inversion</th><th>CT Order</th><th>Notes</th></tr>
+  <tr><td>Root</td><td>[0,3,1,2]</td><td>R-7-3-5</td></tr>
+  <tr><td>1st</td><td>[1,0,2,3]</td><td>3-R-5-7</td></tr>
+  <tr><td>2nd</td><td>[2,1,3,0]</td><td>5-3-7-R</td></tr>
+  <tr><td>3rd</td><td>[3,2,0,1]</td><td>7-5-R-3</td></tr>
+</table>
+
+<p>
+  <span class="swatch" style="background:#00E5FF"></span>
+  ハイライト色: <strong>#00E5FF</strong> (シアン) — ポジション色・ガイドトーン色と非重複
+</p>
+
+<h2 id="progression">Chord Progressions</h2>
+
+<h3>QUALITY_TO_MODES マッピング</h3>
+<p>コードクオリティから使用可能なモードへのマッピング:</p>
+<table>
+  <tr><th>Quality</th><th>Compatible Modes</th></tr>
+  <tr><td>maj7</td><td>Ionian, Lydian</td></tr>
+  <tr><td>m7</td><td>Dorian, Phrygian, Aeolian, Dorian♭2</td></tr>
+  <tr><td>7</td><td>Mixolydian, Lydian Dom, Mixo♭6, Phrygian Dom, Altered, Dim H-W</td></tr>
+  <tr><td>m7♭5</td><td>Locrian, Locrian♯2</td></tr>
+  <tr><td>dim</td><td>Diminished W-H</td></tr>
+  <tr><td>mMaj7</td><td>Melodic Minor, Harmonic Minor</td></tr>
+  <tr><td>aug</td><td>Lydian Augmented</td></tr>
+  <tr><td>7alt</td><td>Altered</td></tr>
+  <tr><td>7b9</td><td>Phrygian Dom, Altered, Dim H-W</td></tr>
+</table>
+
+<h3>Preset Progressions</h3>
+<ul>
+  <li>II-V-I in C, F, B♭</li>
+  <li>Blues in B♭, F (12-bar with chartLayout)</li>
+  <li>Rhythm Changes in B♭ (AABA 32-bar with sections + volta endings)</li>
+</ul>
+
+<h3>Position Proximity</h3>
+<p><code>rankPositionsByProximity()</code> — 前のコードのポジション中心フレットとの距離でランキングし、
+最小移動量のポジションを自動提案。</p>
+
+<!-- ==================== AUDIO ==================== -->
+<h2 id="audio-engine">Audio Engine</h2>
+<p>すべて Web Audio API ベース。外部ライブラリ依存なし。</p>
+<ul>
+  <li><strong>Karplus-Strong</strong> — 物理モデリングによるギター単音シンセ (<code>playKSNote()</code>)</li>
+  <li><strong>Chord Strum</strong> — ボイシングの同時/アルペジオ発音 (<code>playChordStrum()</code>)</li>
+  <li><strong>Click</strong> — メトロノーム用オシレーター (<code>playClick()</code>)</li>
+  <li><strong>Phrase Scheduling</strong> — <code>schedulePhrase()</code> で Web Audio API タイムスタンプに基づく正確な発音</li>
+</ul>
+
+<h2 id="bpm-playback">BPM Auto-Playback</h2>
+
+<h3><code>buildPlaybackSeq()</code></h3>
+<p>ChartLayout からセクションリピートとvolta endingsを展開したフラットな再生順リストを生成。</p>
+<pre>// 出力: { chordIdx: number, beats: number }[]
+// 全リピート/エンディングを展開済み
+const seq = buildPlaybackSeq(getChartLayout(activeProg));</pre>
+
+<h4>BeatWidths 変換</h4>
+<pre>// beatWidths はフレックス比率
+// 4拍基準の実拍数に変換:
+actualBeats = (beatWidth / sumOfBeatWidths) * 4</pre>
+
+<h3>Drift-Free Timing</h3>
+<p><code>setTimeout</code> の累積ドリフトを防ぐため、理想時刻ベースでタイミングを計算:</p>
+<pre>// chordStartRef: 現コードの「理想開始時刻」
+// 自動進行時: targetAt (理想時刻) を次コードの anchor に
+// 手動ナビ / BPM変更 / 再生開始時: performance.now() に再アンカー</pre>
+
+<h2 id="metronome">Metronome</h2>
+<table>
+  <tr><th>Parameter</th><th>Accent (小節頭)</th><th>Normal</th></tr>
+  <tr><td>Frequency</td><td>1200 Hz</td><td>800 Hz</td></tr>
+  <tr><td>Gain</td><td>volume × 3</td><td>volume × 1.5</td></tr>
+  <tr><td>Duration</td><td colspan="2">40ms (exponential ramp to 0.001)</td></tr>
+</table>
+<p>4拍ごと（<code>metBeatRef % 4 === 0</code>）にアクセント。BPM コントローラーとは独立した <code>setInterval</code>。</p>
+
+<h2 id="volume-mixer">Volume Mixer</h2>
+<table>
+  <tr><th>Channel</th><th>State</th><th>Default</th><th>Target</th></tr>
+  <tr><td>Metronome</td><td><code>metVolume</code></td><td>0.5</td><td><code>playClick()</code></td></tr>
+  <tr><td>Chord</td><td><code>chordVolume</code></td><td>0.5</td><td><code>playChordStrum()</code></td></tr>
+  <tr><td>Single Note</td><td><code>noteVolume</code></td><td>0.4</td><td><code>playKSNote()</code> + <code>schedulePhrase()</code></td></tr>
+</table>
+<p>全て localStorage に永続化。<code>useRef</code> 経由でコールバック内から参照（再レンダリング回避）。</p>
+
+<!-- ==================== UI ==================== -->
+<h2 id="chart-layout">Chart Layout (iReal Pro Style)</h2>
+
+<h3>Data Flow</h3>
+<div class="diagram">JazzStandards.json
+    ↓ fetchJazzStandards()
+RawJazzStandard { Sections: RawSection[] }
+    ↓ extractStructuredChords()
+StructuredSection { measures: MeasureChord[][], endings?, repeats? }
+    ↓ songToProgression()
+Progression { chords: ChordSlot[], chartLayout: ChartLayout }
+    ↓ ChordChart component
+CSS Grid 描画</div>
+
+<h4>Design Decisions</h4>
+<ul>
+  <li><code>chords: ChordSlot[]</code> フラット配列 = ロジックのsingle source of truth</li>
+  <li><code>chartLayout?: ChartLayout</code> = 表示用メタデータ（chords[] へのインデックス参照）</li>
+  <li>ユーザー作成進行（layoutなし）→ <code>deriveChartLayout()</code> で1コード/小節に自動生成</li>
+  <li><code>beatWidths</code>: フレックス比率 — ChordChart で <code>flex: beats</code>, BPM 再生で <code>(bw/bwSum)*4</code></li>
+</ul>
+
+<h2 id="fretboard-svg">Fretboard SVG</h2>
+<p>SVG ベースの指板描画。6弦 × 22フレットのグリッド上にノート、ゴーストノート、ボイシング、
+フレーズパスを重ね描画します。</p>
+
+<h2 id="phrase-path">Phrase Path Rendering</h2>
+<p>PhrasePath.tsx — Catmull-Rom スプラインを Cubic Bezier に変換して SVG <code>&lt;path&gt;</code> で描画。</p>
+<ul>
+  <li><strong>グラデーション</strong>: per-beat (#FFA0B0 → #BBA0FF)</li>
+  <li><strong>ノート形状</strong>:
+    <ul>
+      <li>CT = 塗り潰し円</li>
+      <li>アプローチ = ダイヤモンド</li>
+      <li>スケールトーン = 枠円（ストロークのみ）</li>
+    </ul>
+  </li>
+  <li><strong>矢印マーカー</strong>: 進行方向を示す</li>
+  <li><strong>拍番号</strong>: 各ノートの横に表示</li>
+</ul>
+
+<h2 id="ui-layout">UI Layout</h2>
+
+<h4>Normal Mode</h4>
+<pre>RootSelector (12キー)
+ModeSelector (18モード)
+PositionSelector (Pos 1-7 + 全表示 + 重ねる) ＋ VoicingGrid
+OptionBar (CT, ラベル, 記法, ガイドトーン, コードフォーム, フレーズ)
+PhraseControls (フレーズON時)
+Fretboard (SVG + PhrasePath)
+モード説明セクション
+PositionGrid (ポジション一覧カード)
+Footer</pre>
+
+<h4>Progression Mode</h4>
+<pre>ProgressionEditor (編集時のみ)
+ProgressionPlayer (BPM + ChordChart + モード/ポジション選択 + VoicingGrid)
+OptionBar (フレーズ含む)
+PhraseControls (フレーズON時)
+Fretboard (SVG + PhrasePath)
+モード説明セクション
+Footer</pre>
+
+<h2 id="color-system">Color System</h2>
+<table>
+  <tr><th>Purpose</th><th>Color</th><th>Hex</th></tr>
+  <tr><td>Position 1</td><td><span class="swatch" style="background:#E74C3C"></span> Red</td><td>#E74C3C</td></tr>
+  <tr><td>Position 2</td><td><span class="swatch" style="background:#E67E22"></span> Orange</td><td>#E67E22</td></tr>
+  <tr><td>Position 3</td><td><span class="swatch" style="background:#E8336F"></span> Pink</td><td>#E8336F</td></tr>
+  <tr><td>Position 4</td><td><span class="swatch" style="background:#27AE60"></span> Green</td><td>#27AE60</td></tr>
+  <tr><td>Position 5</td><td><span class="swatch" style="background:#6EAC00"></span> Yellow-Green</td><td>#6EAC00</td></tr>
+  <tr><td>Position 6</td><td><span class="swatch" style="background:#8E44AD"></span> Purple</td><td>#8E44AD</td></tr>
+  <tr><td>Position 7</td><td><span class="swatch" style="background:#16A085"></span> Teal</td><td>#16A085</td></tr>
+  <tr><td>3rd (Guide Tone)</td><td><span class="swatch" style="background:#F1C40F"></span> Yellow</td><td>#F1C40F</td></tr>
+  <tr><td>7th (Guide Tone)</td><td><span class="swatch" style="background:#3498DB"></span> Blue</td><td>#3498DB</td></tr>
+  <tr><td>Chord Form</td><td><span class="swatch" style="background:#00E5FF"></span> Cyan</td><td>#00E5FF</td></tr>
+  <tr><td>Phrase UI</td><td><span class="swatch" style="background:#FF6B9D"></span> Pink Magenta</td><td>#FF6B9D</td></tr>
+  <tr><td>Phrase Path</td><td colspan="2">#FFA0B0 → #BBA0FF (per-beat gradient)</td></tr>
+</table>
+
+<!-- ==================== DATA ==================== -->
+<h2 id="type-defs">Type Definitions</h2>
+<p>全型は <code>src/types/music.ts</code> に定義。主要な型:</p>
+
+<details>
+  <summary>Core Types (展開)</summary>
+  <div class="detail-content">
+<pre>// 指板上の音
+type FretNote = [noteName: string, fret: number, semitone: number]
+
+// ポジション
+interface Position {
+  id: number
+  bPair: FretNote[]        // B弦の2音
+  range: [min: number, max: number]
+  instances: PositionInstance[]
+}
+
+// モード
+interface Mode {
+  key: string              // "ionian", "dorian", etc.
+  name: string             // Display name
+  semi: number[]           // Semitone pattern [0,2,4,5,7,9,11]
+  notes: string[]          // Note names ["C","D","E",...]
+  degrees: string[]        // Degree labels
+  chord: string            // Chord symbol
+  chordQuality: string     // "maj7", "m7", "7", etc.
+  chordTones: string[]     // [R, 3rd, 5th, 7th]
+  chordSub?: string        // Subscript suffix
+}
+
+// フレーズノート
+interface PhraseNote {
+  noteName: string
+  stringIdx: number        // 0-5
+  fret: number
+  semitone: number         // 0-11
+  isChordTone: boolean
+  isApproach: boolean
+  isExtension?: boolean
+  beatPosition: number     // 1-8
+  isStrong: boolean        // beats 1,3,5,8
+  approachGroup?: ApproachGroupInfo
+  digitalPattern?: DigitalPatternTag   // デジタルパターンのタグ
+  isBebopPassing?: boolean             // ビバップ経過音
+  isSkeletonBeat?: boolean             // スケルトン拍
+}
+
+// 生成メタデータ型
+interface SkeletonMeta {
+  patternLabel: string     // "R→3→5→7"
+  direction: 'asc' | 'desc' | 'mixed'
+}
+interface DigitalPatternTag {
+  name: string             // "1-2-3-5"
+  position: number         // 0-based index
+  size: number             // pattern length
+}
+
+// コード進行
+interface Progression {
+  name: string
+  songKey?: SongKey
+  chords: ChordSlot[]
+  chartLayout?: ChartLayout
+}</pre>
+  </div>
+</details>
+
+<h2 id="constants">Constants</h2>
+<table>
+  <tr><th>Constant</th><th>Value</th><th>Usage</th></tr>
+  <tr><td><code>OPEN_STRINGS</code></td><td>[4, 11, 7, 2, 9, 4]</td><td>1E, B, G, D, A, 6E の半音値</td></tr>
+  <tr><td><code>STRING_DEG_OFFSETS</code></td><td>{ e:3, g:5, d:2, a:6 }</td><td>Pos 1 の弦ごとの開始度数（不変）</td></tr>
+  <tr><td><code>MAX_TRIO_GAP</code></td><td>5</td><td>B弦ペアとトリオの最大フレットギャップ</td></tr>
+  <tr><td><code>MODE_TEMPLATES</code></td><td>18 entries</td><td>全モード定義</td></tr>
+  <tr><td><code>ROOTS</code></td><td>12 entries</td><td>C, D♭, D, ... B の12ルート</td></tr>
+</table>
+
+<h2 id="jazz-standards">Jazz Standards Database</h2>
+<p><strong>1382曲</strong>を内蔵。iReal Pro フォーマットからパースした構造化データ。</p>
+<ul>
+  <li>セクション構造 (A, B, C, Intro, Coda 等)</li>
+  <li>リピート記号、1番括弧 / 2番括弧</li>
+  <li>各小節のビート幅（3/4, 5/4 等の変拍子対応）</li>
+  <li>キー情報</li>
+</ul>
+
+<!-- ==================== TESTING ==================== -->
+<h2 id="testing">Test Suite</h2>
+<p><code>npm test</code> — Vitest による <strong>1077テスト</strong>。</p>
+
+<table>
+  <tr><th>Test File</th><th>Tests</th><th>Coverage</th></tr>
+  <tr><td>fretboard.test.ts</td><td>388</td><td>Pos1リファレンス、度数オフセット不変条件、構造検証</td></tr>
+  <tr><td>phraseQualityAudit.test.ts</td><td>338</td><td>17条件 × 19品質アサーション + 3進行コンテキスト</td></tr>
+  <tr><td>progression.test.ts</td><td>125</td><td>parseChordSymbol, QUALITY_TO_MODES, 近接ランキング</td></tr>
+  <tr><td>phraseGenerator.test.ts</td><td>64</td><td>構造不変条件 + N=100 ビバップ統計検証 + メタデータ記録検証</td></tr>
+  <tr><td>jazzStandards.test.ts</td><td>42</td><td>パース、エンディング、リピート、ビート幅</td></tr>
+  <tr><td>chordForms.test.ts</td><td>36</td><td>Drop 2/3 ボイシング検索、テンプレート構造</td></tr>
+  <tr><td>guideTones.test.ts</td><td>22</td><td>ガイドトーン抽出、解決分類</td></tr>
+  <tr><td>phraseAnalysis.test.ts</td><td>33</td><td>分析・度数・機能ラベル + メタデータパススルー + ナラティブ生成</td></tr>
+  <tr><td>noteSpelling.test.ts</td><td>19</td><td>スペリング、度数マップ、resolveMode</td></tr>
+  <tr><td>audioEngine.test.ts</td><td>10</td><td>Karplus-Strong, コードストラム</td></tr>
+</table>
+
+<div class="callout warn">
+  <div class="callout-label">Invariant Tests</div>
+  <code>degree offset invariant</code> テストが失敗した場合、<code>STRING_DEG_OFFSETS</code> か
+  <code>generatePositions()</code> に変更が加わった可能性があります。これらは変更禁止です。
+</div>
+
+<!-- Footer -->
+<hr style="border-color: var(--border); margin: 48px 0 24px;">
+<p style="color: var(--text-muted); font-size: 13px;">
+  Jazz Guitar Trainer Documentation — Generated 2026-03-04<br>
+  Vite 7 + React 19 + TypeScript 5 + Tailwind CSS v4
+</p>
+
+</div><!-- /main -->
+
+<script>
+// Sidebar active link tracking
+document.addEventListener('DOMContentLoaded', () => {
+  const links = document.querySelectorAll('.nav-link');
+  const sections = [];
+  links.forEach(link => {
+    const id = link.getAttribute('href')?.replace('#', '');
+    if (id) {
+      const el = document.getElementById(id);
+      if (el) sections.push({ el, link });
+    }
+  });
+
+  function updateActive() {
+    let current = null;
+    for (const { el, link } of sections) {
+      if (el.getBoundingClientRect().top <= 80) current = link;
+    }
+    links.forEach(l => l.classList.remove('active'));
+    if (current) current.classList.add('active');
+  }
+
+  window.addEventListener('scroll', updateActive, { passive: true });
+  updateActive();
+});
+</script>
+
+</body>
+</html>

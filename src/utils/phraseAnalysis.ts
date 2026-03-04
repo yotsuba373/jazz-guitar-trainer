@@ -59,20 +59,30 @@ function getFunctionLabel(note: PhraseNote, mode: Mode): string {
     const { approachType, role, positionInGroup } = note.approachGroup;
     if (role === 'target') return `CT (${chordToneLabel(note.noteName, mode)})`;
     switch (approachType) {
-      case 'single-below': return 'Approach ↑';
-      case 'single-above': return 'Approach ↓';
+      case 'single-below': return '半音↑アプローチ';
+      case 'single-above': return '半音↓アプローチ';
       case 'enclosure':
-        return positionInGroup === 0 ? 'Encl. above' : 'Encl. below';
+        return positionInGroup === 0 ? 'エンクロージャー上' : 'エンクロージャー下';
       case 'parker-enclosure':
-        return `Parker (${positionInGroup + 1}/3)`;
+        return `パーカーEncl. (${positionInGroup + 1}/3)`;
       case 'b9-arpeggio':
-        return `♭9 Arp (${positionInGroup + 1}/4)`;
+        return `♭9アルペジオ (${positionInGroup + 1}/4)`;
     }
   }
   if (note.isChordTone) return `CT (${chordToneLabel(note.noteName, mode)})`;
+  // Bebop passing tone (e.g. nat7 in Mixolydian)
+  if (note.isBebopPassing) {
+    const deg = getScaleDegree(note.noteName, mode);
+    return `ビバップ経過音 (${deg})`;
+  }
+  // Extension tone (9th/13th)
+  if (note.isExtension) {
+    const deg = getScaleDegree(note.noteName, mode);
+    return `テンション (${deg})`;
+  }
   // Heuristic: if isApproach and next note is CT at 1 semitone distance, label direction
-  if (note.isApproach) return 'Chromatic';
-  return 'Scale tone';
+  if (note.isApproach) return 'クロマチック';
+  return 'スケール音';
 }
 
 // ---------------------------------------------------------------------------
@@ -80,10 +90,10 @@ function getFunctionLabel(note: PhraseNote, mode: Mode): string {
 // ---------------------------------------------------------------------------
 
 const CONTOUR_LABELS: Record<PhraseContour, string> = {
-  'arch': 'Arch',
-  'reverse-arch': 'Reverse Arch',
-  'descending': 'Descending',
-  'wave': 'Wave',
+  'arch': 'アーチ',
+  'reverse-arch': '逆アーチ',
+  'descending': '下行',
+  'wave': '波形',
 };
 
 // ---------------------------------------------------------------------------
@@ -100,7 +110,7 @@ export function analyzePhrase(phrase: GeneratedPhrase, mode: Mode): PhraseAnalys
       ? (absPitch > prevPitch ? 'up' : absPitch < prevPitch ? 'down' : 'unison')
       : null;
 
-    return {
+    const na: NoteAnalysis = {
       beatPosition: note.beatPosition,
       noteName: note.noteName,
       scaleDegree: getScaleDegree(note.noteName, mode),
@@ -111,10 +121,58 @@ export function analyzePhrase(phrase: GeneratedPhrase, mode: Mode): PhraseAnalys
       functionLabel: getFunctionLabel(note, mode),
       approachGroup: note.approachGroup,
     };
+    // Pass through generation metadata
+    if (note.digitalPattern) na.digitalPattern = note.digitalPattern;
+    if (note.isBebopPassing) na.isBebopPassing = true;
+    if (note.isExtension) na.isExtension = true;
+    if (note.isSkeletonBeat) na.isSkeletonBeat = true;
+    return na;
   });
 
   const summary = computeSummary(phrase, notes);
-  return { notes, summary };
+  const narrative = buildNarrative(summary);
+  return { notes, summary, narrative };
+}
+
+// ---------------------------------------------------------------------------
+// Summary computation
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Narrative generation
+// ---------------------------------------------------------------------------
+
+const APPROACH_TYPE_LABEL: Record<string, string> = {
+  'single-below': '半音↑',
+  'single-above': '半音↓',
+  'enclosure': 'エンクロージャー',
+  'parker-enclosure': 'パーカーEncl.',
+  'b9-arpeggio': '♭9アルペジオ',
+};
+
+function buildNarrative(summary: PhraseAnalysisSummary): string {
+  const parts: string[] = [];
+
+  // Skeleton
+  if (summary.skeletonLabel) parts.push(`${summary.skeletonLabel}骨格でCTを配置`);
+
+  // Digital pattern
+  if (summary.digitalPatternUsed && summary.digitalPatternBeats) {
+    parts.push(`拍${summary.digitalPatternBeats}でデジタルパターン「${summary.digitalPatternUsed}」を使用`);
+  }
+
+  // Approach patterns
+  if (summary.approachPatternsUsed.length > 0) {
+    const labels = summary.approachPatternsUsed
+      .map(p => `${APPROACH_TYPE_LABEL[p.type] ?? p.type}×${p.count}`)
+      .join('、');
+    parts.push(`アプローチ: ${labels}`);
+  }
+
+  // Goal reason
+  if (summary.goalReason) parts.push(`ゴール: ${summary.goalReason}`);
+
+  return parts.join('。') + (parts.length > 0 ? '。' : '');
 }
 
 // ---------------------------------------------------------------------------
@@ -156,6 +214,31 @@ function computeSummary(phrase: GeneratedPhrase, notes: NoteAnalysis[]): PhraseA
     }
   }
 
+  // Skeleton label
+  const DIR_ARROW: Record<string, string> = { asc: '↑', desc: '↓', mixed: '↕' };
+  const skeletonLabel = phrase.skeleton
+    ? `${phrase.skeleton.patternLabel} ${DIR_ARROW[phrase.skeleton.direction] ?? ''}`
+    : undefined;
+
+  // Digital pattern used
+  const dpNotes = phrase.notes.filter(n => n.digitalPattern);
+  let digitalPatternUsed: string | undefined;
+  let digitalPatternBeats: string | undefined;
+  if (dpNotes.length > 0) {
+    digitalPatternUsed = dpNotes[0].digitalPattern!.name;
+    const beats = dpNotes.map(n => n.beatPosition);
+    digitalPatternBeats = `${Math.min(...beats)}-${Math.max(...beats)}`;
+  }
+
+  // Motif label
+  const motifLabel = phrase.motif && phrase.motif.length > 0
+    ? phrase.motif.map(v => v > 0 ? `↑${v}半音` : v < 0 ? `↓${Math.abs(v)}半音` : '同音').join(', ')
+    : undefined;
+
+  // Bebop & extension counts
+  const bebopPassingCount = phrase.notes.filter(n => n.isBebopPassing).length;
+  const extensionCount = phrase.notes.filter(n => n.isExtension).length;
+
   return {
     stepwisePct: pct(stepwise),
     thirdsPct: pct(thirds),
@@ -168,5 +251,12 @@ function computeSummary(phrase: GeneratedPhrase, notes: NoteAnalysis[]): PhraseA
     chordToneCount: phrase.notes.filter(n => n.isChordTone && !n.isApproach).length,
     approachNoteCount: phrase.notes.filter(n => n.isApproach).length,
     scaleNoteCount: phrase.notes.filter(n => !n.isChordTone && !n.isApproach).length,
+    skeletonLabel,
+    digitalPatternUsed,
+    digitalPatternBeats,
+    goalReason: phrase.goalReason,
+    motifLabel,
+    bebopPassingCount: bebopPassingCount > 0 ? bebopPassingCount : undefined,
+    extensionCount: extensionCount > 0 ? extensionCount : undefined,
   };
 }

@@ -1,4 +1,4 @@
-import type { Position, Mode, FretMap, PhraseNote, PhraseConfig, PhraseContour, GeneratedPhrase, ApproachType, ApproachGroupInfo } from '../types';
+import type { Position, Mode, FretMap, PhraseNote, PhraseConfig, PhraseContour, GeneratedPhrase, ApproachType, ApproachGroupInfo, SkeletonMeta } from '../types';
 import { OPEN_STRINGS } from '../constants';
 
 // ---------------------------------------------------------------------------
@@ -464,7 +464,8 @@ export function generatePhrase(
   const goalBeat = Math.min(totalBeats, 8);
 
   // --- Goal note ---
-  const goalNote = chooseGoalNote(activeCtPool, mode, targetThirdNote, config.nextChordContext);
+  const goalResult = chooseGoalNote(activeCtPool, mode, targetThirdNote, config.nextChordContext);
+  const goalNote = goalResult.note;
 
   // --- CT skeleton: pre-plan strong-beat CTs for phrase direction ---
   const skeleton = planCtSkeleton(activeCtPool, goalNote, contour, pitchRange, config.startHint, totalBeats, mode);
@@ -486,6 +487,10 @@ export function generatePhrase(
   if (goalBeat >= 6 && !patternUsed) {
     const committed = tryDigitalPattern(1, startNote, mode, activeCtPool, activePool, goalBeat, skeleton);
     if (committed) {
+      // Tag beat-1 note as digital pattern start (position: -1 indicates the anchor note)
+      if (committed.length > 0 && committed[0].digitalPattern) {
+        notes[0].digitalPattern = { name: committed[0].digitalPattern.name, position: -1, size: committed[0].digitalPattern.size };
+      }
       for (const cn of committed) {
         notes.push(cn);
         if (cn.beatPosition === goalBeat) goalFilled = true;
@@ -510,7 +515,11 @@ export function generatePhrase(
       if (skeletonNote) {
         const committed = tryDigitalPattern(beat, skeletonNote, mode, activeCtPool, activePool, goalBeat, skeleton);
         if (committed) {
-          notes.push(poolToPhraseNote(skeletonNote, beat));
+          const startPN = poolToPhraseNote(skeletonNote, beat);
+          if (committed.length > 0 && committed[0].digitalPattern) {
+            startPN.digitalPattern = { name: committed[0].digitalPattern.name, position: -1, size: committed[0].digitalPattern.size };
+          }
+          notes.push(startPN);
           for (const cn of committed) {
             notes.push(cn);
             if (cn.beatPosition === goalBeat) goalFilled = true;
@@ -851,7 +860,16 @@ export function generatePhrase(
     });
 
     const chosen = pickWeighted(candidates, weights);
-    notes.push(poolToPhraseNote(chosen, beat));
+    const chosenPN = poolToPhraseNote(chosen, beat);
+    // Mark bebop passing tone
+    if (!strong && !chosen.isChordTone && !chosen.isApproach) {
+      const bpSemi = BEBOP_PASSING[mode.key];
+      if (bpSemi !== undefined && chosen.semitone === bpSemi) {
+        const stepFromPrev = Math.abs(absolutePitch(chosen) - absolutePitch(prevNote));
+        if (stepFromPrev <= 2 && stepFromPrev > 0) chosenPN.isBebopPassing = true;
+      }
+    }
+    notes.push(chosenPN);
     if (isStrongBeat(beat, goalBeat)) prevStrongNote = chosen;
 
     // Update direction tracking
@@ -936,6 +954,14 @@ export function generatePhrase(
     }
   }
 
+  // Mark skeleton beats (1, 3, 5, goalBeat) — after post-processing to survive note replacements
+  const skelBeats = new Set([1, skeleton.goalBeat]);
+  if (skeleton.beat3) skelBeats.add(3);
+  if (skeleton.beat5) skelBeats.add(5);
+  for (const n of notes) {
+    if (skelBeats.has(n.beatPosition)) n.isSkeletonBeat = true;
+  }
+
   // Mark extension tones (9th/13th) on strong beats
   for (const n of notes) {
     if (n.isStrong && !n.isChordTone && !n.isApproach && isExtensionTone(n.noteName, mode)) {
@@ -956,6 +982,8 @@ export function generatePhrase(
     rootName: mode.notes[0],
     config: { ...config, contour },
     motif,
+    skeleton: skeleton.patternMeta,
+    goalReason: goalResult.reason,
   };
 }
 
@@ -963,12 +991,14 @@ export function generatePhrase(
 // Goal & start note selection
 // ---------------------------------------------------------------------------
 
+interface GoalResult { note: PoolNote; reason: string }
+
 function chooseGoalNote(
   ctPool: PoolNote[],
   mode: Mode,
   targetThirdNote?: string,
   nextChordContext?: PhraseConfig['nextChordContext'],
-): PoolNote {
+): GoalResult {
   if (targetThirdNote) {
     // Progression mode with nextChordContext: prefer current 7th resolving to next 3rd
     if (nextChordContext) {
@@ -982,7 +1012,7 @@ function chooseGoalNote(
           const diff = ((nextThirdSemi - seventhSemi) + 12) % 12;
           if (diff === 1 || diff === 11) {
             // 7th→3rd half-step resolution: strong preference (70%)
-            if (Math.random() < 0.70) return pickRandom(seventhCTs);
+            if (Math.random() < 0.70) return { note: pickRandom(seventhCTs), reason: '7th→次3rd半音解決' };
           }
         }
       }
@@ -996,11 +1026,11 @@ function chooseGoalNote(
         const diff = ((targetSemi - n.semitone) + 12) % 12;
         return diff === 1 || diff === 11;
       });
-      if (halfStepCTs.length > 0) return pickRandom(halfStepCTs);
+      if (halfStepCTs.length > 0) return { note: pickRandom(halfStepCTs), reason: '次3rdへ半音VL' };
     }
     // Fallback: any CT that IS the target 3rd
     const exact = ctPool.filter(n => n.noteName === targetThirdNote);
-    if (exact.length > 0) return pickRandom(exact);
+    if (exact.length > 0) return { note: pickRandom(exact), reason: '次3rd一致' };
   }
 
   // Normal mode: use strong resolution mapping
@@ -1012,16 +1042,16 @@ function chooseGoalNote(
       const diff = ((targetSemi - n.semitone) + 12) % 12;
       return diff === 1 || diff === 11;
     });
-    if (halfStepCTs.length > 0) return pickRandom(halfStepCTs);
+    if (halfStepCTs.length > 0) return { note: pickRandom(halfStepCTs), reason: '強進行→半音解決' };
   }
 
   // Fallback: prefer 3rd or 7th
   const preferred = ctPool.filter(n =>
     n.noteName === mode.chordTones[1] || n.noteName === mode.chordTones[3]
   );
-  if (preferred.length > 0) return pickRandom(preferred);
+  if (preferred.length > 0) return { note: pickRandom(preferred), reason: '3rd/7th優先' };
 
-  return pickRandom(ctPool);
+  return { note: pickRandom(ctPool), reason: 'CT (ランダム)' };
 }
 
 // ---------------------------------------------------------------------------
@@ -1034,6 +1064,7 @@ interface CtSkeleton {
   beat5?: PoolNote;   // present when goalBeat >= 8
   goal: PoolNote;     // the resolution note (was beat8)
   goalBeat: number;   // 4, 6, or 8
+  patternMeta?: SkeletonMeta;  // metadata about the chosen arpeggio pattern
 }
 
 function planCtSkeleton(
@@ -1094,6 +1125,13 @@ function planCtSkeleton(
 
   const chosenPattern = pickWeighted(ARPEGGIO_PATTERNS, patternWeights);
 
+  // Build pattern label (e.g. "R→3→5→7")
+  const CT_LABEL_SHORT = ['R', '3', '5', '7'];
+  const patternMeta: SkeletonMeta = {
+    patternLabel: chosenPattern.ctIndices.map(i => CT_LABEL_SHORT[i]).join('→'),
+    direction: chosenPattern.direction,
+  };
+
   // Resolve each skeleton beat to a physical position
   const beat1TargetPitch = startHint ? absolutePitch(startHint) : targetPitch(0);
   const beat1CtName = mode.chordTones[chosenPattern.ctIndices[0]];
@@ -1111,7 +1149,7 @@ function planCtSkeleton(
     beat5 = resolveSkeletonBeat(beat5CtName, ctPool, targetPitch(4), [beat1, beat3!]);
   }
 
-  return { beat1, beat3, beat5, goal: goalNote, goalBeat };
+  return { beat1, beat3, beat5, goal: goalNote, goalBeat, patternMeta };
 }
 
 function resolveSkeletonBeat(
@@ -1379,7 +1417,7 @@ interface DigitalPattern {
   name: string;
   startCtIdx: number[];
   steps: PatternStep[];
-  direction: 'asc' | 'desc';
+  direction: 'asc' | 'desc' | 'mixed';
 }
 
 const DIGITAL_PATTERNS: DigitalPattern[] = [
@@ -1410,6 +1448,15 @@ const DIGITAL_PATTERNS: DigitalPattern[] = [
   { name: '9-7-5-3', startCtIdx: [0],
     steps: [{type:'scaleDeg',offset:-1}, {type:'ct',idx:2}, {type:'ct',idx:1}],
     direction: 'desc' },
+  { name: '3-R-7-5', startCtIdx: [1],
+    steps: [{type:'ct',idx:0}, {type:'ct',idx:3}, {type:'ct',idx:2}],
+    direction: 'desc' },
+  { name: '5-3-R-2', startCtIdx: [2],
+    steps: [{type:'ct',idx:1}, {type:'ct',idx:0}, {type:'scaleDeg',offset:-1}],
+    direction: 'desc' },
+  { name: '3-2-R-7', startCtIdx: [1],
+    steps: [{type:'scaleDeg',offset:-1}, {type:'ct',idx:0}, {type:'ct',idx:3}],
+    direction: 'desc' },
 
   // C. Scalar runs (CT start → 3 stepwise notes)
   { name: 'scale-asc-3', startCtIdx: [0,1,2,3],
@@ -1429,6 +1476,15 @@ const DIGITAL_PATTERNS: DigitalPattern[] = [
   { name: 'R-pivot-5-3', startCtIdx: [0],
     steps: [{type:'scaleDeg',offset:-1}, {type:'ct',idx:2}, {type:'ct',idx:1}],
     direction: 'desc' },
+  { name: 'R-3-5-step-up', startCtIdx: [0],
+    steps: [{type:'ct',idx:1}, {type:'ct',idx:2}, {type:'scaleDeg',offset:+1}],
+    direction: 'asc' },
+  { name: '7-5-step-up-3', startCtIdx: [3],
+    steps: [{type:'ct',idx:2}, {type:'scaleDeg',offset:+1}, {type:'ct',idx:1}],
+    direction: 'mixed' },
+  { name: '5-6-7-R', startCtIdx: [2],
+    steps: [{type:'scaleDeg',offset:+1}, {type:'ct',idx:3}, {type:'ct',idx:0}],
+    direction: 'asc' },
 
   // E. Extended patterns (5 notes = 4 steps) — Parker-style longer runs
   { name: 'R-2-3-5-7', startCtIdx: [0],
@@ -1449,6 +1505,18 @@ const DIGITAL_PATTERNS: DigitalPattern[] = [
   { name: 'scale-desc-4', startCtIdx: [0,1,2,3],
     steps: [{type:'scaleDeg',offset:-1}, {type:'scaleDeg',offset:-1}, {type:'scaleDeg',offset:-1}, {type:'scaleDeg',offset:-1}],
     direction: 'desc' },
+  { name: 'R-3-5-3-7', startCtIdx: [0],
+    steps: [{type:'ct',idx:1}, {type:'ct',idx:2}, {type:'ct',idx:1}, {type:'ct',idx:3}],
+    direction: 'mixed' },
+  { name: '7-5-3-step-up-R', startCtIdx: [3],
+    steps: [{type:'ct',idx:2}, {type:'ct',idx:1}, {type:'scaleDeg',offset:+1}, {type:'ct',idx:0}],
+    direction: 'desc' },
+  { name: '5-7-R-2-3', startCtIdx: [2],
+    steps: [{type:'ct',idx:3}, {type:'ct',idx:0}, {type:'scaleDeg',offset:+1}, {type:'ct',idx:1}],
+    direction: 'asc' },
+  { name: '3-5-3-R-7', startCtIdx: [1],
+    steps: [{type:'ct',idx:2}, {type:'ct',idx:1}, {type:'ct',idx:0}, {type:'ct',idx:3}],
+    direction: 'mixed' },
 
   // F. Extended patterns (6 notes = 5 steps) — bebop-scale runs
   { name: 'R-2-3-5-7-R', startCtIdx: [0],
@@ -1457,10 +1525,22 @@ const DIGITAL_PATTERNS: DigitalPattern[] = [
   { name: 'scale-desc-5', startCtIdx: [0,1,2,3],
     steps: [{type:'scaleDeg',offset:-1}, {type:'scaleDeg',offset:-1}, {type:'scaleDeg',offset:-1}, {type:'scaleDeg',offset:-1}, {type:'scaleDeg',offset:-1}],
     direction: 'desc' },
+  { name: '7-5-3-R-2-3', startCtIdx: [3],
+    steps: [{type:'ct',idx:2}, {type:'ct',idx:1}, {type:'ct',idx:0}, {type:'scaleDeg',offset:+1}, {type:'ct',idx:1}],
+    direction: 'desc' },
+  { name: 'R-3-5-7-5-3', startCtIdx: [0],
+    steps: [{type:'ct',idx:1}, {type:'ct',idx:2}, {type:'ct',idx:3}, {type:'ct',idx:2}, {type:'ct',idx:1}],
+    direction: 'mixed' },
 ];
 
-function pickByDirection(candidates: PoolNote[], ref: PoolNote, dir: 'asc' | 'desc'): PoolNote | null {
+function pickByDirection(candidates: PoolNote[], ref: PoolNote, dir: 'asc' | 'desc' | 'mixed'): PoolNote | null {
   const refP = absolutePitch(ref);
+  if (dir === 'mixed') {
+    return candidates.length > 0
+      ? candidates.reduce((best, n) =>
+          Math.abs(absolutePitch(n) - refP) < Math.abs(absolutePitch(best) - refP) ? n : best)
+      : null;
+  }
   const filtered = dir === 'asc'
     ? candidates.filter(n => absolutePitch(n) > refP)
     : candidates.filter(n => absolutePitch(n) < refP);
@@ -1497,7 +1577,7 @@ function tryDigitalPattern(
   goalBeat: number,
   _skeleton: CtSkeleton,
 ): PhraseNote[] | null {
-  if (Math.random() > 0.35) return null;
+  if (Math.random() > 0.42) return null;
 
   const ctIdx = mode.chordTones.indexOf(currentNote.noteName);
   if (ctIdx < 0) return null;
@@ -1545,7 +1625,9 @@ function tryDigitalPattern(
     if (Math.abs(nextNote.stringIdx - prevNote.stringIdx) > 2) return null;
     if (semiInterval(prevNote, nextNote) > 7) return null;
 
-    result.push(poolToPhraseNote(nextNote, resultBeat));
+    const pn = poolToPhraseNote(nextNote, resultBeat);
+    pn.digitalPattern = { name: pattern.name, position: i, size: pattern.steps.length };
+    result.push(pn);
     prevNote = nextNote;
   }
 

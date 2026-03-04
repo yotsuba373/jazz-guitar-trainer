@@ -150,6 +150,21 @@ export interface FoundVoicing {
   fretSpan: number;
 }
 
+// --- Phrase Generator Metadata Types ---
+
+/** Metadata about the harmonic skeleton chosen during phrase generation */
+export interface SkeletonMeta {
+  patternLabel: string;     // "R→3→5→7"
+  direction: 'asc' | 'desc' | 'mixed';
+}
+
+/** Tag identifying a digital pattern applied to a note */
+export interface DigitalPatternTag {
+  name: string;             // "1-2-3-5"
+  position: number;         // 0-based index within the pattern (0 = first generated note after start)
+  size: number;             // total notes in the pattern (steps.length)
+}
+
 // --- Phrase Generator Types ---
 
 /** Approach group metadata — attached to notes from committed approach patterns */
@@ -173,6 +188,9 @@ export interface PhraseNote {
   beatPosition: number;    // 1-8 (eighth note position)
   isStrong: boolean;       // true for positions 1,3,5,8
   approachGroup?: ApproachGroupInfo;
+  digitalPattern?: DigitalPatternTag;   // present if this note belongs to a digital pattern
+  isBebopPassing?: boolean;             // true if bebop-scale passing tone (e.g. nat7 in Mixolydian)
+  isSkeletonBeat?: boolean;             // true if this note was a skeleton target (beats 1,3,5,goal)
 }
 
 /** Approach note types */
@@ -216,6 +234,10 @@ export interface GeneratedPhrase {
   config: PhraseConfig;
   /** Intervallic motif extracted from opening notes (WP6) */
   motif?: number[];
+  /** Harmonic skeleton pattern used during generation */
+  skeleton?: SkeletonMeta;
+  /** Reason for goal note selection */
+  goalReason?: string;
 }
 
 // --- Phrase Analysis Types ---
@@ -230,6 +252,10 @@ export interface NoteAnalysis {
   intervalLabel: string;        // e.g. "↑m2", "↓M3", "—"
   functionLabel: string;        // e.g. "CT (Root)", "Encl. above", "Scale tone"
   approachGroup?: ApproachGroupInfo;
+  digitalPattern?: DigitalPatternTag;
+  isBebopPassing?: boolean;
+  isExtension?: boolean;
+  isSkeletonBeat?: boolean;
 }
 
 /** Overall phrase analysis summary */
@@ -245,10 +271,18 @@ export interface PhraseAnalysisSummary {
   chordToneCount: number;
   approachNoteCount: number;
   scaleNoteCount: number;
+  skeletonLabel?: string;        // e.g. "R→3→5→7 ↑"
+  digitalPatternUsed?: string;   // e.g. "1-2-3-5"
+  digitalPatternBeats?: string;  // e.g. "3-6"
+  goalReason?: string;
+  motifLabel?: string;           // e.g. "+3, -2"
+  bebopPassingCount?: number;
+  extensionCount?: number;
 }
 
 /** Complete analysis result */
 export interface PhraseAnalysis {
   notes: NoteAnalysis[];
   summary: PhraseAnalysisSummary;
+  narrative?: string;
 }
