@@ -15,6 +15,7 @@ function clamp(val: number, lo: number, hi: number): number {
 
 interface PhrasePathProps {
   phrase: GeneratedPhrase;
+  animKey?: number;
   animSpeed?: number;
 }
 
@@ -95,17 +96,17 @@ function buildSegments(points: Point[]): Segment[] {
   });
 }
 
-export function PhrasePath({ phrase, animSpeed = 350 }: PhrasePathProps) {
+export function PhrasePath({ phrase, animKey, animSpeed = 350 }: PhrasePathProps) {
   const points = phrase.notes.map(n => toSvg(n.stringIdx, n.fret));
   const segs = buildSegments(points);
-  const fadeDur = Math.round(animSpeed * 1.4);
+  const fadeDur = Math.max(60, Math.round(animSpeed * 0.4));
   const fadeStyle = (i: number): React.CSSProperties =>
     animSpeed > 0
       ? { animation: `phraseIn ${fadeDur}ms ease-out ${i * animSpeed}ms both` }
       : {};
 
-  // Key forces remount on phrase change → restarts CSS animations
-  const phraseId = phrase.notes.map(n => `${n.stringIdx}:${n.fret}`).join(',');
+  // Key forces remount on phrase change or play trigger → restarts CSS animations
+  const phraseId = phrase.notes.map(n => `${n.stringIdx}:${n.fret}`).join(',') + (animKey ? `:${animKey}` : '');
 
   return (
     <g key={phraseId}>

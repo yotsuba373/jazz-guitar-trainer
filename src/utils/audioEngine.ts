@@ -4,9 +4,12 @@
  * Provides plucked-string audio for:
  *  - individual fretboard note clicks
  *  - chord strums during BPM auto-play
+ *  - phrase note playback (auto-play in progression mode)
  *
  * Uses pre-rendered AudioBuffers (no AudioWorklet, no external files).
  */
+
+import type { GeneratedPhrase } from '../types';
 
 /** Guitar open-string MIDI note numbers (stringIdx 0 = 1E … 5 = 6E) */
 export const OPEN_STRING_MIDI: readonly number[] = [64, 59, 55, 50, 45, 40];
@@ -120,6 +123,44 @@ export function playChordStrum(
     const freq = fretToFrequency(note.stringIdx, note.fret);
     return playKSNote(ctx, freq, volume, startTime + i * strumDelay, duration);
   });
+
+  return {
+    stop() {
+      handles.forEach(h => h.stop());
+    },
+  };
+}
+
+/**
+ * Schedule a phrase's notes for playback via Web Audio API.
+ *
+ * Each PhraseNote is played as a Karplus-Strong plucked note at precise
+ * eighth-note intervals.  For chords shorter than 4 beats the caller
+ * passes a reduced `maxNotes` so only the first N notes sound.
+ *
+ * @returns composite handle whose `stop()` fades out all scheduled notes.
+ */
+export function schedulePhrase(
+  ctx: AudioContext,
+  phrase: GeneratedPhrase,
+  startTime: number,
+  eighthNoteDur: number,
+  volume: number,
+  maxNotes = 8,
+): { stop: () => void } {
+  if (ctx.state === 'suspended') ctx.resume();
+
+  const notes = phrase.notes.slice(0, maxNotes);
+  const handles: { stop: () => void }[] = [];
+
+  for (let i = 0; i < notes.length; i++) {
+    const n = notes[i];
+    const freq = fretToFrequency(n.stringIdx, n.fret);
+    const noteStart = startTime + i * eighthNoteDur;
+    // Last note sustains longer; others get slight overlap for legato
+    const dur = i < notes.length - 1 ? eighthNoteDur * 1.2 : eighthNoteDur * 2;
+    handles.push(playKSNote(ctx, freq, volume, noteStart, dur));
+  }
 
   return {
     stop() {

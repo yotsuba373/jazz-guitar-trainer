@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import type { Progression, Position, ChordNotationPrefs, FoundVoicing } from '../../types';
 import { MODE_TEMPLATES, POS_COLORS, MODE_COLORS } from '../../constants';
 import {
@@ -29,6 +29,8 @@ interface ProgressionPlayerProps {
   onToggleChordAudio: () => void;
   chordVolume: number;
   onChordVolumeChange: (v: number) => void;
+  noteVolume: number;
+  onNoteVolumeChange: (v: number) => void;
   selPosIds: number[];
   availableVoicings?: FoundVoicing[];
   selectedVoicingIdx?: number;
@@ -43,6 +45,7 @@ export function ProgressionPlayer({
   isPlaying, bpm, onTogglePlay, onBpmChange, isMetronomeOn, onToggleMetronome,
   metVolume, onMetVolumeChange,
   chordAudioOn, onToggleChordAudio, chordVolume, onChordVolumeChange,
+  noteVolume, onNoteVolumeChange,
   selPosIds, availableVoicings, selectedVoicingIdx, onSelectVoicing,
 }: ProgressionPlayerProps) {
   const chords = progression.chords;
@@ -93,6 +96,17 @@ export function ProgressionPlayer({
     ? QUALITY_TO_MODES[activeChord.quality] ?? []
     : [];
 
+  // Volume mixer dropdown
+  const [volOpen, setVolOpen] = useState(false);
+  const volRef = useRef<HTMLDivElement>(null);
+  const handleClickOutside = useCallback((e: MouseEvent) => {
+    if (volRef.current && !volRef.current.contains(e.target as Node)) setVolOpen(false);
+  }, []);
+  useEffect(() => {
+    if (volOpen) document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [volOpen, handleClickOutside]);
+
   return (
     <div className="mb-3">
       {/* BPM / Playback controls */}
@@ -133,16 +147,6 @@ export function ProgressionPlayer({
             <path d="M19 5a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />
           </svg>
         </button>
-        {isMetronomeOn && (
-          <input
-            type="range" min={0} max={1} step={0.05}
-            value={metVolume}
-            onChange={e => onMetVolumeChange(Number(e.target.value))}
-            title={`音量 ${Math.round(metVolume * 100)}%`}
-            className="w-28"
-            style={{ accentColor: '#F1C40F' }}
-          />
-        )}
         <button
           onClick={onToggleChordAudio}
           title="コード音"
@@ -158,16 +162,54 @@ export function ProgressionPlayer({
             <circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
           </svg>
         </button>
-        {chordAudioOn && (
-          <input
-            type="range" min={0} max={1} step={0.05}
-            value={chordVolume}
-            onChange={e => onChordVolumeChange(Number(e.target.value))}
-            title={`コード音量 ${Math.round(chordVolume * 100)}%`}
-            className="w-28"
-            style={{ accentColor: '#27AE60' }}
-          />
-        )}
+        {/* Volume mixer dropdown */}
+        <div className="relative inline-flex items-center" ref={volRef}>
+          <button
+            onClick={() => setVolOpen(v => !v)}
+            title="音量設定"
+            className={btnBase}
+            style={{
+              border: `1px solid ${volOpen ? '#CCC' : '#444'}`,
+              background: volOpen ? '#2a2a2a' : '#1a1a1a',
+              color: volOpen ? '#FFF' : '#888',
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor" />
+              <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+              <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+            </svg>
+          </button>
+          {volOpen && (
+            <div className="absolute left-0 top-[28px] z-50 rounded-md p-2.5 flex flex-col gap-2 min-w-[200px]"
+              style={{ background: '#222', border: '1px solid #555', boxShadow: '0 4px 12px rgba(0,0,0,0.5)' }}>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-text-dim w-[60px] shrink-0">メトロノーム</span>
+                <input type="range" min={0} max={1} step={0.05}
+                  value={metVolume}
+                  onChange={e => onMetVolumeChange(Number(e.target.value))}
+                  className="flex-1" style={{ accentColor: '#F1C40F' }} />
+                <span className="text-[10px] text-text-dim w-[28px] text-right">{Math.round(metVolume * 100)}%</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-text-dim w-[60px] shrink-0">コード</span>
+                <input type="range" min={0} max={1} step={0.05}
+                  value={chordVolume}
+                  onChange={e => onChordVolumeChange(Number(e.target.value))}
+                  className="flex-1" style={{ accentColor: '#27AE60' }} />
+                <span className="text-[10px] text-text-dim w-[28px] text-right">{Math.round(chordVolume * 100)}%</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-text-dim w-[60px] shrink-0">単音</span>
+                <input type="range" min={0} max={1} step={0.05}
+                  value={noteVolume}
+                  onChange={e => onNoteVolumeChange(Number(e.target.value))}
+                  className="flex-1" style={{ accentColor: '#FF6B9D' }} />
+                <span className="text-[10px] text-text-dim w-[28px] text-right">{Math.round(noteVolume * 100)}%</span>
+              </div>
+            </div>
+          )}
+        </div>
         <button
           onClick={() => onBpmChange(Math.max(40, bpm - 1))}
           className={btnBase}
