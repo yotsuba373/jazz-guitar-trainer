@@ -497,6 +497,12 @@ export function generatePhrase(
         score -= 90;
       }
 
+      // Same note-name oscillation at different octaves (B3→C4→B4 harmonic monotony)
+      if (prevPrevNote && c.noteName === prevPrevNote.noteName &&
+          absolutePitch(c) !== absolutePitch(prevPrevNote)) {
+        score -= 35;
+      }
+
       // Extended oscillation: also check 3 notes back (A→B→C→A)
       if (notes.length >= 3) {
         const threeBack = notes[notes.length - 3];
@@ -525,6 +531,42 @@ export function generatePhrase(
       // CT variety: penalise reusing the same CT on consecutive strong beats
       if (strong && c.noteName === prevStrongNote.noteName) {
         score -= 50;
+      }
+
+      // Pitch-class monotony: if last 3 notes use only 2 distinct note names,
+      // penalise continuing with either name (prevents B↔C↔B↔C patterns)
+      // Must exceed skeleton adherence bonus (+40) to be effective
+      if (notes.length >= 3) {
+        const recentNameArr = [
+          notes[notes.length - 1].noteName,
+          notes[notes.length - 2].noteName,
+          notes[notes.length - 3].noteName,
+        ];
+        const recentNames = new Set(recentNameArr);
+        if (recentNames.size <= 2 && recentNames.has(c.noteName)) {
+          score -= 55;
+          // Extra penalty if the 2 names are semitone-adjacent (e.g. B↔C, E↔F)
+          if (recentNames.size === 2) {
+            const [n1, n2] = [...recentNames];
+            const pool1 = activePool.find(p => p.noteName === n1);
+            const pool2 = activePool.find(p => p.noteName === n2);
+            if (pool1 && pool2) {
+              const semDist = Math.abs(pool1.semitone - pool2.semitone);
+              if (semDist === 1 || semDist === 11) score -= 15;
+            }
+          }
+        }
+      }
+
+      // Extended monotony: 4-note window (catches beat 6 in B→C→B→C→B patterns)
+      if (notes.length >= 4) {
+        const fourNames = new Set([
+          notes[notes.length - 1].noteName, notes[notes.length - 2].noteName,
+          notes[notes.length - 3].noteName, notes[notes.length - 4].noteName,
+        ]);
+        if (fourNames.size <= 2 && fourNames.has(c.noteName)) {
+          score -= 30;
+        }
       }
 
       // Guide tone preference: 3rd and 7th on strong beats are melodically richer
@@ -584,6 +626,7 @@ export function generatePhrase(
         ];
         const hi = Math.max(...recent);
         const lo = Math.min(...recent);
+        if (hi - lo <= 2) score -= 20; // extreme stagnation (nearly same pitch)
         if (hi - lo <= 3) score -= 35;
         // Extended stagnation: 5 notes within 4 semitones
         if (notes.length >= 4) {
@@ -826,7 +869,12 @@ function pickCtNearPitch(
     let w = Math.max(1, 30 - dist * 2);
     // Prefer different CT name for arpeggio variety
     if (!avoidNames.has(c.noteName)) w += 15;
-    return w;
+    // Discourage semi/whole-tone clusters in skeleton (prevents B↔C oscillation)
+    for (const a of avoid) {
+      const aDist = Math.abs(absolutePitch(c) - absolutePitch(a));
+      if (aDist > 0 && aDist <= 2) w -= 15;
+    }
+    return Math.max(1, w);
   });
   return pickWeighted(candidates, weights);
 }

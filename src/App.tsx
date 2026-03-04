@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import type { LabelMode, RootName, Progression, ChordNotationPrefs, ChartLayout, SongKey, ChordSlot, ApproachType, GeneratedPhrase } from './types';
+import type { LabelMode, RootName, Progression, ChordNotationPrefs, ChartLayout, SongKey, ChordSlot, ApproachType, GeneratedPhrase, PhraseConfig } from './types';
 import { MODE_TEMPLATES, ROOTS, MODE_COLORS } from './constants';
 import {
   buildFretMap, generatePositions, generateDimPositions, resolveMode,
@@ -10,7 +10,7 @@ import {
   getGuideTones, findNoteLocations, classifyResolution,
   findVoicingsInPosition,
   playKSNote, playChordStrum, fretToFrequency,
-  generatePhrase,
+  generatePhrase, schedulePhrase,
 } from './utils';
 import { Fretboard } from './components/Fretboard';
 import { RootSelector, ModeSelector, PositionSelector, OptionBar, PhraseControls, PhraseAnalysisPanel } from './components/Controls';
@@ -156,6 +156,19 @@ export default function App() {
   const wasAutoAdvanceRef = useRef(false);
   const playPosRef = useRef(0);
 
+  // Phrase auto-play state (progression mode)
+  const [phraseAutoPlay, setPhraseAutoPlay] = useState(false);
+  // Single-note volume: shared between fretboard clicks and phrase playback
+  const [noteVolume, setNoteVolume] = useState<number>(() => {
+    const s = parseFloat(localStorage.getItem('noteVolume') ?? localStorage.getItem('phraseVolume') ?? '');
+    return isNaN(s) ? 0.4 : s;
+  });
+  const noteVolumeRef = useRef(noteVolume);
+  const phraseAutoPlayRef = useRef(phraseAutoPlay);
+  const activePhraseStopRef = useRef<{ stop: () => void } | null>(null);
+  const [phraseMap, setPhraseMap] = useState<Map<number, GeneratedPhrase>>(new Map());
+  const phraseMapRef = useRef(phraseMap);
+
   const template = MODE_TEMPLATES[modeIdx];
   const mode = useMemo(() => resolveMode(rootName, template), [rootName, modeIdx]);
   const is8Note = mode.notes.length > 7;
@@ -205,9 +218,15 @@ export default function App() {
     setActivePhraseIdx(0);
   }, [rootName, modeIdx, selPosIds, activeChordIdx]);
 
-  const activePhrase = showPhrase && phraseHistory.length > 0
-    ? phraseHistory[activePhraseIdx] ?? null
-    : null;
+  const activePhrase = useMemo(() => {
+    // During auto-play in progression mode, show the current chord's pre-generated phrase
+    if (phraseAutoPlay && progMode && phraseMap.has(activeChordIdx))
+      return phraseMap.get(activeChordIdx)!;
+    // Normal manual mode
+    if (showPhrase && phraseHistory.length > 0)
+      return phraseHistory[activePhraseIdx] ?? null;
+    return null;
+  }, [phraseAutoPlay, progMode, phraseMap, activeChordIdx, showPhrase, phraseHistory, activePhraseIdx]);
 
   const deg = mode.degrees;
   const rootNote = mode.notes[0];
@@ -358,6 +377,65 @@ export default function App() {
   }, [chordVolume]);
   useEffect(() => { chordAudioOnRef.current = chordAudioOn; }, [chordAudioOn]);
 
+  // Note volume ref + persistence (covers fretboard clicks + phrase playback)
+  useEffect(() => { noteVolumeRef.current = noteVolume; localStorage.setItem('noteVolume', String(noteVolume)); }, [noteVolume]);
+  useEffect(() => { phraseAutoPlayRef.current = phraseAutoPlay; }, [phraseAutoPlay]);
+  useEffect(() => { phraseMapRef.current = phraseMap; }, [phraseMap]);
+
+  // Auto-enable showPhrase when phraseAutoPlay is turned on
+  useEffect(() => { if (phraseAutoPlay && !showPhrase) setShowPhrase(true); }, [phraseAutoPlay]);
+  // Turn off phraseAutoPlay when leaving progression mode
+  useEffect(() => { if (!progMode) setPhraseAutoPlay(false); }, [progMode]);
+
+  // Generate phrases for ALL chords in the active progression
+  const generatePhraseMap = useCallback(() => {
+    if (!activeProg) { setPhraseMap(new Map()); return; }
+    const chords = activeProg.chords;
+    const effAll = computeEffectiveSelections(chords, activeProg.songKey);
+    const map = new Map<number, GeneratedPhrase>();
+    const config: PhraseConfig = { approachTypes: phraseApproachTypes };
+
+    for (let i = 0; i < chords.length; i++) {
+      const chord = chords[i];
+      const eff = effAll[i];
+      if (!chord || !eff || !QUALITY_TO_MODES[chord.quality]) continue;
+
+      const chordMode = resolveMode(chord.rootName, MODE_TEMPLATES[eff.modeIdx]);
+      if (chordMode.notes.length > 7) continue; // skip dim (8-note) chords
+
+      const chordFretMap = buildFretMap(chordMode.semi, chordMode.notes);
+      const positions = generatePositions(chordFretMap, chordMode.notes);
+      const pos = positions.find(p => p.id === eff.posId);
+      if (!pos) continue;
+
+      // Target: next chord's 3rd (wrap-around for last chord)
+      let targetThirdNote: string | undefined;
+      const nextIdx = (i + 1) % chords.length;
+      if (nextIdx !== i) {
+        const nextChord = chords[nextIdx];
+        const nextEff = effAll[nextIdx];
+        if (nextChord && nextEff && QUALITY_TO_MODES[nextChord.quality]) {
+          const nextMode = resolveMode(nextChord.rootName, MODE_TEMPLATES[nextEff.modeIdx]);
+          if (nextMode.notes.length <= 7) {
+            const gt = getGuideTones(nextMode);
+            targetThirdNote = gt.third;
+          }
+        }
+      }
+
+      try {
+        map.set(i, generatePhrase(pos, chordMode, chordFretMap, config, targetThirdNote));
+      } catch { /* skip failed generations */ }
+    }
+    setPhraseMap(map);
+  }, [activeProg, phraseApproachTypes]);
+
+  // Regenerate phrase map when auto-play is enabled or relevant state changes
+  useEffect(() => {
+    if (phraseAutoPlay && progMode && activeProg) generatePhraseMap();
+    else setPhraseMap(new Map());
+  }, [phraseAutoPlay, progMode, activeProg, phraseApproachTypes, generatePhraseMap]);
+
   // BPM auto-advance: drift-free, respects section repeats and volta endings
   useEffect(() => {
     if (!isPlaying || !progMode || !activeProg) {
@@ -365,6 +443,8 @@ export default function App() {
       wasAutoAdvanceRef.current = false;
       activeStrumRef.current?.stop();
       activeStrumRef.current = null;
+      activePhraseStopRef.current?.stop();
+      activePhraseStopRef.current = null;
       return;
     }
     const seq = buildPlaybackSeq(getChartLayout(activeProg));
@@ -387,6 +467,19 @@ export default function App() {
         const strumNotes = getStrumNotes(activeChordIdx, activeProg.chords, activeProg.songKey);
         if (strumNotes.length > 0) {
           activeStrumRef.current = playChordStrum(ctx, strumNotes, chordVolumeRef.current, ctx.currentTime);
+        }
+      }
+      // Schedule phrase for initial chord on playback start
+      if (isPlaybackStart && phraseAutoPlayRef.current) {
+        activePhraseStopRef.current?.stop();
+        const phrase = phraseMapRef.current.get(activeChordIdx);
+        if (phrase) {
+          if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
+          const ctx = audioCtxRef.current;
+          const eighthDur = (60 / bpm) / 2;
+          const chordBeats = seq[playPosRef.current]?.beats ?? 4;
+          const maxNotes = Math.min(8, Math.round(chordBeats * 2));
+          activePhraseStopRef.current = schedulePhrase(ctx, phrase, ctx.currentTime, eighthDur, noteVolumeRef.current, maxNotes);
         }
       }
     }
@@ -414,6 +507,20 @@ export default function App() {
         const strumNotes = getStrumNotes(nextChordIdx, activeProg.chords, activeProg.songKey);
         if (strumNotes.length > 0) {
           activeStrumRef.current = playChordStrum(ctx, strumNotes, chordVolumeRef.current, ctx.currentTime);
+        }
+      }
+
+      // Schedule phrase for the next chord on auto-advance
+      if (phraseAutoPlayRef.current) {
+        activePhraseStopRef.current?.stop();
+        const phrase = phraseMapRef.current.get(nextChordIdx);
+        if (phrase) {
+          if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
+          const ctx = audioCtxRef.current;
+          const eighthDur = (60 / bpm) / 2;
+          const nextStep = seq[nextPos];
+          const maxNotes = Math.min(8, Math.round((nextStep?.beats ?? 4) * 2));
+          activePhraseStopRef.current = schedulePhrase(ctx, phrase, ctx.currentTime, eighthDur, noteVolumeRef.current, maxNotes);
         }
       }
 
@@ -514,11 +621,48 @@ export default function App() {
     saveChordNotationPrefs(prefs);
   }
 
+  // Manual phrase playback (single phrase, not auto-play)
+  const manualPhraseRef = useRef<{ stop: () => void } | null>(null);
+  const manualPhraseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [isPhraseAudioPlaying, setIsPhraseAudioPlaying] = useState(false);
+  const [phraseAnimKey, setPhraseAnimKey] = useState(0);
+
+  const handlePlayPhrase = useCallback(() => {
+    // Toggle off if already playing
+    if (manualPhraseRef.current) {
+      manualPhraseRef.current.stop();
+      manualPhraseRef.current = null;
+      if (manualPhraseTimer.current) clearTimeout(manualPhraseTimer.current);
+      setIsPhraseAudioPlaying(false);
+      return;
+    }
+    if (!activePhrase) return;
+    if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
+    const ctx = audioCtxRef.current;
+    if (ctx.state === 'suspended') ctx.resume();
+    const eighthDur = Math.max(0.1, phraseAnimSpeed / 1000);
+    manualPhraseRef.current = schedulePhrase(ctx, activePhrase, ctx.currentTime, eighthDur, noteVolumeRef.current);
+    setIsPhraseAudioPlaying(true);
+    setPhraseAnimKey(k => k + 1);
+    manualPhraseTimer.current = setTimeout(() => {
+      manualPhraseRef.current = null;
+      setIsPhraseAudioPlaying(false);
+    }, eighthDur * 8 * 1000 + 200);
+  }, [activePhrase, phraseAnimSpeed]);
+
+  // Stop manual phrase on context change
+  useEffect(() => {
+    manualPhraseRef.current?.stop();
+    manualPhraseRef.current = null;
+    if (manualPhraseTimer.current) clearTimeout(manualPhraseTimer.current);
+    setIsPhraseAudioPlaying(false);
+  }, [activePhrase]);
+
   const handleNoteClick = useCallback((stringIdx: number, fret: number) => {
     if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
     const ctx = audioCtxRef.current;
     if (ctx.state === 'suspended') ctx.resume();
-    playKSNote(ctx, fretToFrequency(stringIdx, fret), chordVolumeRef.current, ctx.currentTime);
+    playKSNote(ctx, fretToFrequency(stringIdx, fret), noteVolumeRef.current, ctx.currentTime);
   }, []);
 
   const handleGeneratePhrase = useCallback(() => {
@@ -639,6 +783,8 @@ export default function App() {
                 onToggleChordAudio={() => setChordAudioOn(p => !p)}
                 chordVolume={chordVolume}
                 onChordVolumeChange={setChordVolume}
+                noteVolume={noteVolume}
+                onNoteVolumeChange={setNoteVolume}
                 selPosIds={selPosIds}
                 availableVoicings={showChordForms ? deduplicatedVoicings : undefined}
                 selectedVoicingIdx={effectiveVoicingIdx}
@@ -702,17 +848,25 @@ export default function App() {
           onTogglePhrase={setShowPhrase}
         />
 
-        {showPhrase && canShowPhrase && (
+        {(showPhrase || phraseAutoPlay) && canShowPhrase && (
           <PhraseControls
             approachTypes={phraseApproachTypes}
             onApproachTypesChange={setPhraseApproachTypes}
-            onGenerate={handleGeneratePhrase}
-            phraseCount={phraseHistory.length}
+            onGenerate={phraseAutoPlay ? generatePhraseMap : handleGeneratePhrase}
+            onPlayPhrase={handlePlayPhrase}
+            isPhraseAudioPlaying={isPhraseAudioPlaying}
+            hasPhrase={!!activePhrase}
+            phraseCount={phraseAutoPlay ? phraseMap.size : phraseHistory.length}
             phraseIdx={activePhraseIdx}
             onPhraseNav={setActivePhraseIdx}
             animSpeed={phraseAnimSpeed}
             onAnimSpeedChange={v => { setPhraseAnimSpeed(v); localStorage.setItem('phraseAnimSpeed', String(v)); }}
             chordQuality={template.chordQuality}
+            progMode={progMode}
+            phraseAutoPlay={phraseAutoPlay}
+            onTogglePhraseAutoPlay={() => setPhraseAutoPlay(p => !p)}
+            onRegeneratePhraseMap={generatePhraseMap}
+            isPlaying={isPlaying}
           />
         )}
 
@@ -728,7 +882,10 @@ export default function App() {
           voicingHighlights={voicingHighlights}
           onNoteClick={handleNoteClick}
           activePhrase={activePhrase}
-          phraseAnimSpeed={phraseAnimSpeed}
+          phraseAnimKey={phraseAnimKey}
+          phraseAnimSpeed={(phraseAutoPlay && progMode && isPlaying)
+            ? Math.round((60000 / bpm) / 2)
+            : phraseAnimSpeed}
         />
 
         {activePhrase && <PhraseAnalysisPanel phrase={activePhrase} mode={mode} />}

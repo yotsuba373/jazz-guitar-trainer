@@ -17,10 +17,11 @@ interface FretboardProps {
   voicingHighlights?: Set<string> | null;
   onNoteClick?: (stringIdx: number, fret: number) => void;
   activePhrase?: GeneratedPhrase | null;
+  phraseAnimKey?: number;
   phraseAnimSpeed?: number;
 }
 
-export function Fretboard({ visible, selPosIds, dim, showCT, ctSet, getLabel, rootNote, guideToneInfo, voicingHighlights, onNoteClick, activePhrase, phraseAnimSpeed }: FretboardProps) {
+export function Fretboard({ visible, selPosIds, dim, showCT, ctSet, getLabel, rootNote, guideToneInfo, voicingHighlights, onNoteClick, activePhrase, phraseAnimKey, phraseAnimSpeed }: FretboardProps) {
   return (
     <div className="overflow-x-auto mb-[14px]">
       <svg width={SVG_WIDTH} height={SVG_HEIGHT}
@@ -103,7 +104,7 @@ export function Fretboard({ visible, selPosIds, dim, showCT, ctSet, getLabel, ro
         })}
 
         {/* Phrase path (rendered between notes and ghost rings) */}
-        {activePhrase && <PhrasePath phrase={activePhrase} animSpeed={phraseAnimSpeed} />}
+        {activePhrase && <PhrasePath phrase={activePhrase} animKey={phraseAnimKey} animSpeed={phraseAnimSpeed} />}
 
         {/* Ghost rings: next chord's 3rd (rendered ON TOP of notes) */}
         {guideToneInfo?.nextThirdLocations.map(({ stringIdx, fret }, i) => (

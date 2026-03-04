@@ -432,7 +432,7 @@ function formatReport(label: string, stats: AggregateStats): string {
 // Test suite: Automated Quality Audit
 // ---------------------------------------------------------------------------
 
-const N = 50; // phrases per condition
+const N = 5000; // phrases per condition
 
 // Test conditions: key × position × approach type
 const CONDITIONS: {

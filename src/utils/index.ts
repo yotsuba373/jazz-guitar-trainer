@@ -49,6 +49,7 @@ export {
   fretToFrequency,
   playKSNote,
   playChordStrum,
+  schedulePhrase,
 } from './audioEngine';
 export {
   generatePhrase,

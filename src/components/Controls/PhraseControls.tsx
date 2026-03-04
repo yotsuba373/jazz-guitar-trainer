@@ -11,6 +11,16 @@ interface PhraseControlsProps {
   onAnimSpeedChange: (ms: number) => void;
   /** Current chord quality — b9 Arp is only available on dominant 7 chords */
   chordQuality?: string;
+  /** Manual phrase playback */
+  onPlayPhrase?: () => void;
+  isPhraseAudioPlaying?: boolean;
+  hasPhrase?: boolean;
+  /** Progression mode auto-play */
+  progMode?: boolean;
+  phraseAutoPlay?: boolean;
+  onTogglePhraseAutoPlay?: () => void;
+  onRegeneratePhraseMap?: () => void;
+  isPlaying?: boolean;
 }
 
 const PHRASE_COLOR = '#FF6B9D';
@@ -31,8 +41,12 @@ export function PhraseControls({
   onGenerate, phraseCount, phraseIdx, onPhraseNav,
   animSpeed, onAnimSpeedChange,
   chordQuality,
+  onPlayPhrase, isPhraseAudioPlaying, hasPhrase,
+  progMode, phraseAutoPlay, onTogglePhraseAutoPlay, onRegeneratePhraseMap,
+  isPlaying,
 }: PhraseControlsProps) {
   const isDom7 = chordQuality ? DOM7_QUALITIES.has(chordQuality) : false;
+  const autoPlaying = phraseAutoPlay && isPlaying;
 
   function toggleApproach(type: ApproachType) {
     if (approachTypes.includes(type)) {
@@ -74,21 +88,70 @@ export function PhraseControls({
         })}
       </div>
 
-      {/* Generate button */}
-      <button
-        onClick={onGenerate}
-        className={`${btnBase} text-[10px] px-3 py-[4px]`}
-        style={{
-          border: `1px solid ${PHRASE_COLOR}`,
-          background: '#2a1a1e',
-          color: PHRASE_COLOR,
-          fontWeight: 700,
-        }}>
-        Generate
-      </button>
+      {/* Auto-play toggle (progression mode only) */}
+      {progMode && onTogglePhraseAutoPlay && (
+        <div className="flex gap-1 items-center">
+          <button
+            onClick={onTogglePhraseAutoPlay}
+            className={`${btnBase} text-[10px] px-3 py-[4px]`}
+            style={{
+              border: `1px solid ${phraseAutoPlay ? PHRASE_COLOR : '#666'}`,
+              background: phraseAutoPlay ? '#2a1020' : '#1a1a1a',
+              color: phraseAutoPlay ? PHRASE_COLOR : '#888',
+              fontWeight: phraseAutoPlay ? 700 : 400,
+            }}>
+            Auto ▶
+          </button>
+          {phraseAutoPlay && onRegeneratePhraseMap && (
+            <button
+              onClick={onRegeneratePhraseMap}
+              className={`${btnBase} text-[10px] px-2 py-[4px]`}
+              title="フレーズ再生成"
+              style={{
+                border: `1px solid ${PHRASE_COLOR}60`,
+                background: '#1a1a1a',
+                color: PHRASE_COLOR,
+              }}>
+              ↻
+            </button>
+          )}
+        </div>
+      )}
 
-      {/* History navigation */}
-      {phraseCount > 0 && (
+      {/* Generate + Play buttons — hidden during auto-play playback */}
+      {!autoPlaying && (
+        <div className="flex gap-1 items-center">
+          <button
+            onClick={onGenerate}
+            className={`${btnBase} text-[10px] px-3 py-[4px]`}
+            style={{
+              border: `1px solid ${PHRASE_COLOR}`,
+              background: '#2a1a1e',
+              color: PHRASE_COLOR,
+              fontWeight: 700,
+            }}>
+            {phraseAutoPlay ? '↻ Regenerate' : 'Generate'}
+          </button>
+          {onPlayPhrase && (
+            <button
+              onClick={onPlayPhrase}
+              disabled={!hasPhrase}
+              title={isPhraseAudioPlaying ? 'フレーズ停止' : 'フレーズ再生'}
+              className={`${btnBase} text-[10px] px-2.5 py-[4px]`}
+              style={{
+                border: `1px solid ${!hasPhrase ? '#444' : isPhraseAudioPlaying ? '#E74C3C' : PHRASE_COLOR}`,
+                background: isPhraseAudioPlaying ? '#2a1010' : '#2a1a1e',
+                color: !hasPhrase ? '#555' : isPhraseAudioPlaying ? '#E74C3C' : PHRASE_COLOR,
+                cursor: !hasPhrase ? 'not-allowed' : 'pointer',
+              }}>
+              {isPhraseAudioPlaying ? '■ Stop' : '▶ Play'}
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* History navigation — hidden during auto-play */}
+      {!phraseAutoPlay && phraseCount > 0 && (
         <div className="flex gap-1 items-center text-[10px]"
           style={{ color: PHRASE_COLOR }}>
           <button onClick={prev}
@@ -107,15 +170,17 @@ export function PhraseControls({
         </div>
       )}
 
-      {/* Animation speed slider */}
-      <div className="flex gap-1 items-center text-[10px] text-text-muted">
-        <span>速度</span>
-        <input type="range" min={0} max={500} step={50}
-          value={500 - animSpeed}
-          onChange={e => onAnimSpeedChange(500 - Number(e.target.value))}
-          className="w-16 accent-pink-400"
-        />
-      </div>
+      {/* Animation speed slider — hidden during auto-play (BPM-synced) */}
+      {!autoPlaying && (
+        <div className="flex gap-1 items-center text-[10px] text-text-muted">
+          <span>速度</span>
+          <input type="range" min={0} max={500} step={50}
+            value={500 - animSpeed}
+            onChange={e => onAnimSpeedChange(500 - Number(e.target.value))}
+            className="w-16 accent-pink-400"
+          />
+        </div>
+      )}
     </div>
   );
 }
