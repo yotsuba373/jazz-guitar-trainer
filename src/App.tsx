@@ -13,7 +13,7 @@ import {
   generatePhrase,
 } from './utils';
 import { Fretboard } from './components/Fretboard';
-import { RootSelector, ModeSelector, PositionSelector, OptionBar, PhraseControls } from './components/Controls';
+import { RootSelector, ModeSelector, PositionSelector, OptionBar, PhraseControls, PhraseAnalysisPanel } from './components/Controls';
 import { PositionGrid } from './components/PositionGrid';
 import { ProgressionEditor, ProgressionPlayer } from './components/Progression';
 import { Footer } from './components/Footer';
@@ -732,6 +732,8 @@ export default function App() {
           activePhrase={activePhrase}
           phraseAnimSpeed={phraseAnimSpeed}
         />
+
+        {activePhrase && <PhraseAnalysisPanel phrase={activePhrase} mode={mode} />}
 
         {/* Mode description section */}
         <div className="mt-2 mb-3 rounded-md px-3 py-2" style={{ background: '#1a1a1a', borderLeft: `3px solid ${MODE_COLORS[mode.key]}` }}>

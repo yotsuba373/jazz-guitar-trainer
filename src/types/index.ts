@@ -22,9 +22,13 @@ export type {
   VoicingTemplate,
   FoundVoicing,
   PhraseNote,
+  ApproachGroupInfo,
   ApproachType,
   PhraseSource,
   PhraseContour,
   PhraseConfig,
   GeneratedPhrase,
+  NoteAnalysis,
+  PhraseAnalysisSummary,
+  PhraseAnalysis,
 } from './music';

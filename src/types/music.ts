@@ -152,6 +152,15 @@ export interface FoundVoicing {
 
 // --- Phrase Generator Types ---
 
+/** Approach group metadata — attached to notes from committed approach patterns */
+export interface ApproachGroupInfo {
+  groupId: number;
+  approachType: ApproachType;
+  role: 'approach' | 'target';
+  positionInGroup: number;   // 0-based index within group
+  groupSize: number;         // total notes including target
+}
+
 /** A single note in a generated phrase, with fretboard coordinates */
 export interface PhraseNote {
   noteName: string;
@@ -162,6 +171,7 @@ export interface PhraseNote {
   isApproach: boolean;
   beatPosition: number;    // 1-8 (eighth note position)
   isStrong: boolean;       // true for positions 1,3,5,8
+  approachGroup?: ApproachGroupInfo;
 }
 
 /** Approach note types */
@@ -192,4 +202,39 @@ export interface GeneratedPhrase {
   modeKey: string;
   rootName: string;
   config: PhraseConfig;
+}
+
+// --- Phrase Analysis Types ---
+
+/** Per-note analysis result (computed post-hoc) */
+export interface NoteAnalysis {
+  beatPosition: number;
+  noteName: string;
+  scaleDegree: string;          // e.g. "1", "♭3", "#5", "chr."
+  intervalFromPrev: number | null;
+  intervalDirection: 'up' | 'down' | 'unison' | null;
+  intervalLabel: string;        // e.g. "↑m2", "↓M3", "—"
+  functionLabel: string;        // e.g. "CT (Root)", "Encl. above", "Scale tone"
+  approachGroup?: ApproachGroupInfo;
+}
+
+/** Overall phrase analysis summary */
+export interface PhraseAnalysisSummary {
+  stepwisePct: number;
+  thirdsPct: number;
+  fourthsPct: number;
+  leapsPct: number;
+  rangeSemitones: number;
+  contourLabel: string;
+  approachPatternsUsed: { type: ApproachType; count: number }[];
+  directionChanges: number;
+  chordToneCount: number;
+  approachNoteCount: number;
+  scaleNoteCount: number;
+}
+
+/** Complete analysis result */
+export interface PhraseAnalysis {
+  notes: NoteAnalysis[];
+  summary: PhraseAnalysisSummary;
 }
