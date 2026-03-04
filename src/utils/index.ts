@@ -54,4 +54,6 @@ export {
   generatePhrase,
   buildNotePool,
   getApproachNotes,
+  absolutePitch,
 } from './phraseGenerator';
+export { analyzePhrase } from './phraseAnalysis';

@@ -1,4 +1,4 @@
-import type { Position, Mode, FretMap, PhraseNote, PhraseConfig, PhraseContour, GeneratedPhrase, ApproachType } from '../types';
+import type { Position, Mode, FretMap, PhraseNote, PhraseConfig, PhraseContour, GeneratedPhrase, ApproachType, ApproachGroupInfo } from '../types';
 import { OPEN_STRINGS } from '../constants';
 
 // ---------------------------------------------------------------------------
@@ -71,7 +71,7 @@ function isStrongBeat(beat: number): boolean {
 
 /** Absolute pitch (semitone + octave info) for interval comparison.
  *  Uses fret as a proxy for octave height since we're on a guitar.  */
-function absolutePitch(note: { stringIdx: number; fret: number }): number {
+export function absolutePitch(note: { stringIdx: number; fret: number }): number {
   // MIDI-like: open string MIDI base + fret
   const OPEN_MIDI = [64, 59, 55, 50, 45, 40]; // 1E=E4, B=B3, G=G3, D=D3, A=A2, 6E=E2
   return OPEN_MIDI[note.stringIdx] + note.fret;
@@ -284,7 +284,7 @@ function contourScore(
   const range = pitchRange.max - pitchRange.min || 1;
   const normalised = (absolutePitch(candidate) - pitchRange.min) / range;
   const diff = Math.abs(normalised - target);
-  return Math.max(0, 20 - diff * 40);
+  return Math.max(0, 30 - diff * 60);
 }
 
 function directionScore(
@@ -299,24 +299,58 @@ function directionScore(
   const sameDirection = (curDir > 0 && prevDir > 0) || (curDir < 0 && prevDir < 0);
 
   if (sameDirection) {
-    if (consecutiveSameDir >= 3) return -25; // penalise long runs
-    if (consecutiveSameDir >= 2) return -10;
-    return 5; // mild continuity bonus
+    // Bebop lines often have 3-4 note scalar runs (Parker staple)
+    if (consecutiveSameDir >= 4) return -25; // 5+ notes: loses phrase shape
+    if (consecutiveSameDir >= 3) return 0;   // 4 notes: neutral
+    return 5; // 2-3 note runs: natural scalar passages
   } else {
-    // Direction change — generally good
+    // Direction change — creates melodic interest
     return 15;
   }
 }
 
+/** Minimum semitone distance from candidate to any instance of goalNoteName in the pool */
+function nearestGoalDist(candidate: PoolNote, goalNoteName: string, ctPool: PoolNote[]): number {
+  const instances = ctPool.filter(n => n.noteName === goalNoteName);
+  if (instances.length === 0) return Infinity;
+  return Math.min(...instances.map(n => Math.abs(absolutePitch(candidate) - absolutePitch(n))));
+}
+
+/** Find the closest physical instance of a note name relative to a reference position */
+function nearestInstance(
+  noteName: string,
+  ref: { stringIdx: number; fret: number },
+  pool: PoolNote[],
+): PoolNote | null {
+  const candidates = pool.filter(n => n.noteName === noteName);
+  if (candidates.length === 0) return null;
+  return candidates.reduce((best, n) => {
+    const distN = Math.abs(absolutePitch(n) - absolutePitch(ref));
+    const distB = Math.abs(absolutePitch(best) - absolutePitch(ref));
+    return distN < distB ? n : best;
+  });
+}
+
 function goalProximityScore(
   candidate: PoolNote,
-  goalNote: PoolNote,
+  goalNoteName: string,
+  ctPool: PoolNote[],
   beatPosition: number,
 ): number {
   if (beatPosition < 6) return 0;
-  const dist = Math.abs(absolutePitch(candidate) - absolutePitch(goalNote));
-  const weight = beatPosition === 7 ? 1.5 : 1.0;
-  return Math.max(0, (20 - dist * 3)) * weight;
+  const dist = nearestGoalDist(candidate, goalNoteName, ctPool);
+  if (dist === Infinity) return 0;
+  if (beatPosition === 7) {
+    // Beat 7: strong pull towards goal — bonus for close, penalty for far
+    if (dist <= 5) {
+      let bonus = (20 - dist * 3) * 2.5;
+      // Half-step approach: chromatic resolution is the strongest bebop device
+      if (dist === 1) bonus += 15;
+      return bonus;
+    }
+    return -dist * 3; // penalise being far from goal
+  }
+  return Math.max(0, (20 - dist * 3));
 }
 
 // ---------------------------------------------------------------------------
@@ -358,8 +392,11 @@ export function generatePhrase(
   // --- Goal note (beat 8) ---
   const goalNote = chooseGoalNote(activeCtPool, mode, targetThirdNote);
 
-  // --- Start note (beat 1) ---
-  const startNote = chooseStartNote(activeCtPool, goalNote, contour, pitchRange);
+  // --- CT skeleton: pre-plan strong-beat CTs for phrase direction ---
+  const skeleton = planCtSkeleton(activeCtPool, goalNote, contour, pitchRange);
+
+  // --- Start note (beat 1) from skeleton ---
+  const startNote = skeleton.beat1;
 
   // --- Generate notes for beats 2-7 (beat 8 = goal) ---
   const notes: PhraseNote[] = [];
@@ -367,6 +404,8 @@ export function generatePhrase(
 
   let consecutiveSameDir = 0;
   let beat8Filled = false; // track if approach pattern already filled beat 8
+  let approachGroupId = 0;
+  let prevStrongNote: PoolNote | PhraseNote = startNote; // track last CT on strong beat
 
   for (let beat = 2; beat <= 7; beat++) {
     // Skip if this beat was already filled by an approach pattern
@@ -379,12 +418,14 @@ export function generatePhrase(
     // --- Try approach pattern commitment ---
     if (!strong && includeChromatic && config.approachTypes.length > 0) {
       const committed = tryApproachCommitment(
-        beat, activePool, activeCtPool, mode, config, notes, goalNote,
+        beat, activePool, activeCtPool, mode, config, notes, goalNote, approachGroupId,
       );
       if (committed) {
+        approachGroupId = committed.nextGroupId;
         for (const cn of committed.notes) {
           notes.push(cn);
           if (cn.beatPosition === 8) beat8Filled = true;
+          if (cn.isStrong) prevStrongNote = cn;
         }
         // Update direction tracking
         if (notes.length >= 2) {
@@ -431,12 +472,15 @@ export function generatePhrase(
       continue;
     }
 
+    // Compute once per beat for pitch variety scoring
+    const usedPitchClasses = new Set(notes.map(n => n.semitone));
+
     const weights = candidates.map(c => {
       const interval = semiInterval(prevNote, c);
       let score = intervalScore(interval);
       score += contourScore(c, beat - 1, contour, pitchRange);
       score += directionScore(c, prevNote, prevPrevNote, consecutiveSameDir);
-      score += goalProximityScore(c, goalNote, beat);
+      score += goalProximityScore(c, goalNote.noteName, activeCtPool, beat);
 
       // String distance penalty (heavier to keep phrases compact)
       const strDist = Math.abs(c.stringIdx - prevNote.stringIdx);
@@ -446,11 +490,95 @@ export function generatePhrase(
       if (interval >= 6) score -= 20;
       if (interval >= 8) score -= 30;
 
+      // Penalise returning to the same pitch as 2 notes ago (A→B→A oscillation)
+      // -80 ensures net negative even with stepwise(60) + dirChange(15) bonuses
+      if (prevPrevNote && absolutePitch(c) === absolutePitch(prevPrevNote)) {
+        score -= 80;
+      }
+
+      // Extended oscillation: also check 3 notes back (A→B→C→A)
+      if (notes.length >= 3) {
+        const threeBack = notes[notes.length - 3];
+        if (absolutePitch(c) === absolutePitch(threeBack)) score -= 40;
+      }
+
+      // CT variety: penalise reusing the same CT on consecutive strong beats
+      if (strong && c.noteName === prevStrongNote.noteName) {
+        score -= 50;
+      }
+
+      // Guide tone preference: 3rd and 7th on strong beats are melodically richer
+      if (strong) {
+        const ctIdx = mode.chordTones.indexOf(c.noteName);
+        if (ctIdx === 1 || ctIdx === 3) score += 10;
+      }
+
+      // Pitch variety: bonus for introducing a new pitch class
+      if (!usedPitchClasses.has(c.semitone)) score += 8;
+
+      // Scalar run continuation: reward extending a stepwise passage
+      if (prevPrevNote) {
+        const prevStep = absolutePitch(prevNote) - absolutePitch(prevPrevNote);
+        const curStep = absolutePitch(c) - absolutePitch(prevNote);
+        if (Math.abs(prevStep) <= 2 && prevStep !== 0 &&
+            Math.abs(curStep) <= 2 && curStep !== 0 &&
+            ((prevStep > 0 && curStep > 0) || (prevStep < 0 && curStep < 0))) {
+          score += 10;
+        }
+      }
+
+      // CT outline progression: reward consecutive strong-beat CTs forming arpeggio
+      if (strong && prevStrongNote) {
+        const prevCtIdx = mode.chordTones.indexOf(prevStrongNote.noteName);
+        const curCtIdx = mode.chordTones.indexOf(c.noteName);
+        if (prevCtIdx >= 0 && curCtIdx >= 0 && prevCtIdx !== curCtIdx) {
+          const diff = Math.abs(curCtIdx - prevCtIdx);
+          if (diff === 1 || diff === 3) score += 12;  // adjacent CT (R→3, 5→7 etc.)
+          else if (diff === 2) score += 6;             // skip-one (R→5, 3→7)
+        }
+      }
+
+      // Skeleton adherence: strong bonus for matching the pre-planned CT
+      if (strong) {
+        const skeletonTarget = beat === 3 ? skeleton.beat3
+          : beat === 5 ? skeleton.beat5 : null;
+        if (skeletonTarget && c.noteName === skeletonTarget.noteName) {
+          score += 40;
+          // Extra bonus for the exact planned instance (same string/fret region)
+          const skelDist = Math.abs(absolutePitch(c) - absolutePitch(skeletonTarget));
+          if (skelDist <= 2) score += 15;
+        }
+      }
+
+      // Narrow-zone stagnation: penalise if last 3 notes + candidate within 3 semitones
+      if (notes.length >= 3) {
+        const recent = [
+          absolutePitch(notes[notes.length - 3]),
+          absolutePitch(notes[notes.length - 2]),
+          absolutePitch(notes[notes.length - 1]),
+          absolutePitch(c),
+        ];
+        const hi = Math.max(...recent);
+        const lo = Math.min(...recent);
+        if (hi - lo <= 3) score -= 30;
+      }
+
+      // Passing tone quality: weak beats should move towards the next skeleton CT
+      if (!strong && beat < 7) {
+        const nextSkeletonNote = beat <= 2 ? skeleton.beat3
+          : beat <= 4 ? skeleton.beat5 : skeleton.beat8;
+        const targetPitch = absolutePitch(nextSkeletonNote);
+        const prevDist = Math.abs(absolutePitch(prevNote) - targetPitch);
+        const curDist = Math.abs(absolutePitch(c) - targetPitch);
+        if (curDist < prevDist) score += 10;
+      }
+
       return Math.max(1, score);
     });
 
     const chosen = pickWeighted(candidates, weights);
     notes.push(poolToPhraseNote(chosen, beat));
+    if (isStrongBeat(beat)) prevStrongNote = chosen;
 
     // Update direction tracking
     const dir = absolutePitch(chosen) - absolutePitch(prevNote);
@@ -467,22 +595,49 @@ export function generatePhrase(
   }
 
   // --- Beat 8: goal note (only if not already filled by approach pattern) ---
+  // Late resolution: pick the closest instance of goalNote's note name to beat 7
   if (!beat8Filled) {
     const lastNote = notes[notes.length - 1];
+    let resolvedGoal = nearestInstance(goalNote.noteName, lastNote, activeCtPool) ?? goalNote;
+
+    // Distance guard: if resolved goal is too far from beat 7 (>5st), pick the
+    // nearest CT of ANY name instead (avoids octave-jump same-name resolution)
+    const goalDist = Math.abs(absolutePitch(resolvedGoal) - absolutePitch(lastNote));
+    if (goalDist > 5) {
+      const closerCTs = activeCtPool
+        .filter(n =>
+          !(n.stringIdx === lastNote.stringIdx && n.fret === lastNote.fret) &&
+          absolutePitch(n) !== absolutePitch(lastNote)
+        )
+        .sort((a, b) =>
+          Math.abs(absolutePitch(a) - absolutePitch(lastNote)) -
+          Math.abs(absolutePitch(b) - absolutePitch(lastNote))
+        );
+      if (closerCTs.length > 0 &&
+          Math.abs(absolutePitch(closerCTs[0]) - absolutePitch(lastNote)) < goalDist) {
+        resolvedGoal = closerCTs[0];
+      }
+    }
+
     // Avoid same-note repetition with beat 7
-    if (lastNote && lastNote.stringIdx === goalNote.stringIdx && lastNote.fret === goalNote.fret) {
+    if (lastNote && lastNote.stringIdx === resolvedGoal.stringIdx && lastNote.fret === resolvedGoal.fret) {
       // Pick an alternative CT that's different
       const altCTs = activeCtPool.filter(n =>
         !(n.stringIdx === lastNote.stringIdx && n.fret === lastNote.fret) &&
         absolutePitch(n) !== absolutePitch(lastNote)
       );
       if (altCTs.length > 0) {
-        notes.push(poolToPhraseNote(pickRandom(altCTs), 8));
+        // Prefer the closest alternative
+        altCTs.sort((a, b) =>
+          Math.abs(absolutePitch(a) - absolutePitch(lastNote)) -
+          Math.abs(absolutePitch(b) - absolutePitch(lastNote))
+        );
+        notes.push(poolToPhraseNote(altCTs[0], 8));
       } else {
-        notes.push(poolToPhraseNote(goalNote, 8));
+        notes.push(poolToPhraseNote(resolvedGoal, 8));
       }
     } else {
-      notes.push(poolToPhraseNote(goalNote, 8));
+      notes.push(poolToPhraseNote(resolvedGoal, 8));
     }
   }
 
@@ -497,6 +652,7 @@ export function generatePhrase(
       // Replace current with an alternative from the pool
       const strong = isStrongBeat(cur.beatPosition);
       const alts = (strong ? activeCtPool : activePool).filter(n =>
+        !n.isApproach &&
         !(n.stringIdx === prev.stringIdx && n.fret === prev.fret) &&
         absolutePitch(n) !== absolutePitch(prev) &&
         (i + 1 >= notes.length || !(n.stringIdx === notes[i + 1].stringIdx && n.fret === notes[i + 1].fret))
@@ -564,41 +720,58 @@ function chooseGoalNote(
   return pickRandom(ctPool);
 }
 
-function chooseStartNote(
+// ---------------------------------------------------------------------------
+// CT skeleton — pre-plan strong-beat chord tones for phrase direction
+// ---------------------------------------------------------------------------
+
+interface CtSkeleton {
+  beat1: PoolNote;
+  beat3: PoolNote;
+  beat5: PoolNote;
+  beat8: PoolNote;
+}
+
+function planCtSkeleton(
   ctPool: PoolNote[],
   goalNote: PoolNote,
   contour: PhraseContour,
   pitchRange: { min: number; max: number },
-): PoolNote {
-  // Filter out the exact goal note position, and keep within reachable range of goal
-  // (max ~16 semitones away to keep phrase compact)
-  const goalPitch = absolutePitch(goalNote);
-  const candidates = ctPool.filter(n => {
-    if (n.stringIdx === goalNote.stringIdx && n.fret === goalNote.fret) return false;
-    // Same absolute pitch (different string) is also excluded
-    if (absolutePitch(n) === goalPitch) return false;
-    // Keep within compact range (~1 octave)
-    const dist = Math.abs(absolutePitch(n) - goalPitch);
-    return dist <= 12;
-  });
-  if (candidates.length === 0) {
-    // Fallback: any CT different from goal
-    const fallback = ctPool.filter(n =>
-      !(n.stringIdx === goalNote.stringIdx && n.fret === goalNote.fret) &&
-      absolutePitch(n) !== goalPitch
-    );
-    return fallback.length > 0 ? pickRandom(fallback) : ctPool[0];
-  }
-
-  // Weight based on contour: arch wants lower start, descending wants higher start
+): CtSkeleton {
   const curve = CONTOUR_CURVES[contour];
-  const targetPitch = pitchRange.min + curve[0] * (pitchRange.max - pitchRange.min);
+  const beat8 = goalNote;
+
+  const targetPitch = (beatIdx: number) =>
+    pitchRange.min + curve[beatIdx] * (pitchRange.max - pitchRange.min);
+
+  // beat 1: contour start position, avoid goalNote's exact position/pitch
+  const beat1 = pickCtNearPitch(ctPool, targetPitch(0), [beat8]);
+  // beat 3: contour beat3 position, prefer different CT name from beat1/beat8
+  const beat3 = pickCtNearPitch(ctPool, targetPitch(2), [beat1, beat8]);
+  // beat 5: contour beat5 position, prefer different CT name from all others
+  const beat5 = pickCtNearPitch(ctPool, targetPitch(4), [beat1, beat3, beat8]);
+
+  return { beat1, beat3, beat5, beat8 };
+}
+
+function pickCtNearPitch(
+  ctPool: PoolNote[],
+  targetPitch: number,
+  avoid: PoolNote[],
+): PoolNote {
+  const avoidNames = new Set(avoid.map(n => n.noteName));
+  const candidates = ctPool.filter(n =>
+    !avoid.some(a => a.stringIdx === n.stringIdx && a.fret === n.fret) &&
+    absolutePitch(n) !== absolutePitch(avoid[0]) // avoid same pitch as primary avoid
+  );
+  if (candidates.length === 0) return pickRandom(ctPool);
 
   const weights = candidates.map(c => {
-    const diff = Math.abs(absolutePitch(c) - targetPitch);
-    return Math.max(1, 30 - diff * 2);
+    const dist = Math.abs(absolutePitch(c) - targetPitch);
+    let w = Math.max(1, 30 - dist * 2);
+    // Prefer different CT name for arpeggio variety
+    if (!avoidNames.has(c.noteName)) w += 15;
+    return w;
   });
-
   return pickWeighted(candidates, weights);
 }
 
@@ -637,9 +810,8 @@ function getCandidates(
     // 2-string jump: max ±2 frets (only for close notes)
     if (strDist === 2 && Math.abs(n.fret - prevNote.fret) > 2) return false;
 
-    // Avoid chromatic approach notes on strong beats (already handled by CT check)
-    // On weak beats, allow approach notes only if source includes approach
-    if (n.isApproach && strong) return false;
+    // Approach notes only enter via tryApproachCommitment(), never via normal selection
+    if (n.isApproach) return false;
 
     return true;
   });
@@ -654,6 +826,7 @@ function getCandidates(
 interface CommittedApproach {
   notes: PhraseNote[];
   upToBeat: number;
+  nextGroupId: number;
 }
 
 function tryApproachCommitment(
@@ -664,23 +837,27 @@ function tryApproachCommitment(
   config: PhraseConfig,
   existingNotes: PhraseNote[],
   goalNote: PoolNote,
+  groupId: number,
 ): CommittedApproach | null {
   // Only attempt approach if we're on a weak beat and a strong beat follows soon
-  const nextStrongBeat = currentBeat === 2 ? 3 : currentBeat === 4 ? 5 : currentBeat === 6 ? 8 : null;
+  const nextStrongBeat = currentBeat === 2 ? 3 : currentBeat === 4 ? 5
+    : currentBeat === 6 ? 8 : currentBeat === 7 ? 8 : null;
   if (nextStrongBeat === null) return null;
 
   const beatsAvailable = nextStrongBeat - currentBeat; // 1 for single, 2 for enclosure, etc.
   const prevNote = existingNotes[existingNotes.length - 1];
 
   // Choose the target CT for the strong beat
+  // For beat 8 (goal): pick the nearest instance of goalNote's name to current position
   const targetCT = nextStrongBeat === 8
-    ? goalNote
+    ? (nearestInstance(goalNote.noteName, prevNote, ctPool) ?? goalNote)
     : pickNearbyChordTone(prevNote, ctPool);
 
   if (!targetCT) return null;
 
   // Random approach decision (not every weak beat should trigger an approach)
-  if (Math.random() > 0.45) return null;
+  // Always attempt approach to beat 8 (goal) for smooth phrase endings
+  if (nextStrongBeat !== 8 && Math.random() > 0.45) return null;
 
   // Shuffle and try approach types
   const shuffled = [...config.approachTypes].sort(() => Math.random() - 0.5);
@@ -702,15 +879,23 @@ function tryApproachCommitment(
       const firstApproach = patternNotes[0];
       if (firstApproach.stringIdx === prevNote.stringIdx && firstApproach.fret === prevNote.fret) continue;
       if (absolutePitch(firstApproach) === absolutePitch(prevNote)) continue;
+      // Reject if first approach note is too far from previous note
+      const distToFirst = semiInterval(prevNote, firstApproach);
+      const strDistToFirst = Math.abs(firstApproach.stringIdx - prevNote.stringIdx);
+      if (distToFirst > 5 || strDistToFirst > 2) continue;
+      const groupSize = patternNotes.length + 1; // approach notes + target
       const result: PhraseNote[] = [];
       for (let i = 0; i < patternNotes.length; i++) {
+        const ag: ApproachGroupInfo = { groupId, approachType: aType, role: 'approach', positionInGroup: i, groupSize };
         result.push(poolToPhraseNote(
           { ...patternNotes[i], isApproach: true },
           currentBeat + i,
+          ag,
         ));
       }
-      result.push(poolToPhraseNote(targetCT, nextStrongBeat));
-      return { notes: result, upToBeat: nextStrongBeat };
+      const tAg: ApproachGroupInfo = { groupId, approachType: aType, role: 'target', positionInGroup: patternNotes.length, groupSize };
+      result.push(poolToPhraseNote(targetCT, nextStrongBeat, tAg));
+      return { notes: result, upToBeat: nextStrongBeat, nextGroupId: groupId + 1 };
     }
 
     // If pattern is 1 note and we have 2 beats available, use single approach + skip
@@ -724,14 +909,18 @@ function tryApproachCommitment(
       );
       if (scaleFiller.length > 0) {
         const filler = pickRandom(scaleFiller);
-        if (absolutePitch(patternNotes[0]) !== absolutePitch(filler)) {
+        if (absolutePitch(patternNotes[0]) !== absolutePitch(filler) &&
+            semiInterval(filler, patternNotes[0]) <= 5) {
+          const ag0: ApproachGroupInfo = { groupId, approachType: aType, role: 'approach', positionInGroup: 0, groupSize: 2 };
+          const ag1: ApproachGroupInfo = { groupId, approachType: aType, role: 'target', positionInGroup: 1, groupSize: 2 };
           return {
             notes: [
               poolToPhraseNote(filler, currentBeat),
-              poolToPhraseNote({ ...patternNotes[0], isApproach: true }, currentBeat + 1),
-              poolToPhraseNote(targetCT, nextStrongBeat),
+              poolToPhraseNote({ ...patternNotes[0], isApproach: true }, currentBeat + 1, ag0),
+              poolToPhraseNote(targetCT, nextStrongBeat, ag1),
             ],
             upToBeat: nextStrongBeat,
+            nextGroupId: groupId + 1,
           };
         }
       }
@@ -776,8 +965,8 @@ function pickNearbyChordTone(
 // Utility
 // ---------------------------------------------------------------------------
 
-function poolToPhraseNote(note: PoolNote, beatPosition: number): PhraseNote {
-  return {
+function poolToPhraseNote(note: PoolNote, beatPosition: number, approachGroup?: ApproachGroupInfo): PhraseNote {
+  const pn: PhraseNote = {
     noteName: note.noteName,
     stringIdx: note.stringIdx,
     fret: note.fret,
@@ -787,6 +976,8 @@ function poolToPhraseNote(note: PoolNote, beatPosition: number): PhraseNote {
     beatPosition,
     isStrong: isStrongBeat(beatPosition),
   };
+  if (approachGroup) pn.approachGroup = approachGroup;
+  return pn;
 }
 
 const SEMI_MAP: Record<string, number> = {
