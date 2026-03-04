@@ -149,3 +149,47 @@ export interface FoundVoicing {
   instanceIdx: number;
   fretSpan: number;
 }
+
+// --- Phrase Generator Types ---
+
+/** A single note in a generated phrase, with fretboard coordinates */
+export interface PhraseNote {
+  noteName: string;
+  stringIdx: number;       // 0=1E, 1=B, 2=G, 3=D, 4=A, 5=6E
+  fret: number;
+  semitone: number;        // absolute (0-11)
+  isChordTone: boolean;
+  isApproach: boolean;
+  beatPosition: number;    // 1-8 (eighth note position)
+  isStrong: boolean;       // true for positions 1,3,5,8
+}
+
+/** Approach note types */
+export type ApproachType =
+  | 'single-below'       // [CT-1] → CT
+  | 'single-above'       // [CT+1] → CT
+  | 'enclosure'          // [diatonic above] → [chromatic below] → CT
+  | 'parker-enclosure'   // [CT+1] → [CT-2] → [CT-1] → CT
+  | 'b9-arpeggio';       // b9→3→5→b7 (Dom7 only)
+
+/** Phrase generation source */
+export type PhraseSource = 'scale' | 'approach' | 'both';
+
+/** Phrase contour shape */
+export type PhraseContour = 'arch' | 'reverse-arch' | 'descending' | 'wave';
+
+/** Generation configuration */
+export interface PhraseConfig {
+  source: PhraseSource;
+  approachTypes: ApproachType[];
+  contour?: PhraseContour;       // undefined = random
+}
+
+/** A fully generated phrase */
+export interface GeneratedPhrase {
+  notes: PhraseNote[];
+  posId: number;
+  modeKey: string;
+  rootName: string;
+  config: PhraseConfig;
+}

@@ -16,6 +16,9 @@ interface OptionBarProps {
   canShowChordForms?: boolean;
   showChordForms?: boolean;
   onToggleChordForms?: (checked: boolean) => void;
+  canShowPhrase?: boolean;
+  showPhrase?: boolean;
+  onTogglePhrase?: (checked: boolean) => void;
 }
 
 const btnBase = 'rounded cursor-pointer font-mono';
@@ -25,6 +28,7 @@ export function OptionBar({
   onToggleCT, onSetLabelMode, onChordPrefsChange,
   progMode, showGT, onToggleGT,
   canShowChordForms, showChordForms, onToggleChordForms,
+  canShowPhrase, showPhrase, onTogglePhrase,
 }: OptionBarProps) {
   const [notationOpen, setNotationOpen] = useState(false);
 
@@ -60,6 +64,13 @@ export function OptionBar({
         <label className="text-[10px] text-text-muted cursor-pointer flex items-center gap-1">
           <input type="checkbox" checked={showChordForms ?? false} onChange={e => onToggleChordForms(e.target.checked)} />
           コードフォーム
+        </label>
+      )}
+
+      {canShowPhrase && onTogglePhrase && (
+        <label className="text-[10px] text-text-muted cursor-pointer flex items-center gap-1">
+          <input type="checkbox" checked={showPhrase ?? false} onChange={e => onTogglePhrase(e.target.checked)} />
+          フレーズ
         </label>
       )}
 
@@ -104,7 +115,7 @@ export function OptionBar({
         })}
       </div>
 
-      {(showCT || showGT || showChordForms) && (
+      {(showCT || showGT || showChordForms || showPhrase) && (
         <div className="flex gap-2.5 items-center text-[10px]">
           <span className="text-text-muted">|</span>
           {showCT && (
@@ -144,6 +155,13 @@ export function OptionBar({
               <span className="inline-block w-[13px] h-[13px] rounded-sm border-2 border-[#00E5FF]"
                 style={{ background: 'rgba(0,229,255,0.15)' }} />
               <span className="text-text-label">Form</span>
+            </span>
+          )}
+          {showPhrase && (
+            <span className="inline-flex items-center gap-[3px]">
+              <span className="inline-block w-[13px] h-[2px] bg-[#FF6B9D]" />
+              <span className="inline-block w-[7px] h-[7px] rounded-full bg-[#FF6B9D]" />
+              <span className="text-text-label">Phrase</span>
             </span>
           )}
         </div>

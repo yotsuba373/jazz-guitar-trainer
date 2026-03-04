@@ -21,4 +21,10 @@ export type {
   VoicingType,
   VoicingTemplate,
   FoundVoicing,
+  PhraseNote,
+  ApproachType,
+  PhraseSource,
+  PhraseContour,
+  PhraseConfig,
+  GeneratedPhrase,
 } from './music';

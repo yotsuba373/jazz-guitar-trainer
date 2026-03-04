@@ -50,3 +50,8 @@ export {
   playKSNote,
   playChordStrum,
 } from './audioEngine';
+export {
+  generatePhrase,
+  buildNotePool,
+  getApproachNotes,
+} from './phraseGenerator';

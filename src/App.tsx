@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import type { LabelMode, RootName, Progression, ChordNotationPrefs, ChartLayout, SongKey, ChordSlot } from './types';
+import type { LabelMode, RootName, Progression, ChordNotationPrefs, ChartLayout, SongKey, ChordSlot, PhraseSource, ApproachType, GeneratedPhrase } from './types';
 import { MODE_TEMPLATES, ROOTS, MODE_COLORS } from './constants';
 import {
   buildFretMap, generatePositions, generateDimPositions, resolveMode,
@@ -10,9 +10,10 @@ import {
   getGuideTones, findNoteLocations, classifyResolution,
   findVoicingsInPosition,
   playKSNote, playChordStrum, fretToFrequency,
+  generatePhrase,
 } from './utils';
 import { Fretboard } from './components/Fretboard';
-import { RootSelector, ModeSelector, PositionSelector, OptionBar } from './components/Controls';
+import { RootSelector, ModeSelector, PositionSelector, OptionBar, PhraseControls } from './components/Controls';
 import { PositionGrid } from './components/PositionGrid';
 import { ProgressionEditor, ProgressionPlayer } from './components/Progression';
 import { Footer } from './components/Footer';
@@ -114,6 +115,15 @@ export default function App() {
   const [showChordForms, setShowChordForms] = useState(false);
   const [selectedVoicingIdx, setSelectedVoicingIdx] = useState(0);
 
+  // Phrase generator state
+  const [showPhrase, setShowPhrase] = useState(false);
+  const [phraseSource, setPhraseSource] = useState<PhraseSource>('both');
+  const [phraseApproachTypes, setPhraseApproachTypes] = useState<ApproachType[]>(
+    ['single-below', 'single-above', 'enclosure']
+  );
+  const [phraseHistory, setPhraseHistory] = useState<GeneratedPhrase[]>([]);
+  const [activePhraseIdx, setActivePhraseIdx] = useState(0);
+
   // Progression mode state
   const [progMode, setProgMode] = useState(false);
   const [progressions, setProgressions] = useState<Progression[]>(() => loadProgressions());
@@ -156,6 +166,9 @@ export default function App() {
 
   // Chord form voicings (only when exactly 1 position selected)
   const canShowChordForms = selPosIds.length === 1 && !overlay && !is8Note && modeIdx <= 6;
+
+  // Phrase generator: available when single position selected, not overlay, not dim scale
+  const canShowPhrase = selPosIds.length === 1 && !overlay && !is8Note;
   const selPos = selPosIds.length === 1 ? allPos.find(p => p.id === selPosIds[0]) ?? null : null;
 
   const availableVoicings = useMemo(() => {
@@ -183,6 +196,16 @@ export default function App() {
 
   // Reset voicing index when position/mode/root changes
   useEffect(() => { setSelectedVoicingIdx(0); }, [selPosIds, modeIdx, rootName]);
+
+  // Clear phrase history when context changes
+  useEffect(() => {
+    setPhraseHistory([]);
+    setActivePhraseIdx(0);
+  }, [rootName, modeIdx, selPosIds, activeChordIdx]);
+
+  const activePhrase = showPhrase && phraseHistory.length > 0
+    ? phraseHistory[activePhraseIdx] ?? null
+    : null;
 
   const deg = mode.degrees;
   const rootNote = mode.notes[0];
@@ -496,6 +519,36 @@ export default function App() {
     playKSNote(ctx, fretToFrequency(stringIdx, fret), chordVolumeRef.current, ctx.currentTime);
   }, []);
 
+  const handleGeneratePhrase = useCallback(() => {
+    if (!canShowPhrase || selPosIds.length !== 1) return;
+    const pos = allPos.find(p => p.id === selPosIds[0]);
+    if (!pos) return;
+
+    // In progression mode, compute next chord's 3rd as target
+    let targetThirdNote: string | undefined;
+    if (progMode && activeProg) {
+      const nextChord = activeProg.chords[activeChordIdx + 1];
+      const nextEff = effectiveAll[activeChordIdx + 1];
+      if (nextChord && nextEff && QUALITY_TO_MODES[nextChord.quality]) {
+        const nextMode = resolveMode(nextChord.rootName, MODE_TEMPLATES[nextEff.modeIdx]);
+        const gt = getGuideTones(nextMode);
+        targetThirdNote = gt.third;
+      }
+    }
+
+    const config = { source: phraseSource, approachTypes: phraseApproachTypes };
+    const phrase = generatePhrase(pos, mode, fretMap, config, targetThirdNote);
+
+    setPhraseHistory(prev => {
+      const next = [...prev, phrase];
+      if (next.length > 20) next.shift();
+      return next;
+    });
+    setActivePhraseIdx(
+      Math.min(phraseHistory.length, 19)
+    );
+  }, [canShowPhrase, selPosIds, allPos, mode, fretMap, phraseSource, phraseApproachTypes, progMode, activeProg, activeChordIdx, effectiveAll, phraseHistory.length]);
+
   function getLabel(nn: string): string {
     return labelMode === 'degree' ? (deg[nn] || nn) : nn;
   }
@@ -642,7 +695,23 @@ export default function App() {
           canShowChordForms={canShowChordForms}
           showChordForms={showChordForms}
           onToggleChordForms={setShowChordForms}
+          canShowPhrase={canShowPhrase}
+          showPhrase={showPhrase}
+          onTogglePhrase={setShowPhrase}
         />
+
+        {showPhrase && canShowPhrase && (
+          <PhraseControls
+            source={phraseSource}
+            onSourceChange={setPhraseSource}
+            approachTypes={phraseApproachTypes}
+            onApproachTypesChange={setPhraseApproachTypes}
+            onGenerate={handleGeneratePhrase}
+            phraseCount={phraseHistory.length}
+            phraseIdx={activePhraseIdx}
+            onPhraseNav={setActivePhraseIdx}
+          />
+        )}
 
         <Fretboard
           visible={visible}
@@ -655,6 +724,7 @@ export default function App() {
           guideToneInfo={guideToneInfo}
           voicingHighlights={voicingHighlights}
           onNoteClick={handleNoteClick}
+          activePhrase={activePhrase}
         />
 
         {/* Mode description section */}
