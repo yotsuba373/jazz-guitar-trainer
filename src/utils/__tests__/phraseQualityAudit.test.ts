@@ -20,7 +20,7 @@ import { analyzePhrase } from '../phraseAnalysis';
 import { resolveMode } from '../noteSpelling';
 import { buildFretMap, generatePositions } from '../fretboard';
 import { MODE_TEMPLATES } from '../../constants';
-import type { PhraseConfig, GeneratedPhrase, ApproachType, Mode, Position, FretMap } from '../../types';
+import type { PhraseConfig, PhraseNote, PhraseContour, GeneratedPhrase, ApproachType, Mode, Position, FretMap } from '../../types';
 
 // ---------------------------------------------------------------------------
 // Setup helpers
@@ -67,6 +67,9 @@ interface PhraseProblems {
   stagnationCount: number;       // segments of 4 notes within 3 semitones
   halfStepResolution: boolean;   // beat 7→8 interval is exactly 1 semitone
   uniqueStrongBeatCTs: number;   // distinct CT names on strong beats (1,3,5,8) — max 4
+  arpeggioFragments: number;     // 3+ consecutive CTs with different names
+  weakBeatFunctional: number;    // weak beats serving functional role (passing/approach)
+  weakBeatTotal: number;         // total weak beats
 }
 
 function detectProblems(phrase: GeneratedPhrase, mode: Mode): PhraseProblems {
@@ -90,6 +93,9 @@ function detectProblems(phrase: GeneratedPhrase, mode: Mode): PhraseProblems {
     stagnationCount: 0,
     halfStepResolution: false,
     uniqueStrongBeatCTs: 0,
+    arpeggioFragments: 0,
+    weakBeatFunctional: 0,
+    weakBeatTotal: 0,
   };
 
   // Pitch values
@@ -154,9 +160,9 @@ function detectProblems(phrase: GeneratedPhrase, mode: Mode): PhraseProblems {
     }
   }
 
-  // Strong beat non-CT
+  // Strong beat non-CT (extensions are allowed)
   for (const n of notes) {
-    if (n.isStrong && !n.isChordTone) {
+    if (n.isStrong && !n.isChordTone && !n.isExtension) {
       problems.strongBeatNonCT.push({ beat: n.beatPosition, note: n.noteName });
     }
   }
@@ -206,8 +212,9 @@ function detectProblems(phrase: GeneratedPhrase, mode: Mode): PhraseProblems {
     problems.ctOutlineRange = Math.max(...strongBeatPitches) - Math.min(...strongBeatPitches);
   }
 
-  // Unique CT names on strong beats (max 4 = R, 3, 5, 7 all different)
-  problems.uniqueStrongBeatCTs = new Set(strongBeatNotes.map(n => n.noteName)).size;
+  // Unique CT/extension names on strong beats (max 4 = R, 3, 5, 7 all different)
+  const strongBeatHarmonicNotes = notes.filter(n => n.isStrong && (n.isChordTone || n.isExtension));
+  problems.uniqueStrongBeatCTs = new Set(strongBeatHarmonicNotes.map(n => n.noteName)).size;
 
   // Stagnation: count how many 4-note windows are within 3 semitones
   for (let i = 3; i < notes.length; i++) {
@@ -223,6 +230,31 @@ function detectProblems(phrase: GeneratedPhrase, mode: Mode): PhraseProblems {
     const beat8 = notes.find(n => n.beatPosition === 8);
     if (beat7 && beat8) {
       problems.halfStepResolution = Math.abs(absolutePitch(beat7) - absolutePitch(beat8)) === 1;
+    }
+  }
+
+  // Arpeggio fragments: 3+ consecutive CTs with different names
+  for (let i = 2; i < notes.length; i++) {
+    if (notes[i].isChordTone && notes[i - 1].isChordTone && notes[i - 2].isChordTone) {
+      const names = new Set([notes[i - 2].noteName, notes[i - 1].noteName, notes[i].noteName]);
+      if (names.size === 3) problems.arpeggioFragments++;
+    }
+  }
+
+  // Weak beat functional usage: approach notes, chord tones, or stepwise passing/neighbor
+  for (let i = 1; i < notes.length; i++) {
+    const n = notes[i];
+    if (n.isStrong) continue;
+    problems.weakBeatTotal++;
+    // Approach note = functional
+    if (n.isApproach || n.approachGroup) { problems.weakBeatFunctional++; continue; }
+    // Chord tone on weak beat = functional (outlines harmony)
+    if (n.isChordTone) { problems.weakBeatFunctional++; continue; }
+    // Stepwise from previous note (passing/neighbor tone)
+    const stepFromPrev = Math.abs(pitches[i] - pitches[i - 1]);
+    if (stepFromPrev <= 2 && stepFromPrev > 0) {
+      problems.weakBeatFunctional++;
+      continue;
     }
   }
 
@@ -258,6 +290,8 @@ interface AggregateStats {
   phrasesWithStagnation: number;   // phrases with at least one stagnation window
   phrasesWithHalfStepResolution: number; // phrases where beat 7→8 is exactly 1 semitone
   avgUniqueStrongBeatCTs: number;  // avg distinct CT names on strong beats (ideal: 3-4)
+  avgArpeggioFragments: number;    // avg 3+ consecutive CT outlines per phrase
+  avgWeakBeatFunctionPct: number;  // avg % of weak beats serving functional role
   // Specific problem details (up to 5 worst examples)
   worstBeat78Examples: { interval: number; phrase: string }[];
   worstLeapExamples: { interval: number; beat: number; phrase: string }[];
@@ -295,6 +329,8 @@ function aggregate(phrases: GeneratedPhrase[], mode: Mode): AggregateStats {
     phrasesWithStagnation: 0,
     phrasesWithHalfStepResolution: 0,
     avgUniqueStrongBeatCTs: 0,
+    avgArpeggioFragments: 0,
+    avgWeakBeatFunctionPct: 0,
     worstBeat78Examples: [],
     worstLeapExamples: [],
     worstOscillationExamples: [],
@@ -302,6 +338,7 @@ function aggregate(phrases: GeneratedPhrase[], mode: Mode): AggregateStats {
 
   let sumStep = 0, sumRange = 0, sumLeap = 0;
   let sumPitch = 0, sumRuns = 0, sumGuide = 0, sumDirChanges = 0, sumCtRange = 0, sumUniqueCTs = 0;
+  let sumArpFrags = 0, sumWeakFunc = 0, sumWeakTotal = 0;
 
   for (const phrase of phrases) {
     const p = detectProblems(phrase, mode);
@@ -359,6 +396,9 @@ function aggregate(phrases: GeneratedPhrase[], mode: Mode): AggregateStats {
     if (p.stagnationCount > 0) stats.phrasesWithStagnation++;
     if (p.halfStepResolution) stats.phrasesWithHalfStepResolution++;
     sumUniqueCTs += p.uniqueStrongBeatCTs;
+    sumArpFrags += p.arpeggioFragments;
+    sumWeakFunc += p.weakBeatFunctional;
+    sumWeakTotal += p.weakBeatTotal;
   }
 
   stats.avgStepwisePct = Math.round(sumStep / phrases.length);
@@ -370,6 +410,8 @@ function aggregate(phrases: GeneratedPhrase[], mode: Mode): AggregateStats {
   stats.avgDirectionChanges = Math.round((sumDirChanges / phrases.length) * 10) / 10;
   stats.avgCtOutlineRange = Math.round((sumCtRange / phrases.length) * 10) / 10;
   stats.avgUniqueStrongBeatCTs = Math.round((sumUniqueCTs / phrases.length) * 10) / 10;
+  stats.avgArpeggioFragments = Math.round((sumArpFrags / phrases.length) * 10) / 10;
+  stats.avgWeakBeatFunctionPct = sumWeakTotal > 0 ? Math.round((sumWeakFunc / sumWeakTotal) * 100) : 0;
 
   // Sort and trim examples
   stats.worstBeat78Examples.sort((a, b) => b.interval - a.interval);
@@ -405,6 +447,7 @@ function formatReport(label: string, stats: AggregateStats): string {
   lines.push(`  [Quality] Unique pitches: ${stats.avgUniquePitchClasses}  |  Scalar runs: ${stats.avgScalarRuns}  |  Dir changes: ${stats.avgDirectionChanges}`);
   lines.push(`  [Quality] Guide tone %: ${stats.avgGuideTonePct}%  |  Phrases w/ scalar run: ${pct(stats.phrasesWithScalarRun)}`);
   lines.push(`  [Quality] CT outline range: ${stats.avgCtOutlineRange}st  |  Unique strong CTs: ${stats.avgUniqueStrongBeatCTs}  |  Stagnation: ${pct(stats.phrasesWithStagnation)}  |  Half-step res: ${pct(stats.phrasesWithHalfStepResolution)}`);
+  lines.push(`  [Quality] Arp fragments: ${stats.avgArpeggioFragments}  |  Weak beat function: ${stats.avgWeakBeatFunctionPct}%`);
 
   if (stats.worstBeat78Examples.length > 0) {
     lines.push('\n  Worst beat 7→8 examples:');
@@ -459,6 +502,21 @@ const CONDITIONS: {
   { label: 'G Mixolydian Pos1 — All 5 approaches', root: 'G', modeIdx: 4, posIdx: 0, approachTypes: ['single-below', 'single-above', 'enclosure', 'parker-enclosure', 'b9-arpeggio'] },
   // Scale-only (no approach)
   { label: 'C Ionian Pos3 — Scale only', root: 'C', modeIdx: 0, posIdx: 2, approachTypes: [] },
+
+  // --- Jazz-essential mode coverage (WP7-A) ---
+
+  // Locrian (m7♭5 = minor ii)
+  { label: 'B Locrian Pos3 — All approaches', root: 'B', modeIdx: 6, posIdx: 2, approachTypes: ['single-below', 'single-above', 'enclosure'] },
+  // Aeolian (natural minor = minor i)
+  { label: 'A Aeolian Pos4 — All approaches', root: 'A', modeIdx: 5, posIdx: 3, approachTypes: ['single-below', 'single-above', 'enclosure'] },
+  // Altered (V7alt)
+  { label: 'G Altered Pos2 — All 5 approaches', root: 'G', modeIdx: 13, posIdx: 1, approachTypes: ['single-below', 'single-above', 'enclosure', 'parker-enclosure', 'b9-arpeggio'] },
+  // Lydian Dominant (7#11)
+  { label: 'C Lydian-Dom Pos1 — All approaches', root: 'C', modeIdx: 10, posIdx: 0, approachTypes: ['single-below', 'single-above', 'enclosure'] },
+  // Phrygian Dominant (V7♭9 from Harmonic Minor)
+  { label: 'E Phrygian-Dom Pos3 — All 5 approaches', root: 'E', modeIdx: 15, posIdx: 2, approachTypes: ['single-below', 'single-above', 'enclosure', 'parker-enclosure', 'b9-arpeggio'] },
+  // Melodic Minor (mMaj7)
+  { label: 'A Melodic-Minor Pos2 — All approaches', root: 'A', modeIdx: 7, posIdx: 1, approachTypes: ['single-below', 'single-above', 'enclosure'] },
 ];
 
 describe('Phrase Quality Audit', () => {
@@ -498,13 +556,13 @@ describe('Phrase Quality Audit', () => {
         expect(stats.phrasesWithStrongBeatNonCT).toBe(0);
       });
 
-      it('stepwise motion ≥ 35%', () => {
-        expect(stats.avgStepwisePct).toBeGreaterThanOrEqual(35);
+      it('stepwise motion ≥ 40%', () => {
+        expect(stats.avgStepwisePct).toBeGreaterThanOrEqual(40);
       });
 
-      it('large leaps (≥P5) in ≤ 55% of phrases', () => {
+      it('large leaps (≥P5) in ≤ 46% of phrases', () => {
         const pct = stats.phrasesWithLargeLeaps / N;
-        expect(pct).toBeLessThanOrEqual(0.55);
+        expect(pct).toBeLessThanOrEqual(0.46);
       });
 
       it('beat 7→8 leap (>5st) in < 25% of phrases', () => {
@@ -512,10 +570,9 @@ describe('Phrase Quality Audit', () => {
         expect(pct).toBeLessThan(0.25);
       });
 
-      it('oscillation in < 65% of phrases', () => {
-        // 4 CTs in compact positions + 3 strong beats requiring CTs = some oscillation unavoidable
+      it('oscillation in < 50% of phrases', () => {
         const pct = stats.phrasesWithOscillation / N;
-        expect(pct).toBeLessThan(0.65);
+        expect(pct).toBeLessThan(0.50);
       });
 
       it('approach leaps (>5st) in < 15% of phrases', () => {
@@ -530,47 +587,253 @@ describe('Phrase Quality Audit', () => {
       // --- Positive quality assertions ---
 
       it('average unique pitch classes ≥ 5', () => {
-        // Good bebop lines use variety; 5+ of 12 pitch classes in 8 notes
         expect(stats.avgUniquePitchClasses).toBeGreaterThanOrEqual(5);
       });
 
-      it('at least 20% of phrases have a scalar run', () => {
-        // Parker-style lines often include 3+ note stepwise runs
+      it('at least 25% of phrases have a scalar run', () => {
         const pct = stats.phrasesWithScalarRun / N;
-        expect(pct).toBeGreaterThanOrEqual(0.2);
+        expect(pct).toBeGreaterThanOrEqual(0.25);
       });
 
-      it('guide tone emphasis ≥ 20%', () => {
-        // 3rd and 7th should appear on strong beats at least sometimes
-        expect(stats.avgGuideTonePct).toBeGreaterThanOrEqual(20);
+      it('guide tone emphasis ≥ 32%', () => {
+        expect(stats.avgGuideTonePct).toBeGreaterThanOrEqual(32);
       });
 
-      it('average CT outline range ≥ 4 semitones', () => {
-        // Strong-beat CTs should span at least a major 3rd (audible chord outline)
-        expect(stats.avgCtOutlineRange).toBeGreaterThanOrEqual(4);
+      it('average CT outline range ≥ 5 semitones', () => {
+        expect(stats.avgCtOutlineRange).toBeGreaterThanOrEqual(5);
       });
 
-      it('stagnation in ≤ 60% of phrases', () => {
-        // Approach patterns inherently use narrow ranges (chromatic neighbors),
-        // so some stagnation is structural; ensure it doesn't dominate
+      it('stagnation in ≤ 50% of phrases', () => {
         const pct = stats.phrasesWithStagnation / N;
-        expect(pct).toBeLessThanOrEqual(0.6);
+        expect(pct).toBeLessThanOrEqual(0.50);
       });
 
-      it('half-step resolution in ≥ 10% of phrases', () => {
-        // Some phrases should resolve beat 7→8 via chromatic approach
+      it('half-step resolution in ≥ 18% of phrases', () => {
         const pct = stats.phrasesWithHalfStepResolution / N;
-        expect(pct).toBeGreaterThanOrEqual(0.1);
+        expect(pct).toBeGreaterThanOrEqual(0.18);
       });
 
-      it('average unique strong-beat CTs ≥ 2.5', () => {
-        // Skeleton planning should produce diverse CT outlines (not just repeating 2 CTs)
-        expect(stats.avgUniqueStrongBeatCTs).toBeGreaterThanOrEqual(2.5);
+      it('average unique strong-beat CTs ≥ 2.8', () => {
+        expect(stats.avgUniqueStrongBeatCTs).toBeGreaterThanOrEqual(2.8);
+      });
+
+      it('arpeggio fragments ≥ 0.3 per phrase', () => {
+        expect(stats.avgArpeggioFragments).toBeGreaterThanOrEqual(0.3);
+      });
+
+      it('weak beat functional usage ≥ 60%', () => {
+        expect(stats.avgWeakBeatFunctionPct).toBeGreaterThanOrEqual(60);
       });
 
       // Print report after all conditions
       it('prints report', () => {
         console.log(formatReport(cond.label, stats));
+      });
+    });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// WP7-B: Progression context tests (multi-chord chain generation)
+// ---------------------------------------------------------------------------
+
+import { getGuideTones } from '../guideTones';
+
+interface ProgressionStep {
+  root: string;
+  modeIdx: number;
+  posIdx: number;
+}
+
+interface ChainStats {
+  totalSets: number;
+  goalResolutionCount: number;       // beat 8 within 1 semitone of next 3rd
+  chainIntervalSum: number;         // sum of beat8→beat1 intervals
+  chainIntervalCount: number;
+  voiceLeadingResolutions: number;  // 7th→3rd half-step resolutions
+  voiceLeadingOpportunities: number;
+  qualityDefiningSum: number;       // 3rd+7th presence ratio sum
+  characteristicToneCount: number;  // phrases with characteristic tone
+  totalPhrases: number;
+}
+
+function computeChainStats(
+  steps: ProgressionStep[],
+  sets: number,
+  approachTypes: ApproachType[],
+): ChainStats {
+  const stats: ChainStats = {
+    totalSets: sets,
+    goalResolutionCount: 0,
+    chainIntervalSum: 0,
+    chainIntervalCount: 0,
+    voiceLeadingResolutions: 0,
+    voiceLeadingOpportunities: 0,
+    qualityDefiningSum: 0,
+    characteristicToneCount: 0,
+    totalPhrases: 0,
+  };
+
+  // Pre-resolve all modes
+  const contexts = steps.map(s => {
+    const m = resolveMode(s.root as any, MODE_TEMPLATES[s.modeIdx]);
+    const fm = buildFretMap(m.semi, m.notes);
+    const positions = generatePositions(fm, m.notes);
+    return { mode: m, fretMap: fm, pos: positions[s.posIdx], guideTones: getGuideTones(m) };
+  });
+
+  for (let set = 0; set < sets; set++) {
+    let prevLastNote: PhraseNote | undefined;
+    let prevContour: PhraseContour | undefined;
+
+    for (let si = 0; si < steps.length; si++) {
+      const ctx = contexts[si];
+      const nextCtx = contexts[(si + 1) % steps.length];
+
+      const config: PhraseConfig = {
+        approachTypes,
+        startHint: prevLastNote ? {
+          noteName: prevLastNote.noteName,
+          stringIdx: prevLastNote.stringIdx,
+          fret: prevLastNote.fret,
+          semitone: prevLastNote.semitone,
+        } : undefined,
+        prevContour,
+        nextChordContext: {
+          thirdNote: nextCtx.guideTones.third,
+          seventhNote: nextCtx.guideTones.seventh,
+          rootNote: nextCtx.mode.notes[0],
+          quality: nextCtx.mode.chordQuality,
+        },
+      };
+
+      try {
+        const phrase = generatePhrase(ctx.pos, ctx.mode, ctx.fretMap, config, nextCtx.guideTones.third);
+        stats.totalPhrases++;
+
+        // Goal resolution: beat 8 within 1 semitone of next 3rd
+        const lastNote = phrase.notes[phrase.notes.length - 1];
+        const nextThirdSemi = nextCtx.mode.semi[nextCtx.mode.notes.indexOf(nextCtx.guideTones.third)];
+        if (nextThirdSemi !== undefined) {
+          const dist = Math.min(
+            Math.abs(lastNote.semitone - nextThirdSemi),
+            12 - Math.abs(lastNote.semitone - nextThirdSemi),
+          );
+          if (dist <= 1) stats.goalResolutionCount++;
+        }
+
+        // Chain interval: previous beat8 → current beat1
+        if (prevLastNote) {
+          const firstNote = phrase.notes[0];
+          const interval = Math.abs(absolutePitch(firstNote) - absolutePitch(prevLastNote));
+          stats.chainIntervalSum += interval;
+          stats.chainIntervalCount++;
+        }
+
+        // Voice leading: current 7th resolving to next 3rd by half step
+        if (si < steps.length - 1) {
+          stats.voiceLeadingOpportunities++;
+          const seventh = ctx.mode.chordTones[3];
+          const seventhSemi = ctx.mode.semi[ctx.mode.notes.indexOf(seventh)];
+          if (seventhSemi !== undefined && nextThirdSemi !== undefined) {
+            const vlDist = Math.min(
+              Math.abs(seventhSemi - nextThirdSemi),
+              12 - Math.abs(seventhSemi - nextThirdSemi),
+            );
+            if (vlDist === 1 && lastNote.noteName === seventh) {
+              stats.voiceLeadingResolutions++;
+            }
+          }
+        }
+
+        // Quality-defining presence: 3rd + 7th in phrase
+        const third = ctx.mode.chordTones[1];
+        const seventh = ctx.mode.chordTones[3];
+        const qualBeats = phrase.notes.filter(n => n.noteName === third || n.noteName === seventh).length;
+        stats.qualityDefiningSum += qualBeats / phrase.notes.length;
+
+        prevLastNote = phrase.notes[phrase.notes.length - 1];
+        prevContour = phrase.config.contour;
+      } catch {
+        prevLastNote = undefined;
+        prevContour = undefined;
+      }
+    }
+  }
+
+  return stats;
+}
+
+const CHAIN_N = 1000;
+
+const PROGRESSIONS: { label: string; steps: ProgressionStep[]; approachTypes: ApproachType[] }[] = [
+  {
+    label: 'Major ii-V-I (C)',
+    steps: [
+      { root: 'D', modeIdx: 1, posIdx: 2 },  // Dm7 (Dorian)
+      { root: 'G', modeIdx: 4, posIdx: 2 },  // G7 (Mixolydian)
+      { root: 'C', modeIdx: 0, posIdx: 2 },  // Cmaj7 (Ionian)
+    ],
+    approachTypes: ['single-below', 'single-above', 'enclosure'],
+  },
+  {
+    label: 'Minor ii-V-i (A)',
+    steps: [
+      { root: 'B', modeIdx: 6, posIdx: 1 },  // Bm7♭5 (Locrian)
+      { root: 'E', modeIdx: 15, posIdx: 1 },  // E7♭9 (Phrygian-Dom)
+      { root: 'A', modeIdx: 5, posIdx: 1 },  // Am7 (Aeolian)
+    ],
+    approachTypes: ['single-below', 'single-above', 'enclosure'],
+  },
+  {
+    label: 'Blues turnaround (B♭)',
+    steps: [
+      { root: 'B♭', modeIdx: 4, posIdx: 1 }, // B♭7
+      { root: 'E♭', modeIdx: 4, posIdx: 1 }, // E♭7
+      { root: 'B♭', modeIdx: 4, posIdx: 1 }, // B♭7
+      { root: 'F', modeIdx: 4, posIdx: 1 },  // F7
+    ],
+    approachTypes: ['single-below', 'single-above', 'enclosure', 'parker-enclosure'],
+  },
+];
+
+describe('Progression Context Quality', () => {
+  for (const prog of PROGRESSIONS) {
+    describe(prog.label, () => {
+      let stats: ChainStats;
+
+      beforeAll(() => {
+        stats = computeChainStats(prog.steps, CHAIN_N, prog.approachTypes);
+      });
+
+      it('generates all phrases', () => {
+        expect(stats.totalPhrases).toBe(CHAIN_N * prog.steps.length);
+      });
+
+      it('goal resolution accuracy ≥ 35%', () => {
+        const pct = stats.goalResolutionCount / stats.totalPhrases;
+        expect(pct).toBeGreaterThanOrEqual(0.35);
+      });
+
+      it('average chain interval ≤ 7 semitones', () => {
+        const avg = stats.chainIntervalCount > 0
+          ? stats.chainIntervalSum / stats.chainIntervalCount : 0;
+        expect(avg).toBeLessThanOrEqual(7);
+      });
+
+      it('quality-defining tone presence ≥ 35%', () => {
+        const avg = stats.qualityDefiningSum / stats.totalPhrases;
+        expect(avg).toBeGreaterThanOrEqual(0.35);
+      });
+
+      it('prints chain stats', () => {
+        const goalPct = Math.round((stats.goalResolutionCount / stats.totalPhrases) * 100);
+        const avgChain = stats.chainIntervalCount > 0
+          ? Math.round((stats.chainIntervalSum / stats.chainIntervalCount) * 10) / 10 : 0;
+        const vlPct = stats.voiceLeadingOpportunities > 0
+          ? Math.round((stats.voiceLeadingResolutions / stats.voiceLeadingOpportunities) * 100) : 0;
+        const qualPct = Math.round((stats.qualityDefiningSum / stats.totalPhrases) * 100);
+        console.log(`\n  [Chain] ${prog.label}: goal=${goalPct}% chain=${avgChain}st VL=${vlPct}% qual=${qualPct}%`);
       });
     });
   }

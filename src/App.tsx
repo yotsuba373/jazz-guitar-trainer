@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import type { LabelMode, RootName, Progression, ChordNotationPrefs, ChartLayout, SongKey, ChordSlot, ApproachType, GeneratedPhrase, PhraseConfig } from './types';
+import type { LabelMode, RootName, Progression, ChordNotationPrefs, ChartLayout, SongKey, ChordSlot, ApproachType, GeneratedPhrase, PhraseConfig, PhraseNote, PhraseContour } from './types';
 import { MODE_TEMPLATES, ROOTS, MODE_COLORS } from './constants';
 import {
   buildFretMap, generatePositions, generateDimPositions, resolveMode,
@@ -388,14 +388,25 @@ export default function App() {
   useEffect(() => { if (!progMode) setPhraseAutoPlay(false); }, [progMode]);
 
   // Generate phrases for ALL chords in the active progression
+  // Phrases are chained in playback order: each phrase's last note feeds the next
+  // phrase's startHint for smooth voice leading across chord boundaries.
   const generatePhraseMap = useCallback(() => {
     if (!activeProg) { setPhraseMap(new Map()); return; }
     const chords = activeProg.chords;
     const effAll = computeEffectiveSelections(chords, activeProg.songKey);
     const map = new Map<number, GeneratedPhrase>();
-    const config: PhraseConfig = { approachTypes: phraseApproachTypes };
 
-    for (let i = 0; i < chords.length; i++) {
+    // Process in playback order (respecting repeats/endings) for proper chaining
+    const seq = buildPlaybackSeq(getChartLayout(activeProg));
+
+    let prevLastNote: PhraseNote | undefined;
+    let prevContour: PhraseContour | undefined;
+    let prevMotif: number[] | undefined;
+
+    for (const step of seq) {
+      const i = step.chordIdx;
+      if (map.has(i)) continue; // already generated (from repeat)
+
       const chord = chords[i];
       const eff = effAll[i];
       if (!chord || !eff || !QUALITY_TO_MODES[chord.quality]) continue;
@@ -410,6 +421,7 @@ export default function App() {
 
       // Target: next chord's 3rd (wrap-around for last chord)
       let targetThirdNote: string | undefined;
+      let nextChordContext: PhraseConfig['nextChordContext'] | undefined;
       const nextIdx = (i + 1) % chords.length;
       if (nextIdx !== i) {
         const nextChord = chords[nextIdx];
@@ -419,13 +431,44 @@ export default function App() {
           if (nextMode.notes.length <= 7) {
             const gt = getGuideTones(nextMode);
             targetThirdNote = gt.third;
+            nextChordContext = {
+              thirdNote: gt.third,
+              seventhNote: gt.seventh,
+              rootNote: nextMode.notes[0],
+              quality: nextChord.quality,
+            };
           }
         }
       }
 
+      // Phrase length matches chord duration (2-beat → 4 notes, 4-beat → 8 notes)
+      const phraseLength = Math.min(8, Math.max(4, Math.round(step.beats * 2)));
+
+      const config: PhraseConfig = {
+        approachTypes: phraseApproachTypes,
+        startHint: prevLastNote ? {
+          noteName: prevLastNote.noteName,
+          stringIdx: prevLastNote.stringIdx,
+          fret: prevLastNote.fret,
+          semitone: prevLastNote.semitone,
+        } : undefined,
+        phraseLength,
+        prevContour,
+        nextChordContext,
+        prevMotif,
+      };
+
       try {
-        map.set(i, generatePhrase(pos, chordMode, chordFretMap, config, targetThirdNote));
-      } catch { /* skip failed generations */ }
+        const phrase = generatePhrase(pos, chordMode, chordFretMap, config, targetThirdNote);
+        map.set(i, phrase);
+        prevLastNote = phrase.notes[phrase.notes.length - 1];
+        prevContour = phrase.config.contour;
+        prevMotif = phrase.motif;
+      } catch {
+        prevLastNote = undefined; // reset chain on failure
+        prevContour = undefined;
+        prevMotif = undefined;
+      }
     }
     setPhraseMap(map);
   }, [activeProg, phraseApproachTypes]);
@@ -477,9 +520,7 @@ export default function App() {
           if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
           const ctx = audioCtxRef.current;
           const eighthDur = (60 / bpm) / 2;
-          const chordBeats = seq[playPosRef.current]?.beats ?? 4;
-          const maxNotes = Math.min(8, Math.round(chordBeats * 2));
-          activePhraseStopRef.current = schedulePhrase(ctx, phrase, ctx.currentTime, eighthDur, noteVolumeRef.current, maxNotes);
+          activePhraseStopRef.current = schedulePhrase(ctx, phrase, ctx.currentTime, eighthDur, noteVolumeRef.current);
         }
       }
     }
@@ -518,9 +559,7 @@ export default function App() {
           if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
           const ctx = audioCtxRef.current;
           const eighthDur = (60 / bpm) / 2;
-          const nextStep = seq[nextPos];
-          const maxNotes = Math.min(8, Math.round((nextStep?.beats ?? 4) * 2));
-          activePhraseStopRef.current = schedulePhrase(ctx, phrase, ctx.currentTime, eighthDur, noteVolumeRef.current, maxNotes);
+          activePhraseStopRef.current = schedulePhrase(ctx, phrase, ctx.currentTime, eighthDur, noteVolumeRef.current);
         }
       }
 
@@ -672,6 +711,7 @@ export default function App() {
 
     // In progression mode, compute next chord's 3rd as target
     let targetThirdNote: string | undefined;
+    let nextChordCtx: PhraseConfig['nextChordContext'] | undefined;
     if (progMode && activeProg) {
       const nextChord = activeProg.chords[activeChordIdx + 1];
       const nextEff = effectiveAll[activeChordIdx + 1];
@@ -679,10 +719,16 @@ export default function App() {
         const nextMode = resolveMode(nextChord.rootName, MODE_TEMPLATES[nextEff.modeIdx]);
         const gt = getGuideTones(nextMode);
         targetThirdNote = gt.third;
+        nextChordCtx = {
+          thirdNote: gt.third,
+          seventhNote: gt.seventh,
+          rootNote: nextMode.notes[0],
+          quality: nextChord.quality,
+        };
       }
     }
 
-    const config = { approachTypes: phraseApproachTypes };
+    const config: PhraseConfig = { approachTypes: phraseApproachTypes, nextChordContext: nextChordCtx };
     const phrase = generatePhrase(pos, mode, fretMap, config, targetThirdNote);
 
     setPhraseHistory(prev => {

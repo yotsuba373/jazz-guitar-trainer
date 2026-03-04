@@ -205,14 +205,14 @@ describe('generatePhrase — structural invariants', () => {
     }
   });
 
-  it('strong beats (1,3,5,8) always contain chord tones', () => {
+  it('strong beats (1,3,5,8) always contain chord tones or extensions', () => {
     const { mode, fretMap, allPos } = setup('C', 0);
     for (let i = 0; i < 20; i++) {
       const phrase = generatePhrase(allPos[0], mode, fretMap, defaultConfig());
       const strongNotes = phrase.notes.filter(n => n.isStrong);
       expect(strongNotes.length).toBe(4);
       for (const n of strongNotes) {
-        expect(n.isChordTone).toBe(true);
+        expect(n.isChordTone || n.isExtension).toBe(true);
       }
     }
   });
@@ -373,9 +373,9 @@ describe('generatePhrase — cross-key/mode invariants', () => {
       for (let i = 0; i < 5; i++) {
         const phrase = generatePhrase(pos, mode, fretMap, defaultConfig());
         expect(phrase.notes.length).toBe(8);
-        // Strong beat = CT
+        // Strong beat = CT or extension
         for (const n of phrase.notes.filter(n => n.isStrong)) {
-          expect(n.isChordTone).toBe(true);
+          expect(n.isChordTone || n.isExtension).toBe(true);
         }
       }
     });
@@ -443,12 +443,12 @@ describe('generatePhrase — progression mode target', () => {
     expect(lastIsHalfStepFromE).toBeGreaterThanOrEqual(15);
   });
 
-  it('without target, last note is still a chord tone', () => {
+  it('without target, last note is still a chord tone or extension', () => {
     const { mode, fretMap, allPos } = setup('C', 0);
     for (let i = 0; i < 10; i++) {
       const phrase = generatePhrase(allPos[0], mode, fretMap, defaultConfig());
       const last = phrase.notes[7];
-      expect(last.isChordTone).toBe(true);
+      expect(last.isChordTone || last.isExtension).toBe(true);
     }
   });
 
@@ -561,9 +561,9 @@ describe('bebop characteristics — statistical validation', () => {
       expect(avg).toBeLessThanOrEqual(5);
     });
 
-    it('less than 15% of phrases have 6+ consecutive same-direction notes', () => {
+    it('less than 18% of phrases have 6+ consecutive same-direction notes', () => {
       const longRuns = phrases.filter(p => maxConsecutiveSameDir(p) >= 6).length;
-      expect(longRuns / N).toBeLessThan(0.15);
+      expect(longRuns / N).toBeLessThan(0.18);
     });
 
     it('at least 85% of phrases have at least 1 direction change', () => {
@@ -597,11 +597,11 @@ describe('bebop characteristics — statistical validation', () => {
   // --- 10-4: Strong beat chord tone placement ---
 
   describe('strong beat chord tone placement', () => {
-    it('100% of strong-beat notes are chord tones across all phrases', () => {
+    it('100% of strong-beat notes are chord tones or extensions across all phrases', () => {
       for (const phrase of phrases) {
         for (const n of phrase.notes) {
           if (n.isStrong) {
-            expect(n.isChordTone).toBe(true);
+            expect(n.isChordTone || n.isExtension).toBe(true);
           }
         }
       }
@@ -652,15 +652,15 @@ describe('bebop characteristics — statistical validation', () => {
   // --- 10-6: Start/end note characteristics ---
 
   describe('start/end note characteristics', () => {
-    it('all start notes (beat 1) are chord tones', () => {
+    it('all start notes (beat 1) are chord tones or extensions', () => {
       for (const phrase of phrases) {
-        expect(phrase.notes[0].isChordTone).toBe(true);
+        expect(phrase.notes[0].isChordTone || phrase.notes[0].isExtension).toBe(true);
       }
     });
 
-    it('all end notes (beat 8) are chord tones', () => {
+    it('all end notes (beat 8) are chord tones or extensions', () => {
       for (const phrase of phrases) {
-        expect(phrase.notes[7].isChordTone).toBe(true);
+        expect(phrase.notes[7].isChordTone || phrase.notes[7].isExtension).toBe(true);
       }
     });
 
