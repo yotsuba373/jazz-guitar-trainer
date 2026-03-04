@@ -42,7 +42,7 @@ export function PhraseControls({
   animSpeed, onAnimSpeedChange,
   chordQuality,
   onPlayPhrase, isPhraseAudioPlaying, hasPhrase,
-  progMode, phraseAutoPlay, onTogglePhraseAutoPlay, onRegeneratePhraseMap,
+  progMode, phraseAutoPlay, onTogglePhraseAutoPlay, onRegeneratePhraseMap: _onRegeneratePhraseMap,
   isPlaying,
 }: PhraseControlsProps) {
   const isDom7 = chordQuality ? DOM7_QUALITIES.has(chordQuality) : false;
@@ -102,19 +102,6 @@ export function PhraseControls({
             }}>
             Auto ▶
           </button>
-          {phraseAutoPlay && onRegeneratePhraseMap && (
-            <button
-              onClick={onRegeneratePhraseMap}
-              className={`${btnBase} text-[10px] px-2 py-[4px]`}
-              title="フレーズ再生成"
-              style={{
-                border: `1px solid ${PHRASE_COLOR}60`,
-                background: '#1a1a1a',
-                color: PHRASE_COLOR,
-              }}>
-              ↻
-            </button>
-          )}
         </div>
       )}
 
