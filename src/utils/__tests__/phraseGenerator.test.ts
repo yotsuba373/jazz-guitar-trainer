@@ -720,3 +720,124 @@ describe('bebop characteristics — statistical validation', () => {
     }
   });
 });
+
+// =========================================================================
+// 9. Generation metadata recording
+// =========================================================================
+
+describe('Generation metadata', () => {
+  it('skeleton meta is recorded with pattern label and direction', () => {
+    const { mode, fretMap, allPos } = setup('C', 0);
+    const phrase = generatePhrase(allPos[0], mode, fretMap, defaultConfig());
+    expect(phrase.skeleton).toBeDefined();
+    expect(phrase.skeleton!.patternLabel).toMatch(/^[R357]→[R357]→[R357]→[R357]$/);
+    expect(['asc', 'desc', 'mixed']).toContain(phrase.skeleton!.direction);
+  });
+
+  it('goalReason is always a non-empty string', () => {
+    const { mode, fretMap, allPos } = setup('C', 0);
+    for (let i = 0; i < 10; i++) {
+      const phrase = generatePhrase(allPos[0], mode, fretMap, defaultConfig());
+      expect(typeof phrase.goalReason).toBe('string');
+      expect(phrase.goalReason!.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('goalReason reflects progression mode reasons', () => {
+    const { mode, fretMap, allPos } = setup('G', 4); // G Mixolydian
+    const config = defaultConfig({
+      nextChordContext: { thirdNote: 'E', seventhNote: 'B', rootNote: 'C', quality: 'maj7' },
+    });
+    const reasons = new Set<string>();
+    for (let i = 0; i < 30; i++) {
+      const phrase = generatePhrase(allPos[0], mode, fretMap, config, 'E');
+      reasons.add(phrase.goalReason!);
+    }
+    // Should see progression-mode reasons
+    const progReasons = ['7th→次3rd半音解決', '次3rdへ半音VL', '次3rd一致'];
+    expect([...reasons].some(r => progReasons.includes(r))).toBe(true);
+  });
+
+  it('isSkeletonBeat marks beats 1, 3, 5, and goal beat', () => {
+    const { mode, fretMap, allPos } = setup('C', 0);
+    for (let i = 0; i < 10; i++) {
+      const phrase = generatePhrase(allPos[0], mode, fretMap, defaultConfig());
+      const skelBeats = phrase.notes.filter(n => n.isSkeletonBeat).map(n => n.beatPosition);
+      expect(skelBeats).toContain(1);
+      expect(skelBeats).toContain(8); // goal beat
+      // beats 3 and 5 should also be marked for 8-note phrases
+      expect(skelBeats).toContain(3);
+      expect(skelBeats).toContain(5);
+    }
+  });
+
+  describe('digital pattern tagging (N=50 statistical)', () => {
+    const N = 50;
+    let phrases: GeneratedPhrase[] = [];
+
+    beforeAll(() => {
+      const { mode, fretMap, allPos } = setup('C', 4); // C Mixolydian
+      for (let i = 0; i < N; i++) {
+        phrases.push(generatePhrase(allPos[0], mode, fretMap, defaultConfig()));
+      }
+    });
+
+    it('at least 15% of phrases have digital pattern tags', () => {
+      const withDP = phrases.filter(p => p.notes.some(n => n.digitalPattern)).length;
+      expect(withDP / N).toBeGreaterThanOrEqual(0.15);
+    });
+
+    it('digital pattern tags have correct structure', () => {
+      for (const phrase of phrases) {
+        const dpNotes = phrase.notes.filter(n => n.digitalPattern);
+        for (const n of dpNotes) {
+          expect(n.digitalPattern!.name).toBeTruthy();
+          expect(typeof n.digitalPattern!.position).toBe('number');
+          expect(n.digitalPattern!.size).toBeGreaterThan(0);
+        }
+      }
+    });
+  });
+
+  describe('bebop passing flag invariants', () => {
+    const N = 50;
+    let phrases: GeneratedPhrase[] = [];
+
+    beforeAll(() => {
+      const { mode, fretMap, allPos } = setup('C', 4); // C Mixolydian
+      for (let i = 0; i < N; i++) {
+        phrases.push(generatePhrase(allPos[0], mode, fretMap, defaultConfig()));
+      }
+    });
+
+    it('bebop passing tones (if any) are only on weak beats', () => {
+      for (const phrase of phrases) {
+        for (const n of phrase.notes) {
+          if (n.isBebopPassing) {
+            expect(n.isStrong).toBe(false);
+          }
+        }
+      }
+    });
+
+    it('bebop passing tones (if any) are not chord tones', () => {
+      for (const phrase of phrases) {
+        for (const n of phrase.notes) {
+          if (n.isBebopPassing) {
+            expect(n.isChordTone).toBe(false);
+          }
+        }
+      }
+    });
+
+    it('isBebopPassing is only set on non-approach notes', () => {
+      for (const phrase of phrases) {
+        for (const n of phrase.notes) {
+          if (n.isBebopPassing) {
+            expect(n.isApproach).toBe(false);
+          }
+        }
+      }
+    });
+  });
+});

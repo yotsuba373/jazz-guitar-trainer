@@ -166,7 +166,7 @@ describe('Function labels', () => {
     expect(analysis.notes[1].functionLabel).toBe('CT (3rd)');
   });
 
-  it('approach note without group shows "Chromatic"', () => {
+  it('approach note without group shows "クロマチック"', () => {
     const mode = getMode('C', 'ionian');
     const notes = [
       makePhraseNote({ noteName: 'D♭', stringIdx: 3, fret: 4, semitone: 1, isApproach: true, beatPosition: 2, isStrong: false }),
@@ -176,10 +176,10 @@ describe('Function labels', () => {
       config: { approachTypes: ['single-below'], contour: 'arch' },
     };
     const analysis = analyzePhrase(phrase, mode);
-    expect(analysis.notes[0].functionLabel).toBe('Chromatic');
+    expect(analysis.notes[0].functionLabel).toBe('クロマチック');
   });
 
-  it('scale tone shows "Scale tone"', () => {
+  it('scale tone shows "スケール音"', () => {
     const mode = getMode('C', 'ionian');
     const notes = [
       makePhraseNote({ noteName: 'D', stringIdx: 3, fret: 5, semitone: 2, beatPosition: 2, isStrong: false }),
@@ -189,7 +189,7 @@ describe('Function labels', () => {
       config: { approachTypes: [], contour: 'arch' },
     };
     const analysis = analyzePhrase(phrase, mode);
-    expect(analysis.notes[0].functionLabel).toBe('Scale tone');
+    expect(analysis.notes[0].functionLabel).toBe('スケール音');
   });
 
   it('approach group notes get pattern labels', () => {
@@ -207,8 +207,8 @@ describe('Function labels', () => {
       config: { approachTypes: ['enclosure'], contour: 'arch' },
     };
     const analysis = analyzePhrase(phrase, mode);
-    expect(analysis.notes[0].functionLabel).toBe('Encl. above');
-    expect(analysis.notes[1].functionLabel).toBe('Encl. below');
+    expect(analysis.notes[0].functionLabel).toBe('エンクロージャー上');
+    expect(analysis.notes[1].functionLabel).toBe('エンクロージャー下');
     expect(analysis.notes[2].functionLabel).toBe('CT (R)');
   });
 });
@@ -286,7 +286,7 @@ describe('Summary statistics', () => {
     const phrase = genPhrase('A', 'aeolian', { approachTypes: [], contour: 'arch' });
     const mode = getMode('A', 'aeolian');
     const { summary } = analyzePhrase(phrase, mode);
-    expect(summary.contourLabel).toBe('Arch');
+    expect(summary.contourLabel).toBe('アーチ');
   });
 
   it('CT + approach + scale counts sum to 8', () => {
@@ -343,6 +343,191 @@ describe('Integration', () => {
         for (let i = 1; i < 8; i++) {
           expect(analysis.notes[i].intervalFromPrev).toBeGreaterThanOrEqual(0);
         }
+      }
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Generation metadata in analysis
+// ---------------------------------------------------------------------------
+
+describe('Skeleton label in summary', () => {
+  it('skeletonLabel is present with direction arrow', () => {
+    const config: PhraseConfig = { approachTypes: [] };
+    const phrase = genPhrase('C', 'ionian', config);
+    const mode = getMode('C', 'ionian');
+    const { summary } = analyzePhrase(phrase, mode);
+    expect(summary.skeletonLabel).toBeDefined();
+    expect(summary.skeletonLabel).toMatch(/[↑↓↕]/);
+  });
+
+  it('skeletonLabel contains pattern like R→3→5→7', () => {
+    const config: PhraseConfig = { approachTypes: [] };
+    const phrase = genPhrase('C', 'mixolydian', config);
+    const mode = getMode('C', 'mixolydian');
+    const { summary } = analyzePhrase(phrase, mode);
+    expect(summary.skeletonLabel).toMatch(/[R357]→[R357]→[R357]→[R357]/);
+  });
+});
+
+describe('Goal reason in summary', () => {
+  it('goalReason is passed through from phrase', () => {
+    const config: PhraseConfig = { approachTypes: [] };
+    const phrase = genPhrase('C', 'ionian', config);
+    const mode = getMode('C', 'ionian');
+    const { summary } = analyzePhrase(phrase, mode);
+    expect(summary.goalReason).toBeDefined();
+    expect(typeof summary.goalReason).toBe('string');
+    expect(summary.goalReason!.length).toBeGreaterThan(0);
+  });
+});
+
+describe('Digital pattern passthrough', () => {
+  it('digitalPattern tags are passed to NoteAnalysis', () => {
+    const mode = getMode('C', 'ionian');
+    const notes: PhraseNote[] = [
+      makePhraseNote({ noteName: 'C', stringIdx: 2, fret: 5, semitone: 0, isChordTone: true, beatPosition: 1 }),
+      makePhraseNote({ noteName: 'D', stringIdx: 2, fret: 7, semitone: 2, beatPosition: 2, isStrong: false,
+        digitalPattern: { name: '1-2-3-5', position: 0, size: 3 } }),
+      makePhraseNote({ noteName: 'E', stringIdx: 2, fret: 9, semitone: 4, isChordTone: true, beatPosition: 3,
+        digitalPattern: { name: '1-2-3-5', position: 1, size: 3 } }),
+    ];
+    const phrase: GeneratedPhrase = {
+      notes, posId: 1, modeKey: 'ionian', rootName: 'C',
+      config: { approachTypes: [], contour: 'arch' },
+    };
+    const analysis = analyzePhrase(phrase, mode);
+    expect(analysis.notes[1].digitalPattern).toEqual({ name: '1-2-3-5', position: 0, size: 3 });
+    expect(analysis.notes[2].digitalPattern).toEqual({ name: '1-2-3-5', position: 1, size: 3 });
+    expect(analysis.notes[0].digitalPattern).toBeUndefined();
+  });
+});
+
+describe('Bebop and Extension function labels', () => {
+  it('bebop passing tone gets "Bebop (degree)" label', () => {
+    const mode = getMode('C', 'mixolydian');
+    const notes: PhraseNote[] = [
+      makePhraseNote({ noteName: 'B', stringIdx: 1, fret: 0, semitone: 11, beatPosition: 2, isStrong: false, isBebopPassing: true }),
+    ];
+    const phrase: GeneratedPhrase = {
+      notes, posId: 1, modeKey: 'mixolydian', rootName: 'C',
+      config: { approachTypes: [], contour: 'arch' },
+    };
+    const analysis = analyzePhrase(phrase, mode);
+    expect(analysis.notes[0].functionLabel).toBe('ビバップ経過音 (7)');
+    expect(analysis.notes[0].isBebopPassing).toBe(true);
+  });
+
+  it('extension tone gets "Ext. (degree)" label', () => {
+    const mode = getMode('C', 'ionian');
+    // D = 9th (2nd degree) in C Ionian
+    const notes: PhraseNote[] = [
+      makePhraseNote({ noteName: 'D', stringIdx: 3, fret: 7, semitone: 2, beatPosition: 3, isStrong: true, isExtension: true }),
+    ];
+    const phrase: GeneratedPhrase = {
+      notes, posId: 1, modeKey: 'ionian', rootName: 'C',
+      config: { approachTypes: [], contour: 'arch' },
+    };
+    const analysis = analyzePhrase(phrase, mode);
+    expect(analysis.notes[0].functionLabel).toBe('テンション (2)');
+    expect(analysis.notes[0].isExtension).toBe(true);
+  });
+});
+
+describe('Skeleton beat passthrough', () => {
+  it('isSkeletonBeat is passed to NoteAnalysis', () => {
+    const mode = getMode('C', 'ionian');
+    const notes: PhraseNote[] = [
+      makePhraseNote({ noteName: 'C', stringIdx: 2, fret: 5, semitone: 0, isChordTone: true, beatPosition: 1, isSkeletonBeat: true }),
+      makePhraseNote({ noteName: 'D', stringIdx: 2, fret: 7, semitone: 2, beatPosition: 2, isStrong: false }),
+    ];
+    const phrase: GeneratedPhrase = {
+      notes, posId: 1, modeKey: 'ionian', rootName: 'C',
+      config: { approachTypes: [], contour: 'arch' },
+    };
+    const analysis = analyzePhrase(phrase, mode);
+    expect(analysis.notes[0].isSkeletonBeat).toBe(true);
+    expect(analysis.notes[1].isSkeletonBeat).toBeUndefined();
+  });
+});
+
+describe('Motif label formatting', () => {
+  it('motifLabel formats signed intervals', () => {
+    const mode = getMode('C', 'ionian');
+    const phrase: GeneratedPhrase = {
+      notes: [
+        makePhraseNote({ noteName: 'C', stringIdx: 2, fret: 5, semitone: 0, isChordTone: true, beatPosition: 1 }),
+      ],
+      posId: 1, modeKey: 'ionian', rootName: 'C',
+      config: { approachTypes: [], contour: 'arch' },
+      motif: [3, -2],
+    };
+    const { summary } = analyzePhrase(phrase, mode);
+    expect(summary.motifLabel).toBe('↑3半音, ↓2半音');
+  });
+
+  it('motifLabel is undefined when no motif', () => {
+    const mode = getMode('C', 'ionian');
+    const phrase: GeneratedPhrase = {
+      notes: [
+        makePhraseNote({ noteName: 'C', stringIdx: 2, fret: 5, semitone: 0, isChordTone: true, beatPosition: 1 }),
+      ],
+      posId: 1, modeKey: 'ionian', rootName: 'C',
+      config: { approachTypes: [], contour: 'arch' },
+    };
+    const { summary } = analyzePhrase(phrase, mode);
+    expect(summary.motifLabel).toBeUndefined();
+  });
+});
+
+describe('Narrative generation', () => {
+  it('narrative includes skeleton and goal reason', () => {
+    const config: PhraseConfig = { approachTypes: [] };
+    const phrase = genPhrase('C', 'ionian', config);
+    const mode = getMode('C', 'ionian');
+    const analysis = analyzePhrase(phrase, mode);
+    expect(analysis.narrative).toBeDefined();
+    expect(analysis.narrative!.length).toBeGreaterThan(0);
+    // Should contain skeleton info
+    expect(analysis.narrative).toMatch(/骨格/);
+    // Should contain goal info
+    expect(analysis.narrative).toMatch(/ゴール/);
+  });
+
+  it('narrative includes approach patterns when present', () => {
+    const config: PhraseConfig = { approachTypes: ['single-below', 'enclosure'] };
+    let found = false;
+    for (let i = 0; i < 30; i++) {
+      const phrase = genPhrase('C', 'mixolydian', config);
+      const mode = getMode('C', 'mixolydian');
+      const analysis = analyzePhrase(phrase, mode);
+      if (analysis.summary.approachPatternsUsed.length > 0) {
+        expect(analysis.narrative).toMatch(/半音|エンクロージャー/);
+        found = true;
+        break;
+      }
+    }
+    expect(found).toBe(true);
+  });
+});
+
+describe('Bebop/Extension counts in summary', () => {
+  it('bebopPassingCount and extensionCount are computed', () => {
+    const config: PhraseConfig = { approachTypes: ['single-below', 'enclosure'] };
+    const mode = getMode('C', 'mixolydian');
+    const fretMap = buildFretMap(mode.semi, mode.notes);
+    const positions = generatePositions(fretMap, mode.notes);
+    // Generate many phrases and check that counts are valid numbers
+    for (let i = 0; i < 10; i++) {
+      const phrase = generatePhrase(positions[0], mode, fretMap, config);
+      const { summary } = analyzePhrase(phrase, mode);
+      // Counts should be undefined (0) or positive integers
+      if (summary.bebopPassingCount !== undefined) {
+        expect(summary.bebopPassingCount).toBeGreaterThan(0);
+      }
+      if (summary.extensionCount !== undefined) {
+        expect(summary.extensionCount).toBeGreaterThan(0);
       }
     }
   });

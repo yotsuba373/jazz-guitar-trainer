@@ -30,4 +30,6 @@ export type {
   NoteAnalysis,
   PhraseAnalysisSummary,
   PhraseAnalysis,
+  SkeletonMeta,
+  DigitalPatternTag,
 } from './music';
