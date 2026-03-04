@@ -25,7 +25,7 @@ const APPROACH_TYPE_SHORT: Record<string, string> = {
 export function PhraseAnalysisPanel({ phrase, mode }: PhraseAnalysisPanelProps) {
   const [open, setOpen] = useState(false);
   const analysis = useMemo(() => analyzePhrase(phrase, mode), [phrase, mode]);
-  const { notes, summary, narrative } = analysis;
+  const { notes, summary } = analysis;
 
   const patternStr = summary.approachPatternsUsed.length > 0
     ? summary.approachPatternsUsed.map(p => `${APPROACH_TYPE_SHORT[p.type] ?? p.type}×${p.count}`).join(' ')

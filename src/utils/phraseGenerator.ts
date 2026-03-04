@@ -892,11 +892,11 @@ export function generatePhrase(
     const lastNote = notes[notes.length - 1];
     let resolvedGoal = nearestInstance(goalNote.noteName, lastNote, activeCtPool) ?? goalNote;
 
-    // Distance guard: if resolved goal is too far from previous note (>5st), pick the
-    // nearest CT of ANY name instead (avoids octave-jump same-name resolution)
+    // Distance guard: if resolved goal is too far from previous note (>7st), pick a
+    // closer CT, preferring VL-compatible ones (half-step from next chord's 3rd)
     const goalDist = Math.abs(absolutePitch(resolvedGoal) - absolutePitch(lastNote));
-    if (goalDist > 5) {
-      const closerCTs = activeCtPool
+    if (goalDist > 7) {
+      let closerCTs = activeCtPool
         .filter(n =>
           !(n.stringIdx === lastNote.stringIdx && n.fret === lastNote.fret) &&
           absolutePitch(n) !== absolutePitch(lastNote)
@@ -905,6 +905,25 @@ export function generatePhrase(
           Math.abs(absolutePitch(a) - absolutePitch(lastNote)) -
           Math.abs(absolutePitch(b) - absolutePitch(lastNote))
         );
+
+      // If we have VL context, prefer CTs that are half-step from next 3rd
+      if (config.nextChordContext) {
+        const nextThirdSemi = findSemitone(config.nextChordContext.thirdNote);
+        if (nextThirdSemi !== null) {
+          const vlCompatible = closerCTs.filter(n => {
+            const d = Math.min(
+              Math.abs(n.semitone - nextThirdSemi),
+              12 - Math.abs(n.semitone - nextThirdSemi),
+            );
+            return d <= 1; // half-step or unison with next 3rd
+          });
+          if (vlCompatible.length > 0 &&
+              Math.abs(absolutePitch(vlCompatible[0]) - absolutePitch(lastNote)) < goalDist) {
+            closerCTs = vlCompatible;
+          }
+        }
+      }
+
       if (closerCTs.length > 0 &&
           Math.abs(absolutePitch(closerCTs[0]) - absolutePitch(lastNote)) < goalDist) {
         resolvedGoal = closerCTs[0];
@@ -1072,7 +1091,7 @@ function planCtSkeleton(
   goalNote: PoolNote,
   contour: PhraseContour,
   pitchRange: { min: number; max: number },
-  startHint?: { stringIdx: number; fret: number },
+  startHint?: { noteName: string; stringIdx: number; fret: number; semitone: number },
   phraseLength = 8,
   mode?: Mode,
 ): CtSkeleton {
@@ -1087,10 +1106,10 @@ function planCtSkeleton(
     const beat1TargetPitch = startHint ? absolutePitch(startHint) : targetPitch(0);
     const beat1 = pickCtNearPitch(ctPool, beat1TargetPitch, [goalNote]);
     const beat3 = goalBeat >= 6
-      ? pickCtNearPitch(ctPool, targetPitch(2), [beat1, goalNote])
+      ? pickCtNearPitch(ctPool, targetPitch(2), [beat1, goalNote], beat1)
       : undefined;
     const beat5 = goalBeat >= 8
-      ? pickCtNearPitch(ctPool, targetPitch(4), [beat1, beat3!, goalNote])
+      ? pickCtNearPitch(ctPool, targetPitch(4), [beat1, beat3!, goalNote], beat3)
       : undefined;
     return { beat1, beat3, beat5, goal: goalNote, goalBeat };
   }
@@ -1098,6 +1117,12 @@ function planCtSkeleton(
   // --- Arpeggio pattern selection ---
   const goalCtIdx = mode.chordTones.indexOf(goalNote.noteName);
   const affineDirs = CONTOUR_PATTERN_AFFINITY[contour];
+
+  // Determine ideal beat 1 CT from startHint (strong coupling for phrase continuity)
+  let idealBeat1CtIdx: number | null = null;
+  if (startHint?.noteName) {
+    idealBeat1CtIdx = findIdealBeat1CtIdx(startHint, mode, ctPool);
+  }
 
   const patternWeights = ARPEGGIO_PATTERNS.map(p => {
     let w = 1;
@@ -1109,15 +1134,12 @@ function planCtSkeleton(
     // Guide tone emphasis: beats 1,3 with 3rd or 7th (ctIdx 1 or 3)
     if (p.ctIndices[0] === 1 || p.ctIndices[0] === 3) w += 3;
     if (p.ctIndices[1] === 1 || p.ctIndices[1] === 3) w += 3;
-    // StartHint proximity
-    if (startHint) {
-      const hintPitch = absolutePitch(startHint);
-      const startCtName = mode.chordTones[p.ctIndices[0]];
-      const instances = ctPool.filter(n => n.noteName === startCtName);
-      if (instances.length > 0) {
-        const nearest = Math.min(...instances.map(n => Math.abs(absolutePitch(n) - hintPitch)));
-        if (nearest <= 3) w += 3;
-        else if (nearest <= 5) w += 1;
+    // StartHint continuity: strong coupling (replaces old +3/+1 proximity)
+    if (idealBeat1CtIdx !== null) {
+      if (p.ctIndices[0] === idealBeat1CtIdx) {
+        w += 12;
+      } else {
+        w = Math.max(1, Math.floor(w * 0.4));
       }
     }
     return Math.max(1, w);
@@ -1130,23 +1152,26 @@ function planCtSkeleton(
   const patternMeta: SkeletonMeta = {
     patternLabel: chosenPattern.ctIndices.map(i => CT_LABEL_SHORT[i]).join('→'),
     direction: chosenPattern.direction,
+    continuityCtIdx: idealBeat1CtIdx ?? undefined,
   };
 
   // Resolve each skeleton beat to a physical position
   const beat1TargetPitch = startHint ? absolutePitch(startHint) : targetPitch(0);
   const beat1CtName = mode.chordTones[chosenPattern.ctIndices[0]];
-  const beat1 = resolveSkeletonBeat(beat1CtName, ctPool, beat1TargetPitch, []);
+  const beat1 = startHint
+    ? resolveSkeletonBeatStrict(beat1CtName, ctPool, beat1TargetPitch)
+    : resolveSkeletonBeat(beat1CtName, ctPool, beat1TargetPitch, []);
 
   let beat3: PoolNote | undefined;
   if (goalBeat >= 6) {
     const beat3CtName = mode.chordTones[chosenPattern.ctIndices[1]];
-    beat3 = resolveSkeletonBeat(beat3CtName, ctPool, targetPitch(2), [beat1]);
+    beat3 = resolveSkeletonBeat(beat3CtName, ctPool, targetPitch(2), [beat1], beat1);
   }
 
   let beat5: PoolNote | undefined;
   if (goalBeat >= 8) {
     const beat5CtName = mode.chordTones[chosenPattern.ctIndices[2]];
-    beat5 = resolveSkeletonBeat(beat5CtName, ctPool, targetPitch(4), [beat1, beat3!]);
+    beat5 = resolveSkeletonBeat(beat5CtName, ctPool, targetPitch(4), [beat1, beat3!], beat3);
   }
 
   return { beat1, beat3, beat5, goal: goalNote, goalBeat, patternMeta };
@@ -1157,11 +1182,12 @@ function resolveSkeletonBeat(
   ctPool: PoolNote[],
   targetPitch: number,
   avoid: PoolNote[],
+  prevBeat?: PoolNote,
 ): PoolNote {
   const candidates = ctPool.filter(n => n.noteName === ctName &&
     !avoid.some(a => a.stringIdx === n.stringIdx && a.fret === n.fret));
   if (candidates.length === 0) {
-    return pickCtNearPitch(ctPool, targetPitch, avoid);
+    return pickCtNearPitch(ctPool, targetPitch, avoid, prevBeat);
   }
   const weights = candidates.map(c => {
     const dist = Math.abs(absolutePitch(c) - targetPitch);
@@ -1170,8 +1196,62 @@ function resolveSkeletonBeat(
       const aDist = Math.abs(absolutePitch(c) - absolutePitch(a));
       if (aDist > 0 && aDist <= 2) w -= 15;
     }
+    // Inter-skeleton proximity: penalise large gaps from previous skeleton beat
+    if (prevBeat) {
+      const interDist = Math.abs(absolutePitch(c) - absolutePitch(prevBeat));
+      if (interDist > 10) w = Math.max(1, Math.floor(w * 0.15));
+      else if (interDist > 7) w = Math.max(1, Math.floor(w * 0.4));
+    }
     return Math.max(1, w);
   });
+  return pickWeighted(candidates, weights);
+}
+
+// ---------------------------------------------------------------------------
+// startHint continuity helpers
+// ---------------------------------------------------------------------------
+
+/** Find the CT index closest to startHint pitch, preferring half-step resolution */
+function findIdealBeat1CtIdx(
+  startHint: { noteName: string; stringIdx: number; fret: number; semitone: number },
+  mode: Mode,
+  ctPool: PoolNote[],
+): number | null {
+  const hintPitch = absolutePitch(startHint);
+  let bestCtIdx = -1;
+  let bestDist = Infinity;
+
+  for (let ci = 0; ci < mode.chordTones.length; ci++) {
+    const ctName = mode.chordTones[ci];
+    const instances = ctPool.filter(n => n.noteName === ctName);
+    if (instances.length === 0) continue;
+    const minDist = Math.min(...instances.map(n => Math.abs(absolutePitch(n) - hintPitch)));
+    // Half-step resolution priority (pitch class distance ≤ 1)
+    const semiDist = Math.min(
+      ((startHint.semitone - instances[0].semitone) + 12) % 12,
+      ((instances[0].semitone - startHint.semitone) + 12) % 12,
+    );
+    const effectiveDist = semiDist <= 1 ? Math.min(minDist, 0.5) : minDist;
+    if (effectiveDist < bestDist) {
+      bestDist = effectiveDist;
+      bestCtIdx = ci;
+    }
+  }
+  return bestCtIdx >= 0 ? bestCtIdx : null;
+}
+
+/** Resolve skeleton beat with exponential decay for strict proximity to target */
+function resolveSkeletonBeatStrict(
+  ctName: string, ctPool: PoolNote[], targetPitch: number,
+): PoolNote {
+  const candidates = ctPool.filter(n => n.noteName === ctName);
+  if (candidates.length <= 1) {
+    return candidates[0] ?? [...ctPool].sort((a, b) =>
+      Math.abs(absolutePitch(a) - targetPitch) - Math.abs(absolutePitch(b) - targetPitch))[0];
+  }
+  // Exponential decay: 3st → 37%, 6st → 14%, 9st → 5%
+  const weights = candidates.map(c =>
+    Math.max(0.01, Math.exp(-Math.abs(absolutePitch(c) - targetPitch) / 3)));
   return pickWeighted(candidates, weights);
 }
 
@@ -1179,6 +1259,7 @@ function pickCtNearPitch(
   ctPool: PoolNote[],
   targetPitch: number,
   avoid: PoolNote[],
+  prevBeat?: PoolNote,
 ): PoolNote {
   const avoidNames = new Set(avoid.map(n => n.noteName));
   const candidates = ctPool.filter(n =>
@@ -1196,6 +1277,12 @@ function pickCtNearPitch(
     for (const a of avoid) {
       const aDist = Math.abs(absolutePitch(c) - absolutePitch(a));
       if (aDist > 0 && aDist <= 2) w -= 15;
+    }
+    // Inter-skeleton proximity: penalise large gaps from previous skeleton beat
+    if (prevBeat) {
+      const interDist = Math.abs(absolutePitch(c) - absolutePitch(prevBeat));
+      if (interDist > 10) w = Math.max(1, Math.floor(w * 0.15));
+      else if (interDist > 7) w = Math.max(1, Math.floor(w * 0.4));
     }
     return Math.max(1, w);
   });

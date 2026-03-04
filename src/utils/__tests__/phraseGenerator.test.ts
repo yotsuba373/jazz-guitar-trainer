@@ -722,7 +722,70 @@ describe('bebop characteristics — statistical validation', () => {
 });
 
 // =========================================================================
-// 9. Generation metadata recording
+// 9. startHint continuity (beat 8 → beat 1 phrase chaining)
+// =========================================================================
+
+describe('startHint continuity', () => {
+  it('beat 1 is within 3 semitones of startHint in ≥ 75% of phrases (N=200)', () => {
+    const { mode, fretMap, allPos } = setup('G', 4); // G Mixolydian
+    const pos = allPos[2];
+    // Generate a "previous" phrase to get a realistic startHint
+    const prevPhrase = generatePhrase(pos, mode, fretMap, defaultConfig());
+    const lastNote = prevPhrase.notes[prevPhrase.notes.length - 1];
+    const hint = {
+      noteName: lastNote.noteName,
+      stringIdx: lastNote.stringIdx,
+      fret: lastNote.fret,
+      semitone: lastNote.semitone,
+    };
+
+    let closeCount = 0;
+    const N = 200;
+    for (let i = 0; i < N; i++) {
+      const phrase = generatePhrase(pos, mode, fretMap, defaultConfig({ startHint: hint }));
+      const beat1 = phrase.notes[0];
+      const interval = Math.abs(absolutePitch(beat1) - absolutePitch(hint));
+      if (interval <= 3) closeCount++;
+    }
+    expect(closeCount / N).toBeGreaterThanOrEqual(0.75);
+  });
+
+  it('same key/pos: startHint beat 1 within 3st in ≥ 70% (chaining within same context)', () => {
+    // Chain two C Mixolydian phrases on Pos 3
+    const { mode, fretMap, allPos } = setup('C', 4);
+    const pos = allPos[2];
+
+    let closeCount = 0;
+    const N = 100;
+    for (let i = 0; i < N; i++) {
+      const prev = generatePhrase(pos, mode, fretMap, defaultConfig());
+      const lastNote = prev.notes[prev.notes.length - 1];
+      const hint = {
+        noteName: lastNote.noteName,
+        stringIdx: lastNote.stringIdx,
+        fret: lastNote.fret,
+        semitone: lastNote.semitone,
+      };
+      const next = generatePhrase(pos, mode, fretMap, defaultConfig({ startHint: hint }));
+      const beat1 = next.notes[0];
+      const interval = Math.abs(absolutePitch(beat1) - absolutePitch(hint));
+      if (interval <= 3) closeCount++;
+    }
+    expect(closeCount / N).toBeGreaterThanOrEqual(0.70);
+  });
+
+  it('skeleton metadata records continuityCtIdx when startHint is provided', () => {
+    const { mode, fretMap, allPos } = setup('C', 0);
+    const hint = { noteName: 'B', stringIdx: 1, fret: 7, semitone: 11 };
+    const phrase = generatePhrase(allPos[0], mode, fretMap, defaultConfig({ startHint: hint }));
+    expect(phrase.skeleton).toBeDefined();
+    // B is a half-step from C (Root, idx 0) — should pick a CT near B
+    expect(typeof phrase.skeleton!.continuityCtIdx).toBe('number');
+  });
+});
+
+// =========================================================================
+// 10. Generation metadata recording
 // =========================================================================
 
 describe('Generation metadata', () => {
@@ -839,5 +902,83 @@ describe('Generation metadata', () => {
         }
       }
     });
+  });
+});
+
+// =========================================================================
+// 11. Skeleton proximity — no octave gaps between strong beats
+// =========================================================================
+
+describe('skeleton proximity — no octave gaps between strong beats', () => {
+  it('strong-beat intervals rarely exceed 10 semitones (N=200)', () => {
+    const cases = [
+      ['A', 6, 'A Locrian'],   // Am7b5
+      ['G', 5, 'G Aeolian'],   // Gm6
+      ['D', 4, 'D Mixolydian'], // D7
+    ] as const;
+
+    for (const [root, mIdx, _label] of cases) {
+      const { mode, fretMap, allPos } = setup(root, mIdx);
+      const pos = allPos[Math.min(3, allPos.length - 1)];
+      let largeGapCount = 0;
+      const N = 200;
+      for (let i = 0; i < N; i++) {
+        const phrase = generatePhrase(pos, mode, fretMap, defaultConfig());
+        const strongBeats = phrase.notes.filter(n => [1, 3, 5, 8].includes(n.beatPosition));
+        for (let j = 1; j < strongBeats.length; j++) {
+          const gap = Math.abs(absolutePitch(strongBeats[j]) - absolutePitch(strongBeats[j - 1]));
+          if (gap > 10) largeGapCount++;
+        }
+      }
+      // <10% of strong-beat transitions should exceed 10st
+      expect(largeGapCount / (N * 3)).toBeLessThan(0.10);
+    }
+  });
+});
+
+// =========================================================================
+// 12. Goal note preserves voice leading intent
+// =========================================================================
+
+describe('goal note preserves voice leading intent', () => {
+  it('Am7b5 → D7b13: goal note resolves to 7th (G) for half-step VL ≥ 50%', () => {
+    // Am7b5 (A Locrian) → D7b13 (D Mixo-b6)
+    // G(7th of Am7b5) → F#(3rd of D7b13) = half-step down = ideal VL
+    const { mode, fretMap, allPos } = setup('A', 6); // A Locrian
+    const pos = allPos[Math.min(6, allPos.length - 1)];
+    const N = 200;
+    let goalIs7th = 0;
+    for (let i = 0; i < N; i++) {
+      const phrase = generatePhrase(pos, mode, fretMap, defaultConfig({
+        nextChordContext: {
+          thirdNote: 'F#', seventhNote: 'C', rootNote: 'D', quality: '7',
+        },
+      }), 'F#');
+      const lastNote = phrase.notes[phrase.notes.length - 1];
+      if (lastNote.noteName === 'G') goalIs7th++;
+    }
+    expect(goalIs7th / N).toBeGreaterThanOrEqual(0.50);
+  });
+
+  it('Dm7 → G7: goal note within half-step of next 3rd (B) ≥ 50%', () => {
+    const { mode, fretMap, allPos } = setup('D', 1); // D Dorian (Dm7)
+    const pos = allPos[2];
+    // Dm7 → G7: Dm7's 7th = C, G7's 3rd = B → C→B half-step
+    const N = 100;
+    let vlPreserved = 0;
+    for (let i = 0; i < N; i++) {
+      const phrase = generatePhrase(pos, mode, fretMap, defaultConfig({
+        nextChordContext: {
+          thirdNote: 'B', seventhNote: 'F', rootNote: 'G', quality: '7',
+        },
+      }), 'B');
+      const lastNote = phrase.notes[phrase.notes.length - 1];
+      const semiDist = Math.min(
+        Math.abs(lastNote.semitone - 11), // B = semitone 11
+        12 - Math.abs(lastNote.semitone - 11),
+      );
+      if (semiDist <= 1) vlPreserved++;
+    }
+    expect(vlPreserved / N).toBeGreaterThanOrEqual(0.50);
   });
 });
