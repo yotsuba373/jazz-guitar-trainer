@@ -364,7 +364,7 @@ export function generatePhrase(
   config: PhraseConfig,
   targetThirdNote?: string,
 ): GeneratedPhrase {
-  const includeChromatic = config.source === 'approach' || config.source === 'both';
+  const includeChromatic = config.approachTypes.length > 0;
   const pool = buildNotePool(position, mode, fretMap, includeChromatic);
   const ctSet = new Set(mode.chordTones);
   const ctPool = pool.filter(n => n.isChordTone);

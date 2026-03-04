@@ -182,15 +182,11 @@ export type ApproachType =
   | 'parker-enclosure'   // [CT+1] → [CT-2] → [CT-1] → CT
   | 'b9-arpeggio';       // b9→3→5→b7 (Dom7 only)
 
-/** Phrase generation source */
-export type PhraseSource = 'scale' | 'approach' | 'both';
-
 /** Phrase contour shape */
 export type PhraseContour = 'arch' | 'reverse-arch' | 'descending' | 'wave';
 
 /** Generation configuration */
 export interface PhraseConfig {
-  source: PhraseSource;
   approachTypes: ApproachType[];
   contour?: PhraseContour;       // undefined = random
 }

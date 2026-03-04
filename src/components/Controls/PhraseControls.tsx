@@ -1,8 +1,6 @@
-import type { PhraseSource, ApproachType } from '../../types';
+import type { ApproachType } from '../../types';
 
 interface PhraseControlsProps {
-  source: PhraseSource;
-  onSourceChange: (s: PhraseSource) => void;
   approachTypes: ApproachType[];
   onApproachTypesChange: (types: ApproachType[]) => void;
   onGenerate: () => void;
@@ -29,7 +27,6 @@ const APPROACH_LABELS: { type: ApproachType; label: string }[] = [
 const DOM7_QUALITIES = new Set(['7', '7b9', '7#11', '7b13']);
 
 export function PhraseControls({
-  source, onSourceChange,
   approachTypes, onApproachTypesChange,
   onGenerate, phraseCount, phraseIdx, onPhraseNav,
   animSpeed, onAnimSpeedChange,
@@ -52,49 +49,30 @@ export function PhraseControls({
     <div className="mb-3 rounded-md px-3 py-2 flex flex-wrap gap-3 items-center"
       style={{ background: '#1a1a1a', border: `1px solid ${PHRASE_COLOR}40` }}>
 
-      {/* Source selector */}
-      <div className="flex gap-1 items-center">
-        <span className="text-[10px] text-text-muted mr-0.5">ソース:</span>
-        {([['scale', 'Scale'], ['approach', 'Approach'], ['both', '両方']] as const).map(([key, label]) =>
-          <button key={key}
-            onClick={() => onSourceChange(key)}
-            className={`${btnBase} text-[9px] px-2 py-[3px]`}
-            style={{
-              border: `1px solid ${source === key ? PHRASE_COLOR : '#444'}`,
-              background: source === key ? '#2a1a1e' : '#1a1a1a',
-              color: source === key ? PHRASE_COLOR : '#999',
-              fontWeight: source === key ? 700 : 400,
-            }}>
-            {label}
-          </button>
-        )}
+      {/* Approach type checkboxes */}
+      <div className="flex gap-2 items-center flex-wrap">
+        <span className="text-[10px] text-text-muted mr-0.5">Approach:</span>
+        {APPROACH_LABELS.map(({ type, label }) => {
+          const disabled = type === 'b9-arpeggio' && !isDom7;
+          return (
+            <label key={type}
+              className="text-[10px] flex items-center gap-0.5"
+              style={{
+                color: disabled ? '#555' : undefined,
+                cursor: disabled ? 'not-allowed' : 'pointer',
+              }}
+              title={disabled ? 'Dom7 コードでのみ使用可能' : undefined}
+            >
+              <input type="checkbox"
+                checked={approachTypes.includes(type)}
+                onChange={() => toggleApproach(type)}
+                disabled={disabled}
+              />
+              {label}
+            </label>
+          );
+        })}
       </div>
-
-      {/* Approach type checkboxes (only when approach is active) */}
-      {(source === 'approach' || source === 'both') && (
-        <div className="flex gap-2 items-center flex-wrap">
-          {APPROACH_LABELS.map(({ type, label }) => {
-            const disabled = type === 'b9-arpeggio' && !isDom7;
-            return (
-              <label key={type}
-                className="text-[10px] flex items-center gap-0.5"
-                style={{
-                  color: disabled ? '#555' : undefined,
-                  cursor: disabled ? 'not-allowed' : 'pointer',
-                }}
-                title={disabled ? 'Dom7 コードでのみ使用可能' : undefined}
-              >
-                <input type="checkbox"
-                  checked={approachTypes.includes(type)}
-                  onChange={() => toggleApproach(type)}
-                  disabled={disabled}
-                />
-                {label}
-              </label>
-            );
-          })}
-        </div>
-      )}
 
       {/* Generate button */}
       <button

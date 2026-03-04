@@ -24,7 +24,6 @@ export type {
   PhraseNote,
   ApproachGroupInfo,
   ApproachType,
-  PhraseSource,
   PhraseContour,
   PhraseConfig,
   GeneratedPhrase,
