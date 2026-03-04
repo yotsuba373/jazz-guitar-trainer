@@ -169,6 +169,7 @@ export interface PhraseNote {
   semitone: number;        // absolute (0-11)
   isChordTone: boolean;
   isApproach: boolean;
+  isExtension?: boolean;   // true for 9th/13th extension tones on strong beats
   beatPosition: number;    // 1-8 (eighth note position)
   isStrong: boolean;       // true for positions 1,3,5,8
   approachGroup?: ApproachGroupInfo;
@@ -189,6 +190,21 @@ export type PhraseContour = 'arch' | 'reverse-arch' | 'descending' | 'wave';
 export interface PhraseConfig {
   approachTypes: ApproachType[];
   contour?: PhraseContour;       // undefined = random
+  /** Last note of the previous phrase — beat 1 will start near this position */
+  startHint?: { noteName: string; stringIdx: number; fret: number; semitone: number };
+  /** Number of eighth notes to generate (4 | 6 | 8, default: 8) */
+  phraseLength?: number;
+  /** Previous phrase's contour — used for macro-contour coherence */
+  prevContour?: PhraseContour;
+  /** Next chord context — for inter-chord voice leading (WP3) */
+  nextChordContext?: {
+    thirdNote: string;    // next chord's 3rd
+    seventhNote: string;  // next chord's 7th
+    rootNote: string;     // next chord's root
+    quality: string;      // next chord's quality
+  };
+  /** Previous phrase's motivic pattern — signed interval sequence (WP6) */
+  prevMotif?: number[];
 }
 
 /** A fully generated phrase */
@@ -198,6 +214,8 @@ export interface GeneratedPhrase {
   modeKey: string;
   rootName: string;
   config: PhraseConfig;
+  /** Intervallic motif extracted from opening notes (WP6) */
+  motif?: number[];
 }
 
 // --- Phrase Analysis Types ---
