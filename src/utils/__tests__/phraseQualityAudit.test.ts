@@ -650,6 +650,7 @@ interface ChainStats {
   goalResolutionCount: number;       // beat 8 within 1 semitone of next 3rd
   chainIntervalSum: number;         // sum of beat8→beat1 intervals
   chainIntervalCount: number;
+  chainIntervalWithin3: number;     // beat8→beat1 intervals ≤ 3 semitones
   voiceLeadingResolutions: number;  // 7th→3rd half-step resolutions
   voiceLeadingOpportunities: number;
   qualityDefiningSum: number;       // 3rd+7th presence ratio sum
@@ -667,6 +668,7 @@ function computeChainStats(
     goalResolutionCount: 0,
     chainIntervalSum: 0,
     chainIntervalCount: 0,
+    chainIntervalWithin3: 0,
     voiceLeadingResolutions: 0,
     voiceLeadingOpportunities: 0,
     qualityDefiningSum: 0,
@@ -728,6 +730,7 @@ function computeChainStats(
           const interval = Math.abs(absolutePitch(firstNote) - absolutePitch(prevLastNote));
           stats.chainIntervalSum += interval;
           stats.chainIntervalCount++;
+          if (interval <= 3) stats.chainIntervalWithin3++;
         }
 
         // Voice leading: current 7th resolving to next 3rd by half step
@@ -815,10 +818,16 @@ describe('Progression Context Quality', () => {
         expect(pct).toBeGreaterThanOrEqual(0.35);
       });
 
-      it('average chain interval ≤ 7 semitones', () => {
+      it('average chain interval ≤ 5.5 semitones', () => {
         const avg = stats.chainIntervalCount > 0
           ? stats.chainIntervalSum / stats.chainIntervalCount : 0;
-        expect(avg).toBeLessThanOrEqual(7);
+        expect(avg).toBeLessThanOrEqual(5.5);
+      });
+
+      it('chain interval within 3 semitones ≥ 60%', () => {
+        const pct = stats.chainIntervalCount > 0
+          ? stats.chainIntervalWithin3 / stats.chainIntervalCount : 0;
+        expect(pct).toBeGreaterThanOrEqual(0.60);
       });
 
       it('quality-defining tone presence ≥ 35%', () => {
@@ -830,10 +839,12 @@ describe('Progression Context Quality', () => {
         const goalPct = Math.round((stats.goalResolutionCount / stats.totalPhrases) * 100);
         const avgChain = stats.chainIntervalCount > 0
           ? Math.round((stats.chainIntervalSum / stats.chainIntervalCount) * 10) / 10 : 0;
+        const within3Pct = stats.chainIntervalCount > 0
+          ? Math.round((stats.chainIntervalWithin3 / stats.chainIntervalCount) * 100) : 0;
         const vlPct = stats.voiceLeadingOpportunities > 0
           ? Math.round((stats.voiceLeadingResolutions / stats.voiceLeadingOpportunities) * 100) : 0;
         const qualPct = Math.round((stats.qualityDefiningSum / stats.totalPhrases) * 100);
-        console.log(`\n  [Chain] ${prog.label}: goal=${goalPct}% chain=${avgChain}st VL=${vlPct}% qual=${qualPct}%`);
+        console.log(`\n  [Chain] ${prog.label}: goal=${goalPct}% chain=${avgChain}st ≤3st=${within3Pct}% VL=${vlPct}% qual=${qualPct}%`);
       });
     });
   }

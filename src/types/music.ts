@@ -156,6 +156,7 @@ export interface FoundVoicing {
 export interface SkeletonMeta {
   patternLabel: string;     // "R→3→5→7"
   direction: 'asc' | 'desc' | 'mixed';
+  continuityCtIdx?: number;  // startHintから決定されたbeat1 CT index
 }
 
 /** Tag identifying a digital pattern applied to a note */
