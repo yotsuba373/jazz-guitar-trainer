@@ -40,10 +40,7 @@ function setup(rootName: string, modeIdx: number): TestContext {
 }
 
 function makeConfig(approachTypes: ApproachType[]): PhraseConfig {
-  return {
-    source: approachTypes.length > 0 ? 'both' : 'scale',
-    approachTypes,
-  };
+  return { approachTypes };
 }
 
 // ---------------------------------------------------------------------------

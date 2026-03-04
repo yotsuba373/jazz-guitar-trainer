@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import type { LabelMode, RootName, Progression, ChordNotationPrefs, ChartLayout, SongKey, ChordSlot, PhraseSource, ApproachType, GeneratedPhrase } from './types';
+import type { LabelMode, RootName, Progression, ChordNotationPrefs, ChartLayout, SongKey, ChordSlot, ApproachType, GeneratedPhrase } from './types';
 import { MODE_TEMPLATES, ROOTS, MODE_COLORS } from './constants';
 import {
   buildFretMap, generatePositions, generateDimPositions, resolveMode,
@@ -117,7 +117,6 @@ export default function App() {
 
   // Phrase generator state
   const [showPhrase, setShowPhrase] = useState(false);
-  const [phraseSource, setPhraseSource] = useState<PhraseSource>('both');
   const [phraseApproachTypes, setPhraseApproachTypes] = useState<ApproachType[]>(
     ['single-below', 'single-above', 'enclosure']
   );
@@ -539,7 +538,7 @@ export default function App() {
       }
     }
 
-    const config = { source: phraseSource, approachTypes: phraseApproachTypes };
+    const config = { approachTypes: phraseApproachTypes };
     const phrase = generatePhrase(pos, mode, fretMap, config, targetThirdNote);
 
     setPhraseHistory(prev => {
@@ -550,7 +549,7 @@ export default function App() {
     setActivePhraseIdx(
       Math.min(phraseHistory.length, 19)
     );
-  }, [canShowPhrase, selPosIds, allPos, mode, fretMap, phraseSource, phraseApproachTypes, progMode, activeProg, activeChordIdx, effectiveAll, phraseHistory.length]);
+  }, [canShowPhrase, selPosIds, allPos, mode, fretMap, phraseApproachTypes, progMode, activeProg, activeChordIdx, effectiveAll, phraseHistory.length]);
 
   function getLabel(nn: string): string {
     return labelMode === 'degree' ? (deg[nn] || nn) : nn;
@@ -705,8 +704,6 @@ export default function App() {
 
         {showPhrase && canShowPhrase && (
           <PhraseControls
-            source={phraseSource}
-            onSourceChange={setPhraseSource}
             approachTypes={phraseApproachTypes}
             onApproachTypesChange={setPhraseApproachTypes}
             onGenerate={handleGeneratePhrase}

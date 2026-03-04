@@ -18,7 +18,6 @@ function setup(rootName: string, modeIdx: number) {
 
 function defaultConfig(overrides?: Partial<PhraseConfig>): PhraseConfig {
   return {
-    source: 'both',
     approachTypes: ['single-below', 'single-above', 'enclosure'],
     ...overrides,
   };
@@ -278,10 +277,10 @@ describe('generatePhrase — structural invariants', () => {
 // 4. Source selection
 // =========================================================================
 
-describe('generatePhrase — source selection', () => {
-  it('source="scale" produces no approach notes', () => {
+describe('generatePhrase — approach type selection', () => {
+  it('no approach types produces no approach notes', () => {
     const { mode, fretMap, allPos } = setup('C', 0);
-    const config = defaultConfig({ source: 'scale', approachTypes: [] });
+    const config = defaultConfig({ approachTypes: [] });
     let foundApproach = false;
     for (let i = 0; i < 30; i++) {
       const phrase = generatePhrase(allPos[0], mode, fretMap, config);
@@ -290,20 +289,9 @@ describe('generatePhrase — source selection', () => {
     expect(foundApproach).toBe(false);
   });
 
-  it('source="both" can produce approach notes', () => {
+  it('with approach types can produce approach notes', () => {
     const { mode, fretMap, allPos } = setup('C', 4); // C Mixolydian
-    const config = defaultConfig({ source: 'both' });
-    let foundApproach = false;
-    for (let i = 0; i < 50; i++) {
-      const phrase = generatePhrase(allPos[2], mode, fretMap, config);
-      if (phrase.notes.some(n => n.isApproach)) { foundApproach = true; break; }
-    }
-    expect(foundApproach).toBe(true);
-  });
-
-  it('source="approach" can produce approach notes', () => {
-    const { mode, fretMap, allPos } = setup('C', 4);
-    const config = defaultConfig({ source: 'approach' });
+    const config = defaultConfig();
     let foundApproach = false;
     for (let i = 0; i < 50; i++) {
       const phrase = generatePhrase(allPos[2], mode, fretMap, config);
@@ -314,7 +302,7 @@ describe('generatePhrase — source selection', () => {
 
   it('approach notes only appear with approachGroup metadata', () => {
     const { mode, fretMap, allPos } = setup('C', 4);
-    const config = defaultConfig({ source: 'both' });
+    const config = defaultConfig();
     for (let i = 0; i < 20; i++) {
       const phrase = generatePhrase(allPos[2], mode, fretMap, config);
       const approachNotes = phrase.notes.filter(n => n.isApproach);
@@ -332,7 +320,7 @@ describe('generatePhrase — source selection', () => {
 describe('generatePhrase — phrase quality', () => {
   it('beat 7→8 interval ≤ 5 semitones in most phrases', () => {
     const { mode, fretMap, allPos } = setup('C', 4);
-    const config = defaultConfig({ source: 'both' });
+    const config = defaultConfig();
     let smooth = 0;
     const N = 50;
     for (let i = 0; i < N; i++) {
@@ -348,7 +336,7 @@ describe('generatePhrase — phrase quality', () => {
 
   it('pitch returns (A→B→A) are reduced by oscillation penalty', () => {
     const { mode, fretMap, allPos } = setup('C', 4);
-    const config = defaultConfig({ source: 'both' });
+    const config = defaultConfig();
     let totalReturns = 0;
     const N = 50;
     for (let i = 0; i < N; i++) {
@@ -484,7 +472,6 @@ describe('bebop characteristics — statistical validation', () => {
     const { mode, fretMap, allPos } = setup('C', 4); // C Mixolydian
     const pos = allPos[2]; // Pos 3
     const config: PhraseConfig = {
-      source: 'both',
       approachTypes: ['single-below', 'single-above', 'enclosure'],
     };
     for (let i = 0; i < N; i++) {
@@ -695,7 +682,6 @@ describe('bebop characteristics — statistical validation', () => {
       const { mode, fretMap, allPos } = setup(root, modeIdx);
       const pos = allPos[Math.min(2, allPos.length - 1)];
       const config: PhraseConfig = {
-        source: 'both',
         approachTypes: ['single-below', 'single-above', 'enclosure'],
       };
       const result: GeneratedPhrase[] = [];

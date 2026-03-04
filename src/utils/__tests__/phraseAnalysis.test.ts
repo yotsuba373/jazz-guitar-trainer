@@ -42,7 +42,7 @@ describe('Scale degree', () => {
     const phrase: GeneratedPhrase = {
       notes: [makePhraseNote({ noteName: 'C', stringIdx: 2, fret: 5, semitone: 0, isChordTone: true, beatPosition: 1 })],
       posId: 1, modeKey: 'ionian', rootName: 'C',
-      config: { source: 'scale', approachTypes: [], contour: 'arch' },
+      config: { approachTypes: [], contour: 'arch' },
     };
     const analysis = analyzePhrase(phrase, mode);
     expect(analysis.notes[0].scaleDegree).toBe('1');
@@ -55,7 +55,7 @@ describe('Scale degree', () => {
     );
     const phrase: GeneratedPhrase = {
       notes, posId: 1, modeKey: 'ionian', rootName: 'C',
-      config: { source: 'scale', approachTypes: [], contour: 'arch' },
+      config: { approachTypes: [], contour: 'arch' },
     };
     const analysis = analyzePhrase(phrase, mode);
     expect(analysis.notes.map(n => n.scaleDegree)).toEqual(['1', '2', '3', '4', '5', '6', '7']);
@@ -66,7 +66,7 @@ describe('Scale degree', () => {
     const phrase: GeneratedPhrase = {
       notes: [makePhraseNote({ noteName: 'E♭', stringIdx: 2, fret: 4, semitone: 3, isApproach: true, beatPosition: 1 })],
       posId: 1, modeKey: 'ionian', rootName: 'C',
-      config: { source: 'both', approachTypes: ['single-below'], contour: 'arch' },
+      config: { approachTypes: ['single-below'], contour: 'arch' },
     };
     const analysis = analyzePhrase(phrase, mode);
     expect(analysis.notes[0].scaleDegree).toBe('♭3');
@@ -78,7 +78,7 @@ describe('Scale degree', () => {
     const phrase: GeneratedPhrase = {
       notes: [makePhraseNote({ noteName: 'C', stringIdx: 2, fret: 5, semitone: 0, beatPosition: 1 })],
       posId: 1, modeKey: 'dorian', rootName: 'D',
-      config: { source: 'scale', approachTypes: [], contour: 'arch' },
+      config: { approachTypes: [], contour: 'arch' },
     };
     const analysis = analyzePhrase(phrase, mode);
     expect(analysis.notes[0].scaleDegree).toBe('♭7');
@@ -95,7 +95,7 @@ describe('Interval calculation', () => {
     const phrase: GeneratedPhrase = {
       notes: [makePhraseNote({ noteName: 'C', stringIdx: 2, fret: 5, semitone: 0, beatPosition: 1 })],
       posId: 1, modeKey: 'ionian', rootName: 'C',
-      config: { source: 'scale', approachTypes: [], contour: 'arch' },
+      config: { approachTypes: [], contour: 'arch' },
     };
     const analysis = analyzePhrase(phrase, mode);
     expect(analysis.notes[0].intervalFromPrev).toBeNull();
@@ -108,7 +108,7 @@ describe('Interval calculation', () => {
     const n2 = makePhraseNote({ noteName: 'F', stringIdx: 1, fret: 6, semitone: 5, beatPosition: 2, isStrong: false });
     const phrase: GeneratedPhrase = {
       notes: [n1, n2], posId: 1, modeKey: 'ionian', rootName: 'C',
-      config: { source: 'scale', approachTypes: [], contour: 'arch' },
+      config: { approachTypes: [], contour: 'arch' },
     };
     const analysis = analyzePhrase(phrase, mode);
     expect(analysis.notes[1].intervalFromPrev).toBe(1);
@@ -123,7 +123,7 @@ describe('Interval calculation', () => {
     const n2 = makePhraseNote({ noteName: 'E', stringIdx: 2, fret: 9, semitone: 4, beatPosition: 2, isStrong: false });
     const phrase: GeneratedPhrase = {
       notes: [n1, n2], posId: 1, modeKey: 'ionian', rootName: 'C',
-      config: { source: 'scale', approachTypes: [], contour: 'arch' },
+      config: { approachTypes: [], contour: 'arch' },
     };
     const analysis = analyzePhrase(phrase, mode);
     expect(analysis.notes[1].intervalFromPrev).toBe(3);
@@ -138,7 +138,7 @@ describe('Interval calculation', () => {
     const n2 = makePhraseNote({ noteName: 'B', stringIdx: 2, fret: 4, semitone: 11, beatPosition: 2, isStrong: false });
     const phrase: GeneratedPhrase = {
       notes: [n1, n2], posId: 1, modeKey: 'ionian', rootName: 'C',
-      config: { source: 'scale', approachTypes: [], contour: 'arch' },
+      config: { approachTypes: [], contour: 'arch' },
     };
     const analysis = analyzePhrase(phrase, mode);
     expect(analysis.notes[1].intervalDirection).toBe('unison');
@@ -159,7 +159,7 @@ describe('Function labels', () => {
     ];
     const phrase: GeneratedPhrase = {
       notes, posId: 1, modeKey: 'ionian', rootName: 'C',
-      config: { source: 'scale', approachTypes: [], contour: 'arch' },
+      config: { approachTypes: [], contour: 'arch' },
     };
     const analysis = analyzePhrase(phrase, mode);
     expect(analysis.notes[0].functionLabel).toBe('CT (R)');
@@ -173,7 +173,7 @@ describe('Function labels', () => {
     ];
     const phrase: GeneratedPhrase = {
       notes, posId: 1, modeKey: 'ionian', rootName: 'C',
-      config: { source: 'both', approachTypes: ['single-below'], contour: 'arch' },
+      config: { approachTypes: ['single-below'], contour: 'arch' },
     };
     const analysis = analyzePhrase(phrase, mode);
     expect(analysis.notes[0].functionLabel).toBe('Chromatic');
@@ -186,7 +186,7 @@ describe('Function labels', () => {
     ];
     const phrase: GeneratedPhrase = {
       notes, posId: 1, modeKey: 'ionian', rootName: 'C',
-      config: { source: 'scale', approachTypes: [], contour: 'arch' },
+      config: { approachTypes: [], contour: 'arch' },
     };
     const analysis = analyzePhrase(phrase, mode);
     expect(analysis.notes[0].functionLabel).toBe('Scale tone');
@@ -204,7 +204,7 @@ describe('Function labels', () => {
     ];
     const phrase: GeneratedPhrase = {
       notes, posId: 1, modeKey: 'ionian', rootName: 'C',
-      config: { source: 'both', approachTypes: ['enclosure'], contour: 'arch' },
+      config: { approachTypes: ['enclosure'], contour: 'arch' },
     };
     const analysis = analyzePhrase(phrase, mode);
     expect(analysis.notes[0].functionLabel).toBe('Encl. above');
@@ -219,7 +219,7 @@ describe('Function labels', () => {
 
 describe('Approach group tagging (generator integration)', () => {
   it('approach source generates notes with approachGroup metadata', () => {
-    const config: PhraseConfig = { source: 'both', approachTypes: ['single-below', 'single-above', 'enclosure'] };
+    const config: PhraseConfig = { approachTypes: ['single-below', 'single-above', 'enclosure'] };
     // Run multiple times to increase chance of approach pattern triggering
     let foundGroup = false;
     for (let i = 0; i < 30; i++) {
@@ -233,7 +233,7 @@ describe('Approach group tagging (generator integration)', () => {
   });
 
   it('group IDs are sequential', () => {
-    const config: PhraseConfig = { source: 'both', approachTypes: ['single-below', 'single-above', 'enclosure'] };
+    const config: PhraseConfig = { approachTypes: ['single-below', 'single-above', 'enclosure'] };
     for (let i = 0; i < 50; i++) {
       const phrase = genPhrase('C', 'mixolydian', config);
       const groups = phrase.notes
@@ -250,7 +250,7 @@ describe('Approach group tagging (generator integration)', () => {
   });
 
   it('scale-only source produces no approach groups', () => {
-    const config: PhraseConfig = { source: 'scale', approachTypes: [] };
+    const config: PhraseConfig = { approachTypes: [] };
     for (let i = 0; i < 10; i++) {
       const phrase = genPhrase('C', 'ionian', config);
       expect(phrase.notes.every(n => !n.approachGroup)).toBe(true);
@@ -264,7 +264,7 @@ describe('Approach group tagging (generator integration)', () => {
 
 describe('Summary statistics', () => {
   it('interval distribution sums correctly', () => {
-    const config: PhraseConfig = { source: 'both', approachTypes: ['single-below', 'enclosure'] };
+    const config: PhraseConfig = { approachTypes: ['single-below', 'enclosure'] };
     const phrase = genPhrase('C', 'dorian', config);
     const mode = getMode('C', 'dorian');
     const { summary } = analyzePhrase(phrase, mode);
@@ -276,21 +276,21 @@ describe('Summary statistics', () => {
   });
 
   it('range is non-negative', () => {
-    const phrase = genPhrase('G', 'mixolydian', { source: 'scale', approachTypes: [] });
+    const phrase = genPhrase('G', 'mixolydian', { approachTypes: [] });
     const mode = getMode('G', 'mixolydian');
     const { summary } = analyzePhrase(phrase, mode);
     expect(summary.rangeSemitones).toBeGreaterThanOrEqual(0);
   });
 
   it('contour label matches config', () => {
-    const phrase = genPhrase('A', 'aeolian', { source: 'scale', approachTypes: [], contour: 'arch' });
+    const phrase = genPhrase('A', 'aeolian', { approachTypes: [], contour: 'arch' });
     const mode = getMode('A', 'aeolian');
     const { summary } = analyzePhrase(phrase, mode);
     expect(summary.contourLabel).toBe('Arch');
   });
 
   it('CT + approach + scale counts sum to 8', () => {
-    const config: PhraseConfig = { source: 'both', approachTypes: ['single-below', 'enclosure'] };
+    const config: PhraseConfig = { approachTypes: ['single-below', 'enclosure'] };
     const phrase = genPhrase('F', 'lydian', config);
     const mode = getMode('F', 'lydian');
     const { summary } = analyzePhrase(phrase, mode);
@@ -298,7 +298,7 @@ describe('Summary statistics', () => {
   });
 
   it('direction changes count is valid', () => {
-    const phrase = genPhrase('B♭', 'mixolydian', { source: 'scale', approachTypes: [] });
+    const phrase = genPhrase('B♭', 'mixolydian', { approachTypes: [] });
     const mode = getMode('B♭', 'mixolydian');
     const { summary } = analyzePhrase(phrase, mode);
     // Max possible direction changes = 6 (7 intervals, each can change)
@@ -313,8 +313,8 @@ describe('Summary statistics', () => {
 
 describe('Integration', () => {
   const configs: PhraseConfig[] = [
-    { source: 'scale', approachTypes: [] },
-    { source: 'both', approachTypes: ['single-below', 'single-above', 'enclosure'] },
+    { approachTypes: [] },
+    { approachTypes: ['single-below', 'single-above', 'enclosure'] },
   ];
   const modes = ['ionian', 'dorian', 'mixolydian', 'aeolian', 'lydian'];
   const roots = ['C', 'F', 'B♭', 'E♭', 'G'];
