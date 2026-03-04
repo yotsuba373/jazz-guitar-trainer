@@ -11,6 +11,8 @@ interface PhraseControlsProps {
   onPhraseNav: (idx: number) => void;
   animSpeed: number;
   onAnimSpeedChange: (ms: number) => void;
+  /** Current chord quality — b9 Arp is only available on dominant 7 chords */
+  chordQuality?: string;
 }
 
 const PHRASE_COLOR = '#FF6B9D';
@@ -24,12 +26,16 @@ const APPROACH_LABELS: { type: ApproachType; label: string }[] = [
   { type: 'b9-arpeggio', label: 'b9 Arp' },
 ];
 
+const DOM7_QUALITIES = new Set(['7', '7b9', '7#11', '7b13']);
+
 export function PhraseControls({
   source, onSourceChange,
   approachTypes, onApproachTypesChange,
   onGenerate, phraseCount, phraseIdx, onPhraseNav,
   animSpeed, onAnimSpeedChange,
+  chordQuality,
 }: PhraseControlsProps) {
+  const isDom7 = chordQuality ? DOM7_QUALITIES.has(chordQuality) : false;
 
   function toggleApproach(type: ApproachType) {
     if (approachTypes.includes(type)) {
@@ -67,15 +73,26 @@ export function PhraseControls({
       {/* Approach type checkboxes (only when approach is active) */}
       {(source === 'approach' || source === 'both') && (
         <div className="flex gap-2 items-center flex-wrap">
-          {APPROACH_LABELS.map(({ type, label }) =>
-            <label key={type} className="text-[10px] text-text-muted cursor-pointer flex items-center gap-0.5">
-              <input type="checkbox"
-                checked={approachTypes.includes(type)}
-                onChange={() => toggleApproach(type)}
-              />
-              {label}
-            </label>
-          )}
+          {APPROACH_LABELS.map(({ type, label }) => {
+            const disabled = type === 'b9-arpeggio' && !isDom7;
+            return (
+              <label key={type}
+                className="text-[10px] flex items-center gap-0.5"
+                style={{
+                  color: disabled ? '#555' : undefined,
+                  cursor: disabled ? 'not-allowed' : 'pointer',
+                }}
+                title={disabled ? 'Dom7 コードでのみ使用可能' : undefined}
+              >
+                <input type="checkbox"
+                  checked={approachTypes.includes(type)}
+                  onChange={() => toggleApproach(type)}
+                  disabled={disabled}
+                />
+                {label}
+              </label>
+            );
+          })}
         </div>
       )}
 
