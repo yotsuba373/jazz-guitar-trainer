@@ -1,8 +1,9 @@
-import type { Position } from '../../types';
+import type { Position, GeneratedPhrase } from '../../types';
 import type { GuideToneInfo } from '../../utils/guideTones';
 import { STR_LABELS, POS_COLORS, FC, FW, SG, TP, LP, DOTS, SVG_WIDTH, SVG_HEIGHT } from '../../constants';
 import { FretboardNote } from './FretboardNote';
 import { GhostNote } from './GhostNote';
+import { PhrasePath } from './PhrasePath';
 
 interface FretboardProps {
   visible: Position[];
@@ -15,9 +16,10 @@ interface FretboardProps {
   guideToneInfo?: GuideToneInfo | null;
   voicingHighlights?: Set<string> | null;
   onNoteClick?: (stringIdx: number, fret: number) => void;
+  activePhrase?: GeneratedPhrase | null;
 }
 
-export function Fretboard({ visible, selPosIds, dim, showCT, ctSet, getLabel, rootNote, guideToneInfo, voicingHighlights, onNoteClick }: FretboardProps) {
+export function Fretboard({ visible, selPosIds, dim, showCT, ctSet, getLabel, rootNote, guideToneInfo, voicingHighlights, onNoteClick, activePhrase }: FretboardProps) {
   return (
     <div className="overflow-x-auto mb-[14px]">
       <svg width={SVG_WIDTH} height={SVG_HEIGHT}
@@ -96,6 +98,9 @@ export function Fretboard({ visible, selPosIds, dim, showCT, ctSet, getLabel, ro
             </g>
           );
         })}
+
+        {/* Phrase path (rendered between notes and ghost rings) */}
+        {activePhrase && <PhrasePath phrase={activePhrase} />}
 
         {/* Ghost rings: next chord's 3rd (rendered ON TOP of notes) */}
         {guideToneInfo?.nextThirdLocations.map(({ stringIdx, fret }, i) => (
