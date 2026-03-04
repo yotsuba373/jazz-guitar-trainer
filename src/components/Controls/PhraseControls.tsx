@@ -9,6 +9,8 @@ interface PhraseControlsProps {
   phraseCount: number;
   phraseIdx: number;
   onPhraseNav: (idx: number) => void;
+  animSpeed: number;
+  onAnimSpeedChange: (ms: number) => void;
 }
 
 const PHRASE_COLOR = '#FF6B9D';
@@ -26,6 +28,7 @@ export function PhraseControls({
   source, onSourceChange,
   approachTypes, onApproachTypesChange,
   onGenerate, phraseCount, phraseIdx, onPhraseNav,
+  animSpeed, onAnimSpeedChange,
 }: PhraseControlsProps) {
 
   function toggleApproach(type: ApproachType) {
@@ -108,6 +111,16 @@ export function PhraseControls({
           </button>
         </div>
       )}
+
+      {/* Animation speed slider */}
+      <div className="flex gap-1 items-center text-[10px] text-text-muted">
+        <span>速度</span>
+        <input type="range" min={0} max={500} step={50}
+          value={500 - animSpeed}
+          onChange={e => onAnimSpeedChange(500 - Number(e.target.value))}
+          className="w-16 accent-pink-400"
+        />
+      </div>
     </div>
   );
 }

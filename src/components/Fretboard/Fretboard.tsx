@@ -17,9 +17,10 @@ interface FretboardProps {
   voicingHighlights?: Set<string> | null;
   onNoteClick?: (stringIdx: number, fret: number) => void;
   activePhrase?: GeneratedPhrase | null;
+  phraseAnimSpeed?: number;
 }
 
-export function Fretboard({ visible, selPosIds, dim, showCT, ctSet, getLabel, rootNote, guideToneInfo, voicingHighlights, onNoteClick, activePhrase }: FretboardProps) {
+export function Fretboard({ visible, selPosIds, dim, showCT, ctSet, getLabel, rootNote, guideToneInfo, voicingHighlights, onNoteClick, activePhrase, phraseAnimSpeed }: FretboardProps) {
   return (
     <div className="overflow-x-auto mb-[14px]">
       <svg width={SVG_WIDTH} height={SVG_HEIGHT}
@@ -71,8 +72,10 @@ export function Fretboard({ visible, selPosIds, dim, showCT, ctSet, getLabel, ro
           const c = POS_COLORS[pos.id - 1];
           const gtThird = guideToneInfo?.third;
           const gtSeventh = guideToneInfo?.seventh;
+          const dimmed = dim && !selPosIds.includes(pos.id);
+          const posOpacity = dimmed ? 0.07 : activePhrase ? 0.35 : 1;
           return (
-            <g key={pos.id} opacity={(!dim || selPosIds.includes(pos.id)) ? 1 : 0.07}>
+            <g key={pos.id} opacity={posOpacity}>
               {pos.instances.map((inst, iIdx) =>
                 inst.strings.map((notes, sIdx) =>
                   notes && notes.map(([n, f]) => (
@@ -100,7 +103,7 @@ export function Fretboard({ visible, selPosIds, dim, showCT, ctSet, getLabel, ro
         })}
 
         {/* Phrase path (rendered between notes and ghost rings) */}
-        {activePhrase && <PhrasePath phrase={activePhrase} />}
+        {activePhrase && <PhrasePath phrase={activePhrase} animSpeed={phraseAnimSpeed} />}
 
         {/* Ghost rings: next chord's 3rd (rendered ON TOP of notes) */}
         {guideToneInfo?.nextThirdLocations.map(({ stringIdx, fret }, i) => (

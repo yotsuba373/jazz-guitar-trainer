@@ -123,6 +123,9 @@ export default function App() {
   );
   const [phraseHistory, setPhraseHistory] = useState<GeneratedPhrase[]>([]);
   const [activePhraseIdx, setActivePhraseIdx] = useState(0);
+  const [phraseAnimSpeed, setPhraseAnimSpeed] = useState(() =>
+    Number(localStorage.getItem('phraseAnimSpeed')) || 350
+  );
 
   // Progression mode state
   const [progMode, setProgMode] = useState(false);
@@ -710,6 +713,8 @@ export default function App() {
             phraseCount={phraseHistory.length}
             phraseIdx={activePhraseIdx}
             onPhraseNav={setActivePhraseIdx}
+            animSpeed={phraseAnimSpeed}
+            onAnimSpeedChange={v => { setPhraseAnimSpeed(v); localStorage.setItem('phraseAnimSpeed', String(v)); }}
           />
         )}
 
@@ -725,6 +730,7 @@ export default function App() {
           voicingHighlights={voicingHighlights}
           onNoteClick={handleNoteClick}
           activePhrase={activePhrase}
+          phraseAnimSpeed={phraseAnimSpeed}
         />
 
         {/* Mode description section */}
