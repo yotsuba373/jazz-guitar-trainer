@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import type { LabelMode, RootName, Progression, ChordNotationPrefs, ChartLayout, SongKey, ChordSlot, ApproachType, GeneratedPhrase, PhraseConfig, PhraseNote, PhraseContour } from './types';
-import { MODE_TEMPLATES, ROOTS, MODE_COLORS } from './constants';
+import { MODE_TEMPLATES, ROOTS, MODE_COLORS, OPEN_STRINGS, loadLickLibrary } from './constants';
 import {
   buildFretMap, generatePositions, generateDimPositions, resolveMode,
   loadProgressions, saveProgressions, QUALITY_TO_MODES,
@@ -182,6 +182,11 @@ export default function App() {
   // Chord form voicings (only when exactly 1 position selected)
   const canShowChordForms = selPosIds.length === 1 && !overlay && !is8Note && modeIdx <= 6;
 
+  // Phrase beat count (normal mode) and goal selection
+  const [beatCount, setBeatCount] = useState<2 | 3 | 4>(4);
+  const [goalSelectMode, setGoalSelectMode] = useState(false);
+  const [selectedGoalNote, setSelectedGoalNote] = useState<PhraseConfig['goalNoteOverride'] | null>(null);
+
   // Phrase generator: available when single position selected, not overlay, not dim scale
   const canShowPhrase = selPosIds.length === 1 && !overlay && !is8Note;
   const selPos = selPosIds.length === 1 ? allPos.find(p => p.id === selPosIds[0]) ?? null : null;
@@ -211,6 +216,9 @@ export default function App() {
 
   // Reset voicing index when position/mode/root changes
   useEffect(() => { setSelectedVoicingIdx(0); }, [selPosIds, modeIdx, rootName]);
+
+  // Preload lick library on mount
+  useEffect(() => { loadLickLibrary(); }, []);
 
   // Clear phrase history when context changes
   useEffect(() => {
@@ -680,13 +688,14 @@ export default function App() {
     const ctx = audioCtxRef.current;
     if (ctx.state === 'suspended') ctx.resume();
     const eighthDur = Math.max(0.1, phraseAnimSpeed / 1000);
-    manualPhraseRef.current = schedulePhrase(ctx, activePhrase, ctx.currentTime, eighthDur, noteVolumeRef.current);
+    const result = schedulePhrase(ctx, activePhrase, ctx.currentTime, eighthDur, noteVolumeRef.current);
+    manualPhraseRef.current = result;
     setIsPhraseAudioPlaying(true);
     setPhraseAnimKey(k => k + 1);
     manualPhraseTimer.current = setTimeout(() => {
       manualPhraseRef.current = null;
       setIsPhraseAudioPlaying(false);
-    }, eighthDur * 8 * 1000 + 200);
+    }, result.totalDuration * 1000 + 200);
   }, [activePhrase, phraseAnimSpeed]);
 
   // Stop manual phrase on context change
@@ -698,11 +707,22 @@ export default function App() {
   }, [activePhrase]);
 
   const handleNoteClick = useCallback((stringIdx: number, fret: number) => {
+    // Goal note selection mode
+    if (goalSelectMode && canShowPhrase && selPos) {
+      const inst = selPos.instances[0];
+      if (fret >= inst.fretMin - 1 && fret <= inst.fretMax + 1) {
+        const semi = (OPEN_STRINGS[stringIdx] + fret) % 12;
+        const CHROMATIC_NAMES = ['C', 'D\u266D', 'D', 'E\u266D', 'E', 'F', 'G\u266D', 'G', 'A\u266D', 'A', 'B\u266D', 'B'];
+        const noteName = CHROMATIC_NAMES[semi];
+        setSelectedGoalNote({ noteName, stringIdx, fret, semitone: semi });
+      }
+      return;
+    }
     if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
     const ctx = audioCtxRef.current;
     if (ctx.state === 'suspended') ctx.resume();
     playKSNote(ctx, fretToFrequency(stringIdx, fret), noteVolumeRef.current, ctx.currentTime);
-  }, []);
+  }, [goalSelectMode, canShowPhrase, selPos]);
 
   const handleGeneratePhrase = useCallback(() => {
     if (!canShowPhrase || selPosIds.length !== 1) return;
@@ -728,7 +748,12 @@ export default function App() {
       }
     }
 
-    const config: PhraseConfig = { approachTypes: phraseApproachTypes, nextChordContext: nextChordCtx };
+    const config: PhraseConfig = {
+      approachTypes: phraseApproachTypes,
+      nextChordContext: nextChordCtx,
+      ...(!progMode && { beatCount }),
+      ...(selectedGoalNote && { goalNoteOverride: selectedGoalNote }),
+    };
     const phrase = generatePhrase(pos, mode, fretMap, config, targetThirdNote);
 
     setPhraseHistory(prev => {
@@ -739,7 +764,7 @@ export default function App() {
     setActivePhraseIdx(
       Math.min(phraseHistory.length, 19)
     );
-  }, [canShowPhrase, selPosIds, allPos, mode, fretMap, phraseApproachTypes, progMode, activeProg, activeChordIdx, effectiveAll, phraseHistory.length]);
+  }, [canShowPhrase, selPosIds, allPos, mode, fretMap, phraseApproachTypes, progMode, activeProg, activeChordIdx, effectiveAll, phraseHistory.length, beatCount, selectedGoalNote]);
 
   function getLabel(nn: string): string {
     return labelMode === 'degree' ? (deg[nn] || nn) : nn;
@@ -913,6 +938,11 @@ export default function App() {
             onTogglePhraseAutoPlay={() => setPhraseAutoPlay(p => !p)}
             onRegeneratePhraseMap={generatePhraseMap}
             isPlaying={isPlaying}
+            beatCount={beatCount}
+            onBeatCountChange={setBeatCount}
+            goalSelectMode={goalSelectMode}
+            onGoalSelectModeChange={setGoalSelectMode}
+            selectedGoalNote={selectedGoalNote}
           />
         )}
 
@@ -932,6 +962,8 @@ export default function App() {
           phraseAnimSpeed={(phraseAutoPlay && progMode && isPlaying)
             ? Math.round((60000 / bpm) / 2)
             : phraseAnimSpeed}
+          selectedGoalNote={selectedGoalNote}
+          goalSelectMode={goalSelectMode}
         />
 
         {activePhrase && <PhraseAnalysisPanel phrase={activePhrase} mode={mode} />}

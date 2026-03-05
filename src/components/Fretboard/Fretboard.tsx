@@ -19,9 +19,11 @@ interface FretboardProps {
   activePhrase?: GeneratedPhrase | null;
   phraseAnimKey?: number;
   phraseAnimSpeed?: number;
+  selectedGoalNote?: { stringIdx: number; fret: number } | null;
+  goalSelectMode?: boolean;
 }
 
-export function Fretboard({ visible, selPosIds, dim, showCT, ctSet, getLabel, rootNote, guideToneInfo, voicingHighlights, onNoteClick, activePhrase, phraseAnimKey, phraseAnimSpeed }: FretboardProps) {
+export function Fretboard({ visible, selPosIds, dim, showCT, ctSet, getLabel, rootNote, guideToneInfo, voicingHighlights, onNoteClick, activePhrase, phraseAnimKey, phraseAnimSpeed, selectedGoalNote, goalSelectMode }: FretboardProps) {
   return (
     <div className="overflow-x-auto mb-[14px]">
       <svg width={SVG_WIDTH} height={SVG_HEIGHT}
@@ -116,6 +118,30 @@ export function Fretboard({ visible, selPosIds, dim, showCT, ctSet, getLabel, ro
             color="#F1C40F"
           />
         ))}
+
+        {/* Goal note pulsing ring */}
+        {selectedGoalNote && (
+          <>
+            <defs>
+              <style>{`@keyframes goalPulse { 0%,100% { opacity: 0.6; r: 8; } 50% { opacity: 1; r: 11; } }`}</style>
+            </defs>
+            <circle
+              cx={LP + (selectedGoalNote.fret - 0.5) * FW}
+              cy={TP + selectedGoalNote.stringIdx * SG}
+              r={9}
+              fill="none"
+              stroke="#80FFAA"
+              strokeWidth={2}
+              style={{ animation: 'goalPulse 1.5s ease-in-out infinite' }}
+            />
+          </>
+        )}
+
+        {/* Goal select mode cursor overlay */}
+        {goalSelectMode && (
+          <rect x={0} y={0} width={SVG_WIDTH} height={SVG_HEIGHT}
+            fill="transparent" style={{ cursor: 'crosshair' }} pointerEvents="none" />
+        )}
       </svg>
     </div>
   );

@@ -21,6 +21,13 @@ interface PhraseControlsProps {
   onTogglePhraseAutoPlay?: () => void;
   onRegeneratePhraseMap?: () => void;
   isPlaying?: boolean;
+  /** Beat count selector (normal mode) */
+  beatCount?: 2 | 3 | 4;
+  onBeatCountChange?: (bc: 2 | 3 | 4) => void;
+  /** Goal note selection */
+  goalSelectMode?: boolean;
+  onGoalSelectModeChange?: (on: boolean) => void;
+  selectedGoalNote?: { noteName: string } | null;
 }
 
 const PHRASE_COLOR = '#FF6B9D';
@@ -44,6 +51,8 @@ export function PhraseControls({
   onPlayPhrase, isPhraseAudioPlaying, hasPhrase,
   progMode, phraseAutoPlay, onTogglePhraseAutoPlay, onRegeneratePhraseMap: _onRegeneratePhraseMap,
   isPlaying,
+  beatCount, onBeatCountChange,
+  goalSelectMode, onGoalSelectModeChange, selectedGoalNote,
 }: PhraseControlsProps) {
   const isDom7 = chordQuality ? DOM7_QUALITIES.has(chordQuality) : false;
   const autoPlaying = phraseAutoPlay && isPlaying;
@@ -87,6 +96,49 @@ export function PhraseControls({
           );
         })}
       </div>
+
+      {/* Beat count selector (normal mode only) */}
+      {!progMode && onBeatCountChange && (
+        <div className="flex gap-0.5 items-center">
+          <span className="text-[10px] text-text-muted mr-0.5">拍数:</span>
+          {([2, 3, 4] as const).map(bc => (
+            <button key={bc}
+              onClick={() => onBeatCountChange(bc)}
+              className={`${btnBase} text-[10px] px-2 py-[2px]`}
+              style={{
+                border: `1px solid ${beatCount === bc ? PHRASE_COLOR : '#555'}`,
+                background: beatCount === bc ? '#2a1020' : '#1a1a1a',
+                color: beatCount === bc ? PHRASE_COLOR : '#888',
+                fontWeight: beatCount === bc ? 700 : 400,
+              }}>
+              {bc}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Goal note selection toggle */}
+      {onGoalSelectModeChange && (
+        <div className="flex gap-1 items-center">
+          <button
+            onClick={() => onGoalSelectModeChange(!goalSelectMode)}
+            className={`${btnBase} text-[10px] px-2.5 py-[3px]`}
+            style={{
+              border: `1px solid ${goalSelectMode ? '#80FFAA' : '#555'}`,
+              background: goalSelectMode ? '#102a1a' : '#1a1a1a',
+              color: goalSelectMode ? '#80FFAA' : '#888',
+              fontWeight: goalSelectMode ? 700 : 400,
+            }}
+            title="指板クリックでゴールノートを指定">
+            {goalSelectMode ? 'ゴール ON' : 'ゴール'}
+          </button>
+          {selectedGoalNote && (
+            <span className="text-[10px]" style={{ color: '#80FFAA' }}>
+              {selectedGoalNote.noteName}
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Auto-play toggle (progression mode only) */}
       {progMode && onTogglePhraseAutoPlay && (

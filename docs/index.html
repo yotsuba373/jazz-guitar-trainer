@@ -279,6 +279,7 @@
     <a href="#phrase-scoring" class="nav-link">Scoring System</a>
     <a href="#phrase-extensions" class="nav-link">Extensions &amp; Bebop</a>
     <a href="#phrase-voiceleading" class="nav-link">Voice Leading</a>
+    <a href="#phrase-profiles" class="nav-link">Quality Profiles</a>
     <a href="#phrase-motif" class="nav-link">Motif Memory</a>
     <a href="#phrase-postprocess" class="nav-link">Post-Processing</a>
     <a href="#phrase-analysis" class="nav-link">Analysis</a>
@@ -374,7 +375,7 @@
 <pre>npm install       # 依存インストール
 npm run dev       # 開発サーバー → http://localhost:5173
 npm run build     # tsc + vite build
-npm test          # vitest run (1154 tests)
+npm test          # vitest run (1159 tests)
 npm run lint      # ESLint</pre>
 
 <h2 id="architecture">Architecture</h2>
@@ -515,8 +516,19 @@ degree ラベル、フレーバーテキストを持ちます。</p>
 <!-- ==================== PHRASE GENERATOR ==================== -->
 <h2 id="phrase-overview">Phrase Generator — Overview</h2>
 <p>
-  フレーズジェネレーターは、<strong>ビバップスタイルの8分音符8音フレーズ</strong>を指板座標ベースで生成する
+  フレーズジェネレーターは、<strong>ビバップスタイルのフレーズ</strong>を指板座標ベースで生成する
   アルゴリズムです。Charlie Parker のソロラインを模倣するため、複数のレイヤーが協調して動作します。
+  <strong>2パス生成</strong>: まずリックライブラリ(~20,000リック、WJD+Omnibook由来)からの
+  パターンマッチングを試行し、失敗時にスコアリング主導の逐次生成にフォールバックします。
+</p>
+<h4>新機能 (v2)</h4>
+<ul>
+  <li><strong>リック駆動生成</strong>: WJD 186ソロ + Parker Omnibook 50ソロから抽出した~20,000リックを品質別に選択・解決。モードスケール互換フィルタ+特性音ボーナスで適合度向上</li>
+  <li><strong>可変リズム</strong>: 4分音符(q)、3連符(t)、8分音符(e)、16分音符(s)の混合に対応</li>
+  <li><strong>拍数選択</strong>: 通常モードで2/3/4拍のフレーズ長を選択可能</li>
+  <li><strong>ゴールノート選択</strong>: 指板クリックでゴール音を指定し、フレーズの到達点を制御</li>
+  <li><strong>ピアノロール</strong>: PhraseAnalysisPanel に時間×ピッチのSVG可視化を追加</li>
+</ul>
 </p>
 
 <div class="callout success">
@@ -560,8 +572,20 @@ degree ラベル、フレーバーテキストを持ちます。</p>
 │   └─ config / prevContour遷移 / ランダム選択
 │
 ├─ Step 4: chooseGoalNote()
+│   ├─ goalNoteOverride → ユーザー指定ゴール (最優先)
 │   ├─ 進行モード: nextChordContext → 7th→3rd 半音解決 (70%)
 │   └─ 通常モード: STRONG_RESOLUTION_DEGREE_IDX で推定
+│
+├─ Step 4b: Lick-Driven Path (2パス生成)
+│   ├─ selectLick(): 品質/拍数/ゴール/コンター + modeSemiスケール互換フィルタ + charTonesボーナス
+│   │   ├─ ハードフィルタ: uniqueOutOfScale ≥ 2 → 除外
+│   │   ├─ スコアペナルティ: outOfScaleCount × -15
+│   │   └─ 特性音ボーナス: CHARACTERISTIC_TONES 一致 × +20
+│   ├─ resolveLick(): スコアベースで指板座標解決 (最大3リトライ)
+│   │   ├─ 品質ゲート: 強拍でアプローチ音 → reject
+│   │   └─ 跳躍ガード: 連続音間 &gt; 9半音 → reject
+│   ├─ 成功 → PhraseNote[] (duration, beatStart付き) を直接返却
+│   └─ 全失敗 → Step 5以降のスコアリング生成にフォールバック
 │
 ├─ Step 5: planCtSkeleton()
 │   └─ ARPEGGIO_PATTERNS から方向親和パターンを選択
@@ -1017,6 +1041,47 @@ Example (G7): A♭ → B → D → F → (next chord's CT)</pre>
   <tr><td>7th→3rd 解決選択</td><td>70% probability</td><td>ゴール音選択時</td></tr>
 </table>
 
+<h2 id="phrase-profiles">Quality-Specific Profiles (Parker Data-Driven)</h2>
+<p>Parker Omnibook (50ソロ, 22,699ノート) + WJD Deep Analysis (186ソロ) から抽出した
+コード品質別の統計データに基づき、<strong>品質ごとに異なるスコアリング</strong> を適用します。</p>
+
+<div class="callout">
+  <div class="callout-label">データソース</div>
+  <code>src/constants/parkerProfiles.ts</code> に全プロファイルを定義。
+  <code>mode.chordQuality</code> から <code>toParkerQuality()</code> でプロファイルキーに変換。
+</div>
+
+<h3>品質マッピング</h3>
+<table>
+  <tr><th>App chordQuality</th><th>Parker Profile</th><th>サンプルサイズ</th></tr>
+  <tr><td>7, 7#11, 7b13, 7alt, 7b9</td><td>dom7</td><td>12,724</td></tr>
+  <tr><td>maj7</td><td>maj</td><td>4,020</td></tr>
+  <tr><td>m7</td><td>min7</td><td>5,607</td></tr>
+  <tr><td>m7&#x266D;5</td><td>min7b5</td><td>163</td></tr>
+  <tr><td>dim, dim7</td><td>dim</td><td>179</td></tr>
+  <tr><td>その他 (mMaj7, aug 等)</td><td>overall</td><td>22,699</td></tr>
+</table>
+
+<h3>品質別インターバル重み</h3>
+<p><code>computeIntervalWeights(profile)</code>: overall の基準値 {60,18,14,5} に品質別比率を乗算。</p>
+<table>
+  <tr><th>Quality</th><th>Stepwise</th><th>Thirds</th><th>Fourths</th><th>Leaps</th></tr>
+  <tr><td>dom7</td><td>60</td><td>17</td><td>14</td><td>7</td></tr>
+  <tr><td>maj</td><td>60</td><td>18</td><td>18</td><td>7</td></tr>
+  <tr><td>min7</td><td>60</td><td>20</td><td>14</td><td>9</td></tr>
+  <tr><td>min7b5</td><td>60</td><td>12</td><td>13</td><td>6</td></tr>
+  <tr><td>overall</td><td>60</td><td>18</td><td>14</td><td>5</td></tr>
+</table>
+
+<h3>品質別追加スコアリング</h3>
+<table>
+  <tr><th>Factor</th><th>Score</th><th>Condition</th></tr>
+  <tr><td>Pitch class preference</td><td class="score-positive">&#177;12</td><td>Parker品質別の音使用頻度偏差 &times; 1.5</td></tr>
+  <tr><td>Bebop scale boost</td><td class="score-positive">&times; profile</td><td>ビバップ経過音ボーナスに品質別倍率 (0.80-1.038)</td></tr>
+  <tr><td>Contour weights</td><td>weighted</td><td>品質別下行優位コンター選択 (descending 40-50%)</td></tr>
+  <tr><td>Approach shuffle</td><td>weighted</td><td>品質別上方/下方アプローチの優先度</td></tr>
+</table>
+
 <h2 id="phrase-motif">Motif Memory</h2>
 <p>フレーズ間の動機的一貫性。前フレーズの開始2音のインターバル列を記録し、
 次フレーズの beats 2-4 で類似度ボーナスを付与します。</p>
@@ -1384,6 +1449,22 @@ interface PhraseNote {
   digitalPattern?: DigitalPatternTag   // デジタルパターンのタグ
   isBebopPassing?: boolean             // ビバップ経過音
   isSkeletonBeat?: boolean             // スケルトン拍
+  duration?: RhythmType                // 音価 (q/t/e/s)
+  beatStart?: number                   // 絶対拍位置 (0起点)
+}
+
+type RhythmType = 'q' | 't' | 'e' | 's'  // 4分/3連/8分/16分
+
+// リック型
+interface Lick {
+  id: string
+  steps: number[]          // interval-from-root (0-11)
+  intervals: number[]      // signed semitone intervals
+  rhythm: RhythmType[]     // duration per note
+  direction: 'asc' | 'desc' | 'mixed'
+  length: number
+  durationBeats: number
+  source: 'omnibook' | 'wjd'
 }
 
 // 生成メタデータ型
@@ -1429,14 +1510,14 @@ interface Progression {
 
 <!-- ==================== TESTING ==================== -->
 <h2 id="testing">Test Suite</h2>
-<p><code>npm test</code> — Vitest による <strong>1154テスト</strong>。</p>
+<p><code>npm test</code> — Vitest による <strong>1159テスト</strong>。</p>
 
 <table>
   <tr><th>Test File</th><th>Tests</th><th>Coverage</th></tr>
   <tr><td>fretboard.test.ts</td><td>388</td><td>Pos1リファレンス、度数オフセット不変条件、構造検証</td></tr>
-  <tr><td>phraseQualityAudit.test.ts</td><td>409</td><td>17条件 × 23品質アサーション + 3進行コンテキスト (fourths%, leaps% 追加)</td></tr>
+  <tr><td>phraseQualityAudit.test.ts</td><td>414</td><td>17条件 × 23品質アサーション + 3進行コンテキスト + 5品質プロファイル検証</td></tr>
   <tr><td>progression.test.ts</td><td>125</td><td>parseChordSymbol, QUALITY_TO_MODES, 近接ランキング</td></tr>
-  <tr><td>phraseGenerator.test.ts</td><td>70</td><td>構造不変条件 + N=100 ビバップ統計検証 + メタデータ記録検証 + startHint連結検証 + 骨格近接検証 + ゴールVL保持検証</td></tr>
+  <tr><td>phraseGenerator.test.ts</td><td>80</td><td>構造不変条件 + N=100 ビバップ統計検証 + メタデータ記録検証 + startHint連結検証 + 骨格近接検証 + ゴールVL保持検証 + スケール互換フィルタ + resolveLick品質ゲート</td></tr>
   <tr><td>jazzStandards.test.ts</td><td>42</td><td>パース、エンディング、リピート、ビート幅</td></tr>
   <tr><td>chordForms.test.ts</td><td>36</td><td>Drop 2/3 ボイシング検索、テンプレート構造</td></tr>
   <tr><td>guideTones.test.ts</td><td>22</td><td>ガイドトーン抽出、解決分類</td></tr>

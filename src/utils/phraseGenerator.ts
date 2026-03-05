@@ -1,5 +1,6 @@
-import type { Position, Mode, FretMap, PhraseNote, PhraseConfig, PhraseContour, GeneratedPhrase, ApproachType, ApproachGroupInfo, SkeletonMeta } from '../types';
-import { OPEN_STRINGS } from '../constants';
+import type { Position, Mode, FretMap, PhraseNote, PhraseConfig, PhraseContour, GeneratedPhrase, ApproachType, ApproachGroupInfo, SkeletonMeta, Lick, RhythmType } from '../types';
+import { OPEN_STRINGS, PARKER_PROFILES, toParkerQuality, getLicksForQuality } from '../constants';
+import type { QualityProfile } from '../constants';
 
 // ---------------------------------------------------------------------------
 // Types (internal)
@@ -89,6 +90,36 @@ const ARPEGGIO_PATTERNS: { ctIndices: number[]; direction: 'asc' | 'desc' | 'mix
 const CONTOUR_PATTERN_AFFINITY: Record<PhraseContour, ('asc' | 'desc' | 'mixed')[]> = {
   'arch': ['asc', 'mixed'], 'reverse-arch': ['desc', 'mixed'],
   'descending': ['desc', 'mixed'], 'wave': ['mixed', 'asc', 'desc'],
+};
+
+// ---------------------------------------------------------------------------
+// Characteristic tones — notes that distinguish each mode from others of the
+// same chord quality (used for lick selection scoring)
+// ---------------------------------------------------------------------------
+
+const CHARACTERISTIC_TONES: Record<string, number[]> = {
+  // Diatonic
+  'ionian':       [5],       // ♮4 (vs Lydian ♯4)
+  'dorian':       [9],       // ♮6 (vs Aeolian ♭6)
+  'phrygian':     [1],       // ♭2 (vs Dorian ♮2)
+  'lydian':       [6],       // ♯4 (vs Ionian ♮4)
+  'mixolydian':   [5],       // ♮4 (vs Lydian Dom ♯4)
+  'aeolian':      [8],       // ♭6 (vs Dorian ♮6)
+  'locrian':      [1, 6],    // ♭2, ♭5
+  // Melodic Minor
+  'melodic-minor':  [9, 11], // ♮6, ♮7
+  'dorian-b2':      [1, 9],  // ♭2, ♮6
+  'lydian-aug':     [6, 8],  // ♯4, ♯5
+  'lydian-dom':     [6],     // ♯4
+  'mixo-b6':        [8],     // ♭6
+  'locrian-nat2':   [2],     // ♮2
+  'altered':        [1, 3],  // ♭9, ♯9
+  // Harmonic Minor
+  'harmonic-minor':  [8, 11], // ♭6, ♮7
+  'phrygian-dom':    [1, 4],  // ♭2, ♮3
+  // Diminished
+  'dim-wh':  [9, 11],        // ♮6, ♮7
+  'dim-hw':  [1, 4],         // ♭2, ♮3
 };
 
 // ---------------------------------------------------------------------------
@@ -330,11 +361,24 @@ const BEBOP_PASSING: Record<string, number> = {
 // Scoring
 // ---------------------------------------------------------------------------
 
-function intervalScore(interval: number): number {
-  if (interval <= 2) return 60;   // stepwise
-  if (interval <= 4) return 18;   // thirds (Parker: ~18% of intervals)
-  if (interval === 5) return 14;  // fourths (Parker: ~10-15%)
-  return 5;                       // fifths+
+interface IntervalWeights { stepwise: number; thirds: number; fourths: number; leaps: number }
+
+function computeIntervalWeights(profile: QualityProfile): IntervalWeights {
+  const o = PARKER_PROFILES.overall.intervals;
+  return {
+    stepwise: 60,  // base value fixed
+    thirds:  Math.round(18 * profile.intervals.thirds / o.thirds),
+    fourths: Math.round(14 * profile.intervals.fourths / o.fourths),
+    leaps:   Math.round(5  * profile.intervals.leaps / o.leaps),
+  };
+}
+
+function intervalScore(interval: number, w?: IntervalWeights): number {
+  const iw = w ?? { stepwise: 60, thirds: 18, fourths: 14, leaps: 5 };
+  if (interval <= 2) return iw.stepwise;
+  if (interval <= 4) return iw.thirds;
+  if (interval === 5) return iw.fourths;
+  return iw.leaps;
 }
 
 function contourScore(
@@ -421,6 +465,205 @@ function goalProximityScore(
 }
 
 // ---------------------------------------------------------------------------
+// Lick-driven generation
+// ---------------------------------------------------------------------------
+
+const RHYTHM_BEATS: Record<RhythmType, number> = {
+  'q': 1.0, 't': 2/3, 'e': 0.5, 's': 0.25,
+};
+
+/** Select a lick from the library based on quality, beat budget, and context */
+export function selectLick(
+  quality: string,
+  maxBeats: number,
+  goalSemitone: number | null,
+  startHint: PhraseConfig['startHint'],
+  contour: PhraseContour,
+  rootSemitone = 0,
+  modeSemi: number[] = [],
+  charTones: number[] = [],
+): Lick | null {
+  const licks = getLicksForQuality(quality);
+  if (licks.length === 0) return null;
+
+  // Filter by duration + scale compatibility
+  const semiSet = modeSemi.length > 0 ? new Set(modeSemi) : null;
+  const eligible = licks.filter(l => {
+    if (l.durationBeats > maxBeats || l.length < 3) return false;
+    // Reject licks with 2+ unique out-of-scale pitch classes
+    if (semiSet) {
+      const uniqueOut = new Set(l.steps.filter(s => !semiSet.has(s))).size;
+      if (uniqueOut >= 2) return false;
+    }
+    return true;
+  });
+  if (eligible.length === 0) return null;
+
+  // Score each lick
+  const scored = eligible.map(l => {
+    let score = 0;
+
+    // Goal compatibility
+    if (goalSemitone !== null) {
+      if (l.endStep === goalSemitone) score += 30;
+      else if (Math.abs(l.endStep - goalSemitone) <= 1 || Math.abs(l.endStep - goalSemitone) >= 11) score += 15;
+    }
+
+    // Start hint proximity (convert absolute semitone to root-relative)
+    if (startHint) {
+      const hintRelSemi = ((startHint.semitone - rootSemitone) + 12) % 12;
+      const diff = Math.abs(l.startStep - hintRelSemi);
+      if (l.startStep === hintRelSemi) score += 40;
+      else if (diff <= 1 || diff >= 11) score += 20;
+      else if (diff <= 2) score += 10;
+    }
+
+    // Out-of-scale penalty (for licks with 1 unique out-of-scale note)
+    if (semiSet) {
+      const outCount = l.steps.filter(s => !semiSet.has(s)).length;
+      score -= outCount * 15;
+    }
+
+    // Characteristic tone bonus
+    if (charTones.length > 0) {
+      const stepsSet = new Set(l.steps);
+      const charHits = charTones.filter(t => stepsSet.has(t)).length;
+      score += charHits * 20;
+    }
+
+    // Contour affinity
+    const contourDir = contour === 'arch' || contour === 'wave' ? 'asc'
+      : contour === 'descending' || contour === 'reverse-arch' ? 'desc' : 'mixed';
+    if (l.direction === contourDir) score += 10;
+
+    // Fill rate: prefer licks that use more of the available beats
+    const fillRate = l.durationBeats / maxBeats;
+    if (fillRate >= 0.8) score += 15;
+    else if (fillRate >= 0.5) score += 5;
+
+    // Prefer shorter (more reusable) licks slightly
+    if (l.length <= 6) score += 5;
+
+    return { lick: l, score: Math.max(1, score) };
+  });
+
+  // Pick from top 10 by weighted random
+  scored.sort((a, b) => b.score - a.score);
+  const top = scored.slice(0, 10);
+  return pickWeighted(
+    top.map(s => s.lick),
+    top.map(s => s.score),
+  );
+}
+
+/** Resolve a lick's abstract steps to concrete fretboard positions.
+ *  Returns PhraseNote[] with duration and beatStart, or null on failure. */
+export function resolveLick(
+  lick: Lick,
+  pool: PoolNote[],
+  mode: Mode,
+  startRef: { stringIdx: number; fret: number },
+  beatOffset = 0,
+): PhraseNote[] | null {
+  const rootSemi = mode.semi[0];
+  const ctSet = new Set(mode.chordTones);
+  const result: PhraseNote[] = [];
+  let prevNote: { stringIdx: number; fret: number } | null = null;
+  let accBeat = beatOffset;
+
+  for (let i = 0; i < lick.steps.length; i++) {
+    const targetSemi = (rootSemi + lick.steps[i]) % 12;
+    const ref = prevNote ?? startRef;
+
+    // Find all candidates matching the target semitone
+    const candidates = pool.filter(n => n.semitone === targetSemi);
+    if (candidates.length === 0) return null;
+
+    // Score each candidate
+    let best: PoolNote | null = null;
+    let bestScore = -Infinity;
+
+    for (const c of candidates) {
+      let score = 0;
+
+      // Absolute pitch proximity to reference
+      const pitchDist = Math.abs(absolutePitch(c) - absolutePitch(ref));
+      score += 50 - pitchDist * 3;
+
+      // String distance
+      const strDist = Math.abs(c.stringIdx - ref.stringIdx);
+      if (strDist <= 1) score += 40;
+      else if (strDist === 2) score += 20;
+      else if (strDist === 3) score += 5;
+      else score -= 30;
+
+      // Direction match with lick interval
+      if (i > 0 && lick.intervals[i - 1] !== 0) {
+        const actualDir = absolutePitch(c) - absolutePitch(ref);
+        const expectedDir = lick.intervals[i - 1];
+        if ((actualDir > 0 && expectedDir > 0) || (actualDir < 0 && expectedDir < 0)) {
+          score += 15;
+        }
+      }
+
+      // Same string bonus for stepwise motion
+      if (strDist === 0) score += 10;
+
+      // First note: extra bonus for proximity to startRef pitch
+      if (i === 0) {
+        const refPitch = absolutePitch(startRef);
+        if (Math.abs(absolutePitch(c) - refPitch) <= 1) score += 20;
+      }
+
+      if (score > bestScore) {
+        bestScore = score;
+        best = c;
+      }
+    }
+
+    // Resolution failure threshold
+    if (!best || bestScore < -20) return null;
+
+    // Leap guard: reject if consecutive notes span > 9 semitones (major 6th)
+    if (prevNote) {
+      const leap = Math.abs(absolutePitch(best) - absolutePitch(prevNote));
+      if (leap > 9) return null;
+    }
+
+    const duration = lick.rhythm[i] ?? 'e';
+    const beatPos = Math.floor(accBeat * 2) + 1; // convert to 1-based eighth-note position
+    const totalBeatCount = Math.ceil((beatOffset + lick.durationBeats) * 2);
+    const strongBeat = isStrongBeat(beatPos, beatOffset === 0 ? 8 : totalBeatCount);
+
+    // Strong-beat CT enforcement: reject chromatic/approach on strong beats
+    if (strongBeat && !ctSet.has(best.noteName) && !isExtensionTone(best.noteName, mode)) {
+      // Allow scale tones on strong beats, but reject approach/chromatic
+      if (best.isApproach) return null;
+    }
+
+    const isStrong = Math.abs(accBeat - Math.round(accBeat)) < 0.05 && accBeat === Math.round(accBeat);
+
+    const pn: PhraseNote = {
+      noteName: best.noteName,
+      stringIdx: best.stringIdx,
+      fret: best.fret,
+      semitone: best.semitone,
+      isChordTone: ctSet.has(best.noteName),
+      isApproach: best.isApproach,
+      beatPosition: Math.min(beatPos, 8),
+      isStrong,
+      duration,
+      beatStart: accBeat,
+    };
+    result.push(pn);
+    prevNote = best;
+    accBeat += RHYTHM_BEATS[duration];
+  }
+
+  return result;
+}
+
+// ---------------------------------------------------------------------------
 // Core generation
 // ---------------------------------------------------------------------------
 
@@ -436,15 +679,21 @@ export function generatePhrase(
   const ctSet = new Set(mode.chordTones);
   const ctPool = pool.filter(n => n.isChordTone);
 
+  // --- Quality-specific profile (Parker/WJD data-driven) ---
+  const profile = PARKER_PROFILES[toParkerQuality(mode.chordQuality)];
+  const iWeights = computeIntervalWeights(profile);
+  const rootSemitone = mode.semi[0];
+
   if (ctPool.length === 0) {
     throw new Error('No chord tones found in position');
   }
 
   // --- Contour selection (with macro-coherence when chained) ---
+  const cw = profile.contourWeights;
   const contour = config.contour
     ?? (config.prevContour
       ? pickWeighted(CONTOUR_TRANSITIONS[config.prevContour], [3, 2, 1])
-      : pickRandom(ALL_CONTOURS));
+      : pickWeighted(ALL_CONTOURS, ALL_CONTOURS.map(c => cw[c])));
 
   // Use first instance for compact range (avoid spanning multiple octaves)
   const firstInst = position.instances[0];
@@ -460,12 +709,97 @@ export function generatePhrase(
   const pitchRange = { min: Math.min(...pitches), max: Math.max(...pitches) };
 
   // --- Phrase length & goal beat ---
-  const totalBeats = config.phraseLength ?? 8;
+  // beatCount (2/3/4 beats) takes priority, otherwise use phraseLength (eighth note count)
+  const totalBeats = config.beatCount ? config.beatCount * 2 : (config.phraseLength ?? 8);
   const goalBeat = Math.min(totalBeats, 8);
 
   // --- Goal note ---
-  const goalResult = chooseGoalNote(activeCtPool, mode, targetThirdNote, config.nextChordContext);
+  let goalResult: GoalResult;
+  if (config.goalNoteOverride) {
+    // User-specified goal note — find closest matching note in pool
+    const override = config.goalNoteOverride;
+    const exact = activeCtPool.find(n => n.stringIdx === override.stringIdx && n.fret === override.fret);
+    const byName = activeCtPool.filter(n => n.noteName === override.noteName);
+    const closest = exact ?? (byName.length > 0 ? byName.reduce((best, n) =>
+      Math.abs(absolutePitch(n) - absolutePitch(override as any)) < Math.abs(absolutePitch(best) - absolutePitch(override as any)) ? n : best
+    ) : null);
+    if (closest) {
+      goalResult = { note: closest, reason: 'ユーザー指定ゴール' };
+    } else {
+      // Fallback: use any pool note at that position
+      const anyPool = activePool.find(n => n.stringIdx === override.stringIdx && n.fret === override.fret);
+      goalResult = anyPool
+        ? { note: anyPool, reason: 'ユーザー指定ゴール (非CT)' }
+        : chooseGoalNote(activeCtPool, mode, targetThirdNote, config.nextChordContext);
+    }
+  } else {
+    goalResult = chooseGoalNote(activeCtPool, mode, targetThirdNote, config.nextChordContext);
+  }
   const goalNote = goalResult.note;
+
+  // --- Lick-driven path (try first, fallback to scoring) ---
+  const maxLickBeats = totalBeats / 2; // convert eighth-note count to beat count
+  const goalSemiRel = ((goalNote.semitone - rootSemitone) + 12) % 12;
+  const charTones = CHARACTERISTIC_TONES[mode.key] ?? [];
+  const lick = selectLick(mode.chordQuality, maxLickBeats, goalSemiRel, config.startHint, contour, rootSemitone, mode.semi, charTones);
+  if (lick) {
+    const startRef = config.startHint ?? activeCtPool[0];
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const selectedLick = attempt === 0 ? lick : selectLick(mode.chordQuality, maxLickBeats, goalSemiRel, config.startHint, contour, rootSemitone, mode.semi, charTones);
+      if (!selectedLick) break;
+      const resolved = resolveLick(selectedLick, activePool, mode, startRef, 0);
+      if (resolved && resolved.length >= 3) {
+        // Assign beat positions for compatibility
+        for (let i = 0; i < resolved.length; i++) {
+          if (!resolved[i].duration) resolved[i].duration = 'e';
+        }
+
+        // If lick doesn't end on goal, append connector notes via scoring
+        const lastLickNote = resolved[resolved.length - 1];
+        const lastBeatStart = lastLickNote.beatStart ?? 0;
+        const remainingBeats = maxLickBeats - lastBeatStart - RHYTHM_BEATS[lastLickNote.duration ?? 'e'];
+        if (remainingBeats >= 0.4 && lastLickNote.noteName !== goalNote.noteName) {
+          // Add 1-2 connecting notes to reach goal
+          const goalResolved = nearestInstance(goalNote.noteName, lastLickNote, activeCtPool);
+          if (goalResolved) {
+            const connBeatStart = lastBeatStart + RHYTHM_BEATS[lastLickNote.duration ?? 'e'];
+            const connPN: PhraseNote = {
+              noteName: goalResolved.noteName,
+              stringIdx: goalResolved.stringIdx,
+              fret: goalResolved.fret,
+              semitone: goalResolved.semitone,
+              isChordTone: goalResolved.isChordTone,
+              isApproach: false,
+              beatPosition: Math.min(Math.floor(connBeatStart * 2) + 1, 8),
+              isStrong: Math.abs(connBeatStart - Math.round(connBeatStart)) < 0.05,
+              duration: 'e',
+              beatStart: connBeatStart,
+            };
+            resolved.push(connPN);
+          }
+        }
+
+        // Extract motif from lick
+        const lickMotif: number[] = [];
+        for (let i = 1; i < Math.min(3, resolved.length); i++) {
+          lickMotif.push(absolutePitch(resolved[i]) - absolutePitch(resolved[i - 1]));
+        }
+
+        return {
+          notes: resolved,
+          posId: position.id,
+          modeKey: mode.key,
+          rootName: mode.notes[0],
+          config: { ...config, contour },
+          motif: lickMotif,
+          goalReason: goalResult.reason,
+          lickId: selectedLick.id,
+          totalBeats: maxLickBeats,
+        };
+      }
+    }
+    // All lick attempts failed — fall through to scoring path
+  }
 
   // --- CT skeleton: pre-plan strong-beat CTs for phrase direction ---
   const skeleton = planCtSkeleton(activeCtPool, goalNote, contour, pitchRange, config.startHint, totalBeats, mode);
@@ -534,7 +868,7 @@ export function generatePhrase(
     // --- Try approach pattern commitment ---
     if (!strong && includeChromatic && config.approachTypes.length > 0) {
       const committed = tryApproachCommitment(
-        beat, activePool, activeCtPool, mode, config, notes, goalNote, approachGroupId, goalBeat,
+        beat, activePool, activeCtPool, mode, config, notes, goalNote, approachGroupId, goalBeat, profile,
       );
       if (committed) {
         approachGroupId = committed.nextGroupId;
@@ -593,7 +927,7 @@ export function generatePhrase(
 
     const weights = candidates.map(c => {
       const interval = semiInterval(prevNote, c);
-      let score = intervalScore(interval);
+      let score = intervalScore(interval, iWeights);
       score += contourScore(c, beat - 1, contour, pitchRange);
       score += directionScore(c, prevNote, prevPrevNote, consecutiveSameDir);
       score += goalProximityScore(c, goalNote.noteName, activeCtPool, beat, goalBeat);
@@ -716,6 +1050,12 @@ export function generatePhrase(
       // Pitch variety: bonus for introducing a new pitch class
       if (!usedPitchClasses.has(c.semitone)) score += 8;
 
+      // Pitch class preference: Parker quality-specific note usage frequency
+      const relSemi = ((c.semitone - rootSemitone) + 12) % 12;
+      const avgUsage = 100 / 12;  // 8.33%
+      const pcDeviation = (profile.pitchClassUsage[relSemi] ?? avgUsage) - avgUsage;
+      score += Math.round(pcDeviation * 1.5);  // ~-9 to +12 range
+
       // Motif similarity: on beats 2-4, reward matching the previous phrase's motif
       if (config.prevMotif && config.prevMotif.length > 0 && beat >= 2 && beat <= 4) {
         const motifIdx = beat - 2; // beat 2→index 0, beat 3→index 1
@@ -759,7 +1099,7 @@ export function generatePhrase(
         if (bpSemi !== undefined && c.semitone === bpSemi) {
           // Only reward during scalar motion (stepwise from previous note)
           const stepFromPrev = Math.abs(absolutePitch(c) - absolutePitch(prevNote));
-          if (stepFromPrev <= 2 && stepFromPrev > 0) score += 20;
+          if (stepFromPrev <= 2 && stepFromPrev > 0) score += Math.round(20 * profile.bebopScaleBoost);
         }
       }
 
@@ -990,6 +1330,12 @@ export function generatePhrase(
     motif.push(absolutePitch(notes[i]) - absolutePitch(notes[i - 1]));
   }
 
+  // Assign default duration/beatStart for backwards compatibility
+  for (let i = 0; i < notes.length; i++) {
+    if (!notes[i].duration) notes[i].duration = 'e';
+    if (notes[i].beatStart == null) notes[i].beatStart = (notes[i].beatPosition - 1) * 0.5;
+  }
+
   return {
     notes,
     posId: position.id,
@@ -999,6 +1345,7 @@ export function generatePhrase(
     motif,
     skeleton: skeleton.patternMeta,
     goalReason: goalResult.reason,
+    totalBeats: totalBeats / 2,  // convert eighth-note count to beat count
   };
 }
 
@@ -1350,6 +1697,7 @@ function tryApproachCommitment(
   goalNote: PoolNote,
   groupId: number,
   goalBeat = 8,
+  profile?: QualityProfile,
 ): CommittedApproach | null {
   // Only attempt approach if we're on a weak beat and a strong beat follows soon
   const nextStrongBeat = currentBeat === 2 ? 3
@@ -1379,8 +1727,18 @@ function tryApproachCommitment(
     if (Math.random() > approachProb) return null;
   }
 
-  // Shuffle and try approach types
-  const shuffled = [...config.approachTypes].sort(() => Math.random() - 0.5);
+  // Weighted shuffle: Parker quality-specific approach direction preference
+  const apW: Record<string, number> = profile ? {
+    'single-below': profile.approach.singleBelowPct,
+    'single-above': profile.approach.singleAbovePct,
+    'enclosure': profile.approach.enclosurePct,
+    'parker-enclosure': profile.approach.enclosurePct * 0.3,
+    'b9-arpeggio': 5,
+  } : {};
+  const shuffled = profile
+    ? [...config.approachTypes].sort((a, b) =>
+        (apW[b] ?? 10) * Math.random() - (apW[a] ?? 10) * Math.random())
+    : [...config.approachTypes].sort(() => Math.random() - 0.5);
 
   for (const aType of shuffled) {
     const patternNotes = getApproachNotes(targetCT, pool, aType, mode);
