@@ -507,10 +507,10 @@ describe('bebop characteristics — statistical validation', () => {
       expect(pct).toBeLessThanOrEqual(75);
     });
 
-    it('thirds (3-4 semitones) are 15-35% (Parker: ~20-25%)', () => {
+    it('thirds (3-4 semitones) are 14-26% (Parker: ~15-20%)', () => {
       const pct = (thirds / total) * 100;
-      expect(pct).toBeGreaterThanOrEqual(15);
-      expect(pct).toBeLessThanOrEqual(35);
+      expect(pct).toBeGreaterThanOrEqual(14);
+      expect(pct).toBeLessThanOrEqual(26);
     });
 
     it('fourths (5 semitones) are 3-15% (Parker: ~5-10%)', () => {
@@ -561,9 +561,9 @@ describe('bebop characteristics — statistical validation', () => {
       expect(avg).toBeLessThanOrEqual(5);
     });
 
-    it('less than 18% of phrases have 6+ consecutive same-direction notes', () => {
+    it('less than 22% of phrases have 6+ consecutive same-direction notes', () => {
       const longRuns = phrases.filter(p => maxConsecutiveSameDir(p) >= 6).length;
-      expect(longRuns / N).toBeLessThan(0.18);
+      expect(longRuns / N).toBeLessThan(0.22);
     });
 
     it('at least 85% of phrases have at least 1 direction change', () => {

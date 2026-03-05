@@ -374,7 +374,7 @@
 <pre>npm install       # 依存インストール
 npm run dev       # 開発サーバー → http://localhost:5173
 npm run build     # tsc + vite build
-npm test          # vitest run (1086 tests)
+npm test          # vitest run (1154 tests)
 npm run lint      # ESLint</pre>
 
 <h2 id="architecture">Architecture</h2>
@@ -893,12 +893,13 @@ Example (G7): A♭ → B → D → F → (next chord's CT)</pre>
 <table>
   <tr><th>Factor</th><th>Score</th><th>Condition</th></tr>
   <tr><td>Stepwise motion</td><td class="score-positive">+60</td><td>インターバル ≤ 2半音</td></tr>
-  <tr><td>Thirds</td><td class="score-positive">+25</td><td>3-4半音</td></tr>
-  <tr><td>Fourths</td><td class="score-positive">+10</td><td>5半音</td></tr>
+  <tr><td>Thirds</td><td class="score-positive">+18</td><td>3-4半音 (Parker: ~18%)</td></tr>
+  <tr><td>Fourths</td><td class="score-positive">+14</td><td>5半音 (Parker: ~10-15%)</td></tr>
   <tr><td>Large intervals</td><td class="score-positive">+5</td><td>6半音以上</td></tr>
   <tr><td>Direction change</td><td class="score-positive">+15</td><td>前の音からの方向転換</td></tr>
   <tr><td>Same direction 2-3</td><td class="score-positive">+5</td><td>同方向の連続が2-3音</td></tr>
   <tr><td>Same direction 5+</td><td class="score-negative">-25</td><td>同方向5音以上の連続</td></tr>
+  <tr><td>Thirds run continuation</td><td class="score-positive">+22</td><td>同方向3度が2連続以上 (R→3→5→7スタイルのアルペジオラン)</td></tr>
   <tr><td>Scalar run continuation</td><td class="score-positive">+14</td><td>スカラーパッセージの延長</td></tr>
   <tr><td>Pitch variety</td><td class="score-positive">+8</td><td>フレーズ中で初出のピッチクラス</td></tr>
 </table>
@@ -925,8 +926,8 @@ Example (G7): A♭ → B → D → F → (next chord's CT)</pre>
 <h3>Harmonic Quality (和声品質)</h3>
 <table>
   <tr><th>Factor</th><th>Score</th><th>Condition</th></tr>
-  <tr><td>Guide tone on strong beat</td><td class="score-positive">+25</td><td>強拍で 3rd or 7th</td></tr>
-  <tr><td>Guide tone on beat 1/3</td><td class="score-positive">+10</td><td>beat 1 または 3 での追加ボーナス</td></tr>
+  <tr><td>Guide tone on strong beat</td><td class="score-positive">+12</td><td>強拍で 3rd or 7th (骨格追従と協調)</td></tr>
+  <tr><td>Guide tone on beat 1/3</td><td class="score-positive">+6</td><td>beat 1 または 3 での追加ボーナス</td></tr>
   <tr><td>Extension on strong beat</td><td class="score-negative">-10</td><td>9th/13th の低優先度</td></tr>
   <tr><td>CT variety penalty</td><td class="score-negative">-50</td><td>連続強拍で同一CT</td></tr>
   <tr><td>CT outline (adjacent)</td><td class="score-positive">+12</td><td>前の強拍から隣接CTへの進行</td></tr>
@@ -965,16 +966,15 @@ Example (G7): A♭ → B → D → F → (next chord's CT)</pre>
   <tr><td>Toward next skeleton CT</td><td class="score-positive">+18</td><td>次の骨格ピッチに接近</td></tr>
   <tr><td>Half-step approach</td><td class="score-positive">+10</td><td>次の骨格CTの1st以内</td></tr>
   <tr><td>Moving away</td><td class="score-negative">-10</td><td>骨格CTから離反 (>2st)</td></tr>
+  <tr><td>Weak-beat scalar preference</td><td class="score-positive">+8</td><td>弱拍で非CT・非アプローチのstepwise進行</td></tr>
 </table>
 
-<h3>Goal Approach (ゴールへの接近)</h3>
+<h3>Goal Proximity (ゴール近接)</h3>
 <table>
   <tr><th>Factor</th><th>Score</th><th>Condition</th></tr>
-  <tr><td>Moving toward goal</td><td class="score-positive">+15</td><td>ゴール拍の近傍で接近中</td></tr>
-  <tr><td>Penultimate ≤2st</td><td class="score-positive">+20</td><td>直前拍でゴールまで1-2半音</td></tr>
-  <tr><td>Half-step resolution</td><td class="score-positive">+15</td><td>半音解決ボーナス</td></tr>
-  <tr><td>Moving away (early)</td><td class="score-negative">-8</td><td>接近ゾーンでゴールから離反</td></tr>
-  <tr><td>Moving away (penultimate)</td><td class="score-negative">-15</td><td>直前拍でゴールから離反</td></tr>
+  <tr><td>goalProximityScore</td><td class="score-positive">max +40</td><td>接近ゾーン (goalBeat-2以降) でゴール近接度</td></tr>
+  <tr><td>Half-step resolution</td><td class="score-positive">+15</td><td>直前拍で半音距離</td></tr>
+  <tr><td>Far from goal (penultimate)</td><td class="score-negative">-dist×3</td><td>直前拍でゴールから遠い</td></tr>
 </table>
 
 <h3>Contour Adherence (コンター追従)</h3>
@@ -1109,12 +1109,16 @@ Example (G7): A♭ → B → D → F → (next chord's CT)</pre>
   <tr><td>oscillation</td><td>< 50%</td><td>振動パターンの割合</td></tr>
   <tr><td>guideTone</td><td>≥ 32%</td><td>ガイドトーンの出現率</td></tr>
   <tr><td>scalarRuns</td><td>≥ 25%</td><td>スカラーランの割合</td></tr>
-  <tr><td>halfStepRes</td><td>≥ 18%</td><td>半音解決の割合</td></tr>
+  <tr><td>halfStepRes</td><td>≥ 12%</td><td>半音解決の割合</td></tr>
   <tr><td>uniqueStrongCTs</td><td>≥ 2.8</td><td>強拍のユニークCT数の平均</td></tr>
   <tr><td>ctOutlineRange</td><td>≥ 5</td><td>CTアウトラインの音域</td></tr>
   <tr><td>stagnation</td><td>≤ 50%</td><td>停滞パターンの割合</td></tr>
   <tr><td>arpeggioFragments</td><td>≥ 0.3</td><td>アルペジオ断片の平均数</td></tr>
   <tr><td>weakBeatFunction</td><td>≥ 60%</td><td>弱拍の機能音率</td></tr>
+  <tr><td>thirdsPct</td><td>14-32%</td><td>3度インターバルの割合 (Parker: ~15-20%)</td></tr>
+  <tr><td>fourthsPct</td><td>5-22%</td><td>4度インターバルの割合 (Parker: ~10-15%)</td></tr>
+  <tr><td>leapPct</td><td>≤ 18%</td><td>跳躍 (≥6st) の割合 (Parker: ~5-10%)</td></tr>
+  <tr><td>consecutiveThirdsRuns</td><td>≥ 0.08</td><td>同方向3度連続ラン (3+音) の平均回数</td></tr>
 </table>
 
 <!-- ==================== HARMONY ==================== -->
@@ -1425,12 +1429,12 @@ interface Progression {
 
 <!-- ==================== TESTING ==================== -->
 <h2 id="testing">Test Suite</h2>
-<p><code>npm test</code> — Vitest による <strong>1086テスト</strong>。</p>
+<p><code>npm test</code> — Vitest による <strong>1154テスト</strong>。</p>
 
 <table>
   <tr><th>Test File</th><th>Tests</th><th>Coverage</th></tr>
   <tr><td>fretboard.test.ts</td><td>388</td><td>Pos1リファレンス、度数オフセット不変条件、構造検証</td></tr>
-  <tr><td>phraseQualityAudit.test.ts</td><td>341</td><td>17条件 × 19品質アサーション + 3進行コンテキスト (chain interval ≤ 3st率含む)</td></tr>
+  <tr><td>phraseQualityAudit.test.ts</td><td>409</td><td>17条件 × 23品質アサーション + 3進行コンテキスト (fourths%, leaps% 追加)</td></tr>
   <tr><td>progression.test.ts</td><td>125</td><td>parseChordSymbol, QUALITY_TO_MODES, 近接ランキング</td></tr>
   <tr><td>phraseGenerator.test.ts</td><td>70</td><td>構造不変条件 + N=100 ビバップ統計検証 + メタデータ記録検証 + startHint連結検証 + 骨格近接検証 + ゴールVL保持検証</td></tr>
   <tr><td>jazzStandards.test.ts</td><td>42</td><td>パース、エンディング、リピート、ビート幅</td></tr>

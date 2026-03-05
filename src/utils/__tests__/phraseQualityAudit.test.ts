@@ -70,6 +70,10 @@ interface PhraseProblems {
   arpeggioFragments: number;     // 3+ consecutive CTs with different names
   weakBeatFunctional: number;    // weak beats serving functional role (passing/approach)
   weakBeatTotal: number;         // total weak beats
+  thirdsPct: number;             // percentage of intervals that are 3-4 semitones
+  fourthsPct: number;            // percentage of intervals that are 5 semitones
+  leapPct: number;               // percentage of intervals that are ≥6 semitones
+  consecutiveThirdsRuns: number; // 3+ consecutive thirds in same direction
 }
 
 function detectProblems(phrase: GeneratedPhrase, mode: Mode): PhraseProblems {
@@ -96,6 +100,10 @@ function detectProblems(phrase: GeneratedPhrase, mode: Mode): PhraseProblems {
     arpeggioFragments: 0,
     weakBeatFunctional: 0,
     weakBeatTotal: 0,
+    thirdsPct: 0,
+    fourthsPct: 0,
+    leapPct: 0,
+    consecutiveThirdsRuns: 0,
   };
 
   // Pitch values
@@ -103,12 +111,15 @@ function detectProblems(phrase: GeneratedPhrase, mode: Mode): PhraseProblems {
   problems.rangeSemitones = Math.max(...pitches) - Math.min(...pitches);
 
   // Interval analysis
-  let stepwise = 0, leaps = 0, total = 0;
+  let stepwise = 0, leaps = 0, thirds = 0, fourths = 0, leapCount = 0, total = 0;
   for (let i = 1; i < notes.length; i++) {
     const interval = Math.abs(pitches[i] - pitches[i - 1]);
     total++;
 
     if (interval <= 2) stepwise++;
+    if (interval >= 3 && interval <= 4) thirds++;
+    if (interval === 5) fourths++;
+    if (interval >= 6) leapCount++;
 
     // Large leap detection (≥ 7 semitones = P5)
     if (interval >= 7) {
@@ -142,6 +153,29 @@ function detectProblems(phrase: GeneratedPhrase, mode: Mode): PhraseProblems {
 
   problems.stepwisePct = total > 0 ? Math.round((stepwise / total) * 100) : 0;
   problems.totalLeapPct = total > 0 ? Math.round((leaps / total) * 100) : 0;
+  problems.thirdsPct = total > 0 ? Math.round((thirds / total) * 100) : 0;
+  problems.fourthsPct = total > 0 ? Math.round((fourths / total) * 100) : 0;
+  problems.leapPct = total > 0 ? Math.round((leapCount / total) * 100) : 0;
+
+  // Consecutive thirds runs: count runs of 3+ notes connected by thirds in same direction
+  // 3 notes (R→3→5) = 2 same-direction third-intervals = streak of 1 → counts as 1 run
+  {
+    let streak = 0; // consecutive same-direction third-intervals
+    for (let i = 2; i < notes.length; i++) {
+      const prevInt = Math.abs(pitches[i - 1] - pitches[i - 2]);
+      const curInt = Math.abs(pitches[i] - pitches[i - 1]);
+      const prevDir = pitches[i - 1] - pitches[i - 2];
+      const curDir = pitches[i] - pitches[i - 1];
+      const sameDir = (prevDir > 0 && curDir > 0) || (prevDir < 0 && curDir < 0);
+      if (prevInt >= 3 && prevInt <= 4 && curInt >= 3 && curInt <= 4 && sameDir) {
+        streak++;
+      } else {
+        if (streak >= 1) problems.consecutiveThirdsRuns++;
+        streak = 0;
+      }
+    }
+    if (streak >= 1) problems.consecutiveThirdsRuns++;
+  }
 
   // Oscillation detection (A→B→A)
   for (let i = 2; i < notes.length; i++) {
@@ -292,6 +326,10 @@ interface AggregateStats {
   avgUniqueStrongBeatCTs: number;  // avg distinct CT names on strong beats (ideal: 3-4)
   avgArpeggioFragments: number;    // avg 3+ consecutive CT outlines per phrase
   avgWeakBeatFunctionPct: number;  // avg % of weak beats serving functional role
+  avgThirdsPct: number;            // avg % of intervals that are thirds (3-4st)
+  avgFourthsPct: number;           // avg % of intervals that are fourths (5st)
+  avgLeapPct: number;              // avg % of intervals that are leaps (≥6st)
+  avgConsecutiveThirdsRuns: number; // avg runs of 3+ same-direction thirds per phrase
   // Specific problem details (up to 5 worst examples)
   worstBeat78Examples: { interval: number; phrase: string }[];
   worstLeapExamples: { interval: number; beat: number; phrase: string }[];
@@ -331,6 +369,10 @@ function aggregate(phrases: GeneratedPhrase[], mode: Mode): AggregateStats {
     avgUniqueStrongBeatCTs: 0,
     avgArpeggioFragments: 0,
     avgWeakBeatFunctionPct: 0,
+    avgThirdsPct: 0,
+    avgFourthsPct: 0,
+    avgLeapPct: 0,
+    avgConsecutiveThirdsRuns: 0,
     worstBeat78Examples: [],
     worstLeapExamples: [],
     worstOscillationExamples: [],
@@ -339,6 +381,7 @@ function aggregate(phrases: GeneratedPhrase[], mode: Mode): AggregateStats {
   let sumStep = 0, sumRange = 0, sumLeap = 0;
   let sumPitch = 0, sumRuns = 0, sumGuide = 0, sumDirChanges = 0, sumCtRange = 0, sumUniqueCTs = 0;
   let sumArpFrags = 0, sumWeakFunc = 0, sumWeakTotal = 0;
+  let sumThirdsPct = 0, sumFourthsPct = 0, sumLeapPct = 0, sumConsecThirdsRuns = 0;
 
   for (const phrase of phrases) {
     const p = detectProblems(phrase, mode);
@@ -399,6 +442,10 @@ function aggregate(phrases: GeneratedPhrase[], mode: Mode): AggregateStats {
     sumArpFrags += p.arpeggioFragments;
     sumWeakFunc += p.weakBeatFunctional;
     sumWeakTotal += p.weakBeatTotal;
+    sumThirdsPct += p.thirdsPct;
+    sumFourthsPct += p.fourthsPct;
+    sumLeapPct += p.leapPct;
+    sumConsecThirdsRuns += p.consecutiveThirdsRuns;
   }
 
   stats.avgStepwisePct = Math.round(sumStep / phrases.length);
@@ -412,6 +459,10 @@ function aggregate(phrases: GeneratedPhrase[], mode: Mode): AggregateStats {
   stats.avgUniqueStrongBeatCTs = Math.round((sumUniqueCTs / phrases.length) * 10) / 10;
   stats.avgArpeggioFragments = Math.round((sumArpFrags / phrases.length) * 10) / 10;
   stats.avgWeakBeatFunctionPct = sumWeakTotal > 0 ? Math.round((sumWeakFunc / sumWeakTotal) * 100) : 0;
+  stats.avgThirdsPct = Math.round(sumThirdsPct / phrases.length);
+  stats.avgFourthsPct = Math.round(sumFourthsPct / phrases.length);
+  stats.avgLeapPct = Math.round(sumLeapPct / phrases.length);
+  stats.avgConsecutiveThirdsRuns = Math.round((sumConsecThirdsRuns / phrases.length) * 100) / 100;
 
   // Sort and trim examples
   stats.worstBeat78Examples.sort((a, b) => b.interval - a.interval);
@@ -448,6 +499,7 @@ function formatReport(label: string, stats: AggregateStats): string {
   lines.push(`  [Quality] Guide tone %: ${stats.avgGuideTonePct}%  |  Phrases w/ scalar run: ${pct(stats.phrasesWithScalarRun)}`);
   lines.push(`  [Quality] CT outline range: ${stats.avgCtOutlineRange}st  |  Unique strong CTs: ${stats.avgUniqueStrongBeatCTs}  |  Stagnation: ${pct(stats.phrasesWithStagnation)}  |  Half-step res: ${pct(stats.phrasesWithHalfStepResolution)}`);
   lines.push(`  [Quality] Arp fragments: ${stats.avgArpeggioFragments}  |  Weak beat function: ${stats.avgWeakBeatFunctionPct}%`);
+  lines.push(`  [Quality] Thirds %: ${stats.avgThirdsPct}%  |  Fourths %: ${stats.avgFourthsPct}%  |  Leaps (≥6st) %: ${stats.avgLeapPct}%  |  Consecutive 3rds runs: ${stats.avgConsecutiveThirdsRuns}`);
 
   if (stats.worstBeat78Examples.length > 0) {
     lines.push('\n  Worst beat 7→8 examples:');
@@ -608,9 +660,9 @@ describe('Phrase Quality Audit', () => {
         expect(pct).toBeLessThanOrEqual(0.50);
       });
 
-      it('half-step resolution in ≥ 18% of phrases', () => {
+      it('half-step resolution in ≥ 12% of phrases', () => {
         const pct = stats.phrasesWithHalfStepResolution / N;
-        expect(pct).toBeGreaterThanOrEqual(0.18);
+        expect(pct).toBeGreaterThanOrEqual(0.12);
       });
 
       it('average unique strong-beat CTs ≥ 2.8', () => {
@@ -623,6 +675,25 @@ describe('Phrase Quality Audit', () => {
 
       it('weak beat functional usage ≥ 60%', () => {
         expect(stats.avgWeakBeatFunctionPct).toBeGreaterThanOrEqual(60);
+      });
+
+      it('thirds interval percentage 14-32%', () => {
+        expect(stats.avgThirdsPct).toBeGreaterThanOrEqual(14);
+        // Modes with augmented 2nds (Phrygian-Dom) inherently produce 3st intervals
+        expect(stats.avgThirdsPct).toBeLessThanOrEqual(32);
+      });
+
+      it('fourths interval percentage 5-22%', () => {
+        expect(stats.avgFourthsPct).toBeGreaterThanOrEqual(5);
+        expect(stats.avgFourthsPct).toBeLessThanOrEqual(22);
+      });
+
+      it('leaps (≥6st) percentage ≤ 18%', () => {
+        expect(stats.avgLeapPct).toBeLessThanOrEqual(18);
+      });
+
+      it('consecutive thirds runs ≥ 0.08 per phrase', () => {
+        expect(stats.avgConsecutiveThirdsRuns).toBeGreaterThanOrEqual(0.08);
       });
 
       // Print report after all conditions

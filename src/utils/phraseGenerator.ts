@@ -332,8 +332,8 @@ const BEBOP_PASSING: Record<string, number> = {
 
 function intervalScore(interval: number): number {
   if (interval <= 2) return 60;   // stepwise
-  if (interval <= 4) return 25;   // thirds
-  if (interval === 5) return 10;  // fourths
+  if (interval <= 4) return 18;   // thirds (Parker: ~18% of intervals)
+  if (interval === 5) return 14;  // fourths (Parker: ~10-15%)
   return 5;                       // fifths+
 }
 
@@ -413,11 +413,11 @@ function goalProximityScore(
       let bonus = (20 - dist * 3) * 2.5;
       // Half-step approach: chromatic resolution is the strongest bebop device
       if (dist === 1) bonus += 15;
-      return bonus;
+      return Math.min(bonus, 40);
     }
     return -dist * 3; // penalise being far from goal
   }
-  return Math.max(0, (20 - dist * 3));
+  return Math.min(Math.max(0, (20 - dist * 3)), 40);
 }
 
 // ---------------------------------------------------------------------------
@@ -699,11 +699,12 @@ export function generatePhrase(
       }
 
       // Guide tone preference: 3rd and 7th on strong beats are melodically richer
+      // (reduced — skeleton adherence +50/+75 already drives CT choice)
       if (strong) {
         const ctIdx = mode.chordTones.indexOf(c.noteName);
         if (ctIdx === 1 || ctIdx === 3) {
-          score += 25;
-          if (beat === 1 || beat === 3) score += 10;
+          score += 12;
+          if (beat === 1 || beat === 3) score += 6;
         }
         // Extension tone: 9th/13th are allowed but penalised vs CTs
         // (filter admits them, but scoring prefers actual chord tones)
@@ -737,6 +738,20 @@ export function generatePhrase(
         }
       }
 
+      // Thirds run continuation: reward extending an arpeggio passage
+      // (3+ consecutive thirds in the same direction = R→3→5→7 style runs)
+      if (prevPrevNote) {
+        const prevStep = Math.abs(absolutePitch(prevNote) - absolutePitch(prevPrevNote));
+        const curStep = Math.abs(absolutePitch(c) - absolutePitch(prevNote));
+        const prevDir = absolutePitch(prevNote) - absolutePitch(prevPrevNote);
+        const curDir = absolutePitch(c) - absolutePitch(prevNote);
+        if (prevStep >= 3 && prevStep <= 4 &&
+            curStep >= 3 && curStep <= 4 &&
+            ((prevDir > 0 && curDir > 0) || (prevDir < 0 && curDir < 0))) {
+          score += 22;
+        }
+      }
+
       // Bebop passing tone: on weak beats during scalar passages, bonus for
       // the characteristic bebop-scale chromatic note (e.g. nat7 in Mixolydian)
       if (!strong && !c.isChordTone && !c.isApproach) {
@@ -746,6 +761,13 @@ export function generatePhrase(
           const stepFromPrev = Math.abs(absolutePitch(c) - absolutePitch(prevNote));
           if (stepFromPrev <= 2 && stepFromPrev > 0) score += 20;
         }
+      }
+
+      // Weak-beat scalar preference: Parker's weak beats are predominantly scalar
+      // passing tones rather than chord tones — reduces scattered thirds
+      if (!strong && !c.isChordTone && !c.isApproach) {
+        const stepFromPrev = Math.abs(absolutePitch(c) - absolutePitch(prevNote));
+        if (stepFromPrev <= 2 && stepFromPrev > 0) score += 8;
       }
 
       // CT outline progression: reward consecutive strong-beat CTs forming arpeggio
@@ -828,32 +850,6 @@ export function generatePhrase(
           if (curDist <= 1) score += 10; // half-step approach to skeleton
         }
         if (curDist > prevDist + 2) score -= 10; // moving away from skeleton
-      }
-
-      // Late-phrase goal approach: beats near goal should move monotonically towards it
-      // This reduces oscillation near the phrase end (Parker's lines resolve smoothly)
-      const approachZoneStart = goalBeat <= 4 ? goalBeat - 1 : goalBeat - 2;
-      if (beat >= approachZoneStart) {
-        const goalInstances = activeCtPool.filter(n => n.noteName === goalNote.noteName);
-        if (goalInstances.length > 0) {
-          const nearestGoalPitch = goalInstances.reduce((best, n) =>
-            Math.abs(absolutePitch(n) - absolutePitch(prevNote)) <
-            Math.abs(absolutePitch(best) - absolutePitch(prevNote)) ? n : best
-          );
-          const goalP = absolutePitch(nearestGoalPitch);
-          const prevP = absolutePitch(prevNote);
-          const curP = absolutePitch(c);
-          // Reward moving closer to goal (monotonic approach)
-          if (Math.abs(curP - goalP) < Math.abs(prevP - goalP)) score += 15;
-          // Penalise moving away from goal in late beats
-          if (Math.abs(curP - goalP) > Math.abs(prevP - goalP)) {
-            score -= beat === goalBeat - 1 ? 15 : 8;
-          }
-          // Strong bonus for being exactly 1-2 semitones from goal (setup for resolution)
-          if (beat === goalBeat - 1 && Math.abs(curP - goalP) <= 2 && Math.abs(curP - goalP) > 0) {
-            score += 20;
-          }
-        }
       }
 
       return Math.max(1, score);
