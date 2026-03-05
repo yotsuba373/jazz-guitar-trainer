@@ -24,3 +24,4 @@ npm-debug.log*
 
 # Python analysis data (large downloads)
 scripts/data/
+__pycache__/
