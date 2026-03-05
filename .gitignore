@@ -21,3 +21,6 @@ npm-debug.log*
 
 # Claude Code
 .claude/
+
+# Python analysis data (large downloads)
+scripts/data/

@@ -90,6 +90,17 @@ src/
         ├── ProgressionEditor.tsx    — 進行エディタ (chartLayout 保持)
         ├── ProgressionPlayer.tsx    — 進行プレイヤー (BPM コントロール + ChordChart)
         └── SongImporter.tsx         — JazzStandards 検索・インポート
+scripts/                                 — Python 分析基盤 (ビバップソロ統計)
+├── download_omnibook.py                 — Parker Omnibook MusicXML ダウンロード
+├── download_wjd.py                      — WJazzD SQLite3 ダウンロード
+├── analyze_omnibook.py                  — Omnibook 分析 (50ソロ, コード品質別)
+├── analyze_wjd.py                       — WJD 基本分析 (186ソロ, 奏者別)
+├── analyze_bebop_deep.py                — 深掘り分析 (スケール検出/アプローチ/フレーズ/イディオム)
+├── data/                                — ダウンロードデータ (gitignored)
+└── output/
+    ├── parker_profiles.json             — Omnibook 分析結果
+    ├── wjd_profiles.json                — WJD 分析結果
+    └── bebop_deep_profiles.json         — 深掘り分析結果
 ```
 
 ---
@@ -438,9 +449,23 @@ Footer
 
 ---
 
+## ビバップソロ統計分析 (`scripts/`)
+
+Parker Omnibook (50ソロ, MusicXML) + Weimar Jazz Database (456ソロ, SQLite3) を Python (music21) で分析。
+コード品質別のインターバル分布・CT率・アプローチパターン・スケール使用・フレーズ構造を JSON 出力。
+
+- `scripts/output/parker_profiles.json` — Omnibook コード品質別統計
+- `scripts/output/wjd_profiles.json` — WJD 奏者別・スタイル別統計
+- `scripts/output/bebop_deep_profiles.json` — スケール検出・詳細アプローチ・フレーズ分析・ビバップイディオム
+
+主要知見: stepwise~54%, thirds~27%, 強拍CT~53%, GT~32%, 下行~52%, ビバップスケールが全品質で最高カバー率
+
+---
+
 ## 今後の開発予定
 
-1. ポジション間移動ガイド (共通音ハイライト)
+1. ビバップ分析データ → phraseGenerator.ts スコアリング統合 (データ駆動化)
+2. ポジション間移動ガイド (共通音ハイライト)
 
 ---
 

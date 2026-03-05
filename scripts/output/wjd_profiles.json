@@ -1,0 +1,2027 @@
+{
+  "metadata": {
+    "source": "Weimar Jazz Database (WJazzD) v2.1",
+    "url": "https://jazzomat.hfm-weimar.de/",
+    "styles_analyzed": [
+      "BEBOP",
+      "COOL",
+      "HARDBOP"
+    ],
+    "solos_analyzed": 186,
+    "total_notes": 75958,
+    "date": "2026-03-05"
+  },
+  "overall": {
+    "sample_size": 75958,
+    "total_intervals": 75957,
+    "intervals": {
+      "unison_pct": 4.8,
+      "stepwise_pct": 52.7,
+      "thirds_pct": 25.6,
+      "fourths_pct": 6.1,
+      "leaps_pct": 10.8
+    },
+    "direction": {
+      "up_pct": 45.9,
+      "down_pct": 49.3,
+      "direction_changes_per_8notes": 3.48
+    },
+    "chord_tones": {
+      "strong_beat_ct_pct": 52.8,
+      "strong_beat_guide_tone_pct": 30.9,
+      "weak_beat_ct_pct": 52.0,
+      "strong_beat_sample": 38045,
+      "weak_beat_sample": 37913
+    },
+    "approach_patterns": {
+      "total_detected": 16564,
+      "single_below_pct": 42.0,
+      "single_above_pct": 48.2,
+      "enclosure_pct": 9.8
+    },
+    "scalar_runs": {
+      "total_runs": 8915,
+      "avg_length": 3.9,
+      "runs_per_8notes": 0.94
+    },
+    "arpeggio_runs": {
+      "total_runs": 3058,
+      "avg_length": 3.4,
+      "runs_per_8notes": 0.32
+    },
+    "pitch_class_usage": {
+      "0": 14.5,
+      "1": 4.2,
+      "2": 10.4,
+      "3": 7.5,
+      "4": 9.0,
+      "5": 9.0,
+      "6": 4.0,
+      "7": 14.4,
+      "8": 4.2,
+      "9": 8.1,
+      "10": 9.3,
+      "11": 5.4
+    }
+  },
+  "by_quality": {
+    "dom7": {
+      "sample_size": 39140,
+      "total_intervals": 39139,
+      "intervals": {
+        "unison_pct": 4.8,
+        "stepwise_pct": 53.5,
+        "thirds_pct": 25.9,
+        "fourths_pct": 5.9,
+        "leaps_pct": 9.8
+      },
+      "direction": {
+        "up_pct": 44.3,
+        "down_pct": 50.8,
+        "direction_changes_per_8notes": 3.46
+      },
+      "chord_tones": {
+        "strong_beat_ct_pct": 50.3,
+        "strong_beat_guide_tone_pct": 30.3,
+        "weak_beat_ct_pct": 51.0,
+        "strong_beat_sample": 19507,
+        "weak_beat_sample": 19633
+      },
+      "approach_patterns": {
+        "total_detected": 8519,
+        "single_below_pct": 39.0,
+        "single_above_pct": 50.7,
+        "enclosure_pct": 10.2
+      },
+      "scalar_runs": {
+        "total_runs": 4550,
+        "avg_length": 3.9,
+        "runs_per_8notes": 0.93
+      },
+      "arpeggio_runs": {
+        "total_runs": 1563,
+        "avg_length": 3.4,
+        "runs_per_8notes": 0.32
+      },
+      "pitch_class_usage": {
+        "0": 14.4,
+        "1": 4.9,
+        "2": 9.8,
+        "3": 4.5,
+        "4": 10.5,
+        "5": 8.6,
+        "6": 4.0,
+        "7": 14.2,
+        "8": 4.6,
+        "9": 9.0,
+        "10": 11.6,
+        "11": 3.9
+      }
+    },
+    "min7": {
+      "sample_size": 19738,
+      "total_intervals": 19737,
+      "intervals": {
+        "unison_pct": 4.8,
+        "stepwise_pct": 51.7,
+        "thirds_pct": 25.7,
+        "fourths_pct": 6.1,
+        "leaps_pct": 11.7
+      },
+      "direction": {
+        "up_pct": 47.2,
+        "down_pct": 48.0,
+        "direction_changes_per_8notes": 3.51
+      },
+      "chord_tones": {
+        "strong_beat_ct_pct": 53.4,
+        "strong_beat_guide_tone_pct": 31.6,
+        "weak_beat_ct_pct": 53.0,
+        "strong_beat_sample": 9883,
+        "weak_beat_sample": 9855
+      },
+      "approach_patterns": {
+        "total_detected": 4534,
+        "single_below_pct": 44.6,
+        "single_above_pct": 43.8,
+        "enclosure_pct": 11.6
+      },
+      "scalar_runs": {
+        "total_runs": 2284,
+        "avg_length": 3.9,
+        "runs_per_8notes": 0.93
+      },
+      "arpeggio_runs": {
+        "total_runs": 881,
+        "avg_length": 3.4,
+        "runs_per_8notes": 0.36
+      },
+      "pitch_class_usage": {
+        "0": 14.4,
+        "1": 3.5,
+        "2": 11.6,
+        "3": 15.0,
+        "4": 2.9,
+        "5": 11.1,
+        "6": 3.5,
+        "7": 14.4,
+        "8": 3.9,
+        "9": 5.6,
+        "10": 9.4,
+        "11": 4.7
+      }
+    },
+    "maj7": {
+      "sample_size": 13589,
+      "total_intervals": 13588,
+      "intervals": {
+        "unison_pct": 4.5,
+        "stepwise_pct": 51.9,
+        "thirds_pct": 25.5,
+        "fourths_pct": 6.8,
+        "leaps_pct": 11.4
+      },
+      "direction": {
+        "up_pct": 48.6,
+        "down_pct": 46.9,
+        "direction_changes_per_8notes": 3.46
+      },
+      "chord_tones": {
+        "strong_beat_ct_pct": 60.6,
+        "strong_beat_guide_tone_pct": 30.9,
+        "weak_beat_ct_pct": 55.3,
+        "strong_beat_sample": 6951,
+        "weak_beat_sample": 6638
+      },
+      "approach_patterns": {
+        "total_detected": 2812,
+        "single_below_pct": 46.2,
+        "single_above_pct": 47.4,
+        "enclosure_pct": 6.4
+      },
+      "scalar_runs": {
+        "total_runs": 1668,
+        "avg_length": 3.9,
+        "runs_per_8notes": 0.98
+      },
+      "arpeggio_runs": {
+        "total_runs": 506,
+        "avg_length": 3.3,
+        "runs_per_8notes": 0.3
+      },
+      "pitch_class_usage": {
+        "0": 15.9,
+        "1": 1.9,
+        "2": 12.0,
+        "3": 3.8,
+        "4": 14.4,
+        "5": 6.8,
+        "6": 2.9,
+        "7": 17.2,
+        "8": 2.6,
+        "9": 9.5,
+        "10": 2.6,
+        "11": 10.6
+      }
+    },
+    "min7b5": {
+      "sample_size": 2427,
+      "total_intervals": 2426,
+      "intervals": {
+        "unison_pct": 5.6,
+        "stepwise_pct": 51.4,
+        "thirds_pct": 22.8,
+        "fourths_pct": 5.6,
+        "leaps_pct": 14.6
+      },
+      "direction": {
+        "up_pct": 45.8,
+        "down_pct": 48.6,
+        "direction_changes_per_8notes": 3.62
+      },
+      "chord_tones": {
+        "strong_beat_ct_pct": 50.1,
+        "strong_beat_guide_tone_pct": 35.6,
+        "weak_beat_ct_pct": 47.8,
+        "strong_beat_sample": 1187,
+        "weak_beat_sample": 1240
+      },
+      "approach_patterns": {
+        "total_detected": 488,
+        "single_below_pct": 45.3,
+        "single_above_pct": 47.1,
+        "enclosure_pct": 7.6
+      },
+      "scalar_runs": {
+        "total_runs": 276,
+        "avg_length": 3.8,
+        "runs_per_8notes": 0.91
+      },
+      "arpeggio_runs": {
+        "total_runs": 71,
+        "avg_length": 3.3,
+        "runs_per_8notes": 0.23
+      },
+      "pitch_class_usage": {
+        "0": 11.1,
+        "1": 9.4,
+        "2": 3.8,
+        "3": 15.6,
+        "4": 4.2,
+        "5": 13.3,
+        "6": 10.5,
+        "7": 4.1,
+        "8": 7.7,
+        "9": 4.8,
+        "10": 11.7,
+        "11": 3.8
+      }
+    },
+    "dim": {
+      "sample_size": 406,
+      "total_intervals": 405,
+      "intervals": {
+        "unison_pct": 3.2,
+        "stepwise_pct": 50.9,
+        "thirds_pct": 25.9,
+        "fourths_pct": 6.4,
+        "leaps_pct": 13.6
+      },
+      "direction": {
+        "up_pct": 45.9,
+        "down_pct": 50.9,
+        "direction_changes_per_8notes": 3.77
+      },
+      "chord_tones": {
+        "strong_beat_ct_pct": 30.7,
+        "strong_beat_guide_tone_pct": 30.2,
+        "weak_beat_ct_pct": 30.4,
+        "strong_beat_sample": 199,
+        "weak_beat_sample": 207
+      },
+      "approach_patterns": {
+        "total_detected": 66,
+        "single_below_pct": 50.0,
+        "single_above_pct": 42.4,
+        "enclosure_pct": 7.6
+      },
+      "scalar_runs": {
+        "total_runs": 45,
+        "avg_length": 3.7,
+        "runs_per_8notes": 0.89
+      },
+      "arpeggio_runs": {
+        "total_runs": 12,
+        "avg_length": 3.7,
+        "runs_per_8notes": 0.24
+      },
+      "pitch_class_usage": {
+        "0": 9.6,
+        "1": 8.9,
+        "2": 8.4,
+        "3": 10.1,
+        "4": 6.9,
+        "5": 4.9,
+        "6": 10.8,
+        "7": 5.9,
+        "8": 7.6,
+        "9": 10.6,
+        "10": 6.7,
+        "11": 9.6
+      }
+    },
+    "dim7": {
+      "sample_size": 575,
+      "total_intervals": 574,
+      "intervals": {
+        "unison_pct": 3.5,
+        "stepwise_pct": 57.0,
+        "thirds_pct": 21.3,
+        "fourths_pct": 4.7,
+        "leaps_pct": 13.6
+      },
+      "direction": {
+        "up_pct": 45.6,
+        "down_pct": 50.9,
+        "direction_changes_per_8notes": 3.54
+      },
+      "chord_tones": {
+        "strong_beat_ct_pct": 37.5,
+        "strong_beat_guide_tone_pct": 33.2,
+        "weak_beat_ct_pct": 43.4,
+        "strong_beat_sample": 280,
+        "weak_beat_sample": 295
+      },
+      "approach_patterns": {
+        "total_detected": 136,
+        "single_below_pct": 37.5,
+        "single_above_pct": 55.9,
+        "enclosure_pct": 6.6
+      },
+      "scalar_runs": {
+        "total_runs": 84,
+        "avg_length": 3.6,
+        "runs_per_8notes": 1.17
+      },
+      "arpeggio_runs": {
+        "total_runs": 22,
+        "avg_length": 3.3,
+        "runs_per_8notes": 0.31
+      },
+      "pitch_class_usage": {
+        "0": 10.1,
+        "1": 7.1,
+        "2": 5.7,
+        "3": 8.2,
+        "4": 8.0,
+        "5": 3.5,
+        "6": 10.1,
+        "7": 6.6,
+        "8": 10.1,
+        "9": 12.2,
+        "10": 5.2,
+        "11": 13.2
+      }
+    },
+    "minMaj7": {
+      "sample_size": 83,
+      "total_intervals": 82,
+      "intervals": {
+        "unison_pct": 15.9,
+        "stepwise_pct": 39.0,
+        "thirds_pct": 23.2,
+        "fourths_pct": 4.9,
+        "leaps_pct": 17.1
+      },
+      "direction": {
+        "up_pct": 31.7,
+        "down_pct": 52.4,
+        "direction_changes_per_8notes": 3.41
+      },
+      "chord_tones": {
+        "strong_beat_ct_pct": 50.0,
+        "strong_beat_guide_tone_pct": 34.2,
+        "weak_beat_ct_pct": 68.9,
+        "strong_beat_sample": 38,
+        "weak_beat_sample": 45
+      },
+      "approach_patterns": {
+        "total_detected": 9,
+        "single_below_pct": 22.2,
+        "single_above_pct": 77.8,
+        "enclosure_pct": 0.0
+      },
+      "scalar_runs": {
+        "total_runs": 8,
+        "avg_length": 3.2,
+        "runs_per_8notes": 0.77
+      },
+      "arpeggio_runs": {
+        "total_runs": 3,
+        "avg_length": 4.3,
+        "runs_per_8notes": 0.29
+      },
+      "pitch_class_usage": {
+        "0": 15.7,
+        "1": 1.2,
+        "2": 14.5,
+        "3": 13.3,
+        "4": 1.2,
+        "5": 16.9,
+        "6": 6.0,
+        "7": 16.9,
+        "11": 14.5
+      }
+    }
+  },
+  "by_style": {
+    "BEBOP": {
+      "sample_size": 18549,
+      "total_intervals": 18548,
+      "intervals": {
+        "unison_pct": 4.1,
+        "stepwise_pct": 58.7,
+        "thirds_pct": 24.5,
+        "fourths_pct": 5.4,
+        "leaps_pct": 7.3
+      },
+      "direction": {
+        "up_pct": 44.8,
+        "down_pct": 51.2,
+        "direction_changes_per_8notes": 3.31
+      },
+      "chord_tones": {
+        "strong_beat_ct_pct": 50.0,
+        "strong_beat_guide_tone_pct": 31.0,
+        "weak_beat_ct_pct": 51.7,
+        "strong_beat_sample": 9301,
+        "weak_beat_sample": 9248
+      },
+      "approach_patterns": {
+        "total_detected": 4458,
+        "single_below_pct": 39.4,
+        "single_above_pct": 50.5,
+        "enclosure_pct": 10.0
+      },
+      "scalar_runs": {
+        "total_runs": 2431,
+        "avg_length": 4.1,
+        "runs_per_8notes": 1.05
+      },
+      "arpeggio_runs": {
+        "total_runs": 808,
+        "avg_length": 3.4,
+        "runs_per_8notes": 0.35
+      },
+      "pitch_class_usage": {
+        "0": 13.7,
+        "1": 4.6,
+        "2": 10.1,
+        "3": 7.8,
+        "4": 8.6,
+        "5": 9.3,
+        "6": 4.0,
+        "7": 13.7,
+        "8": 4.8,
+        "9": 8.1,
+        "10": 9.7,
+        "11": 5.6
+      }
+    },
+    "COOL": {
+      "sample_size": 20458,
+      "total_intervals": 20457,
+      "intervals": {
+        "unison_pct": 5.1,
+        "stepwise_pct": 55.6,
+        "thirds_pct": 26.9,
+        "fourths_pct": 6.1,
+        "leaps_pct": 6.3
+      },
+      "direction": {
+        "up_pct": 46.9,
+        "down_pct": 48.0,
+        "direction_changes_per_8notes": 3.42
+      },
+      "chord_tones": {
+        "strong_beat_ct_pct": 55.5,
+        "strong_beat_guide_tone_pct": 30.6,
+        "weak_beat_ct_pct": 53.7,
+        "strong_beat_sample": 10175,
+        "weak_beat_sample": 10283
+      },
+      "approach_patterns": {
+        "total_detected": 4525,
+        "single_below_pct": 42.7,
+        "single_above_pct": 48.4,
+        "enclosure_pct": 8.8
+      },
+      "scalar_runs": {
+        "total_runs": 2590,
+        "avg_length": 3.9,
+        "runs_per_8notes": 1.01
+      },
+      "arpeggio_runs": {
+        "total_runs": 874,
+        "avg_length": 3.4,
+        "runs_per_8notes": 0.34
+      },
+      "pitch_class_usage": {
+        "0": 15.8,
+        "1": 3.7,
+        "2": 9.9,
+        "3": 7.9,
+        "4": 8.5,
+        "5": 9.2,
+        "6": 3.6,
+        "7": 14.9,
+        "8": 4.3,
+        "9": 8.2,
+        "10": 9.1,
+        "11": 5.1
+      }
+    },
+    "HARDBOP": {
+      "sample_size": 36951,
+      "total_intervals": 36950,
+      "intervals": {
+        "unison_pct": 4.5,
+        "stepwise_pct": 56.2,
+        "thirds_pct": 26.4,
+        "fourths_pct": 5.7,
+        "leaps_pct": 7.2
+      },
+      "direction": {
+        "up_pct": 45.8,
+        "down_pct": 49.7,
+        "direction_changes_per_8notes": 3.3
+      },
+      "chord_tones": {
+        "strong_beat_ct_pct": 52.7,
+        "strong_beat_guide_tone_pct": 31.1,
+        "weak_beat_ct_pct": 51.3,
+        "strong_beat_sample": 18569,
+        "weak_beat_sample": 18382
+      },
+      "approach_patterns": {
+        "total_detected": 8662,
+        "single_below_pct": 42.2,
+        "single_above_pct": 47.4,
+        "enclosure_pct": 10.4
+      },
+      "scalar_runs": {
+        "total_runs": 4437,
+        "avg_length": 4.2,
+        "runs_per_8notes": 0.96
+      },
+      "arpeggio_runs": {
+        "total_runs": 1514,
+        "avg_length": 3.4,
+        "runs_per_8notes": 0.33
+      },
+      "pitch_class_usage": {
+        "0": 14.2,
+        "1": 4.3,
+        "2": 10.9,
+        "3": 7.1,
+        "4": 9.4,
+        "5": 8.8,
+        "6": 4.2,
+        "7": 14.4,
+        "8": 3.9,
+        "9": 8.0,
+        "10": 9.3,
+        "11": 5.6
+      }
+    }
+  },
+  "bebop_by_quality": {
+    "dom7": {
+      "sample_size": 9520,
+      "total_intervals": 9519,
+      "intervals": {
+        "unison_pct": 4.6,
+        "stepwise_pct": 56.0,
+        "thirds_pct": 23.9,
+        "fourths_pct": 5.3,
+        "leaps_pct": 10.2
+      },
+      "direction": {
+        "up_pct": 43.0,
+        "down_pct": 52.4,
+        "direction_changes_per_8notes": 3.42
+      },
+      "chord_tones": {
+        "strong_beat_ct_pct": 47.6,
+        "strong_beat_guide_tone_pct": 29.6,
+        "weak_beat_ct_pct": 50.7,
+        "strong_beat_sample": 4690,
+        "weak_beat_sample": 4830
+      },
+      "approach_patterns": {
+        "total_detected": 2187,
+        "single_below_pct": 36.4,
+        "single_above_pct": 53.6,
+        "enclosure_pct": 10.0
+      },
+      "scalar_runs": {
+        "total_runs": 1197,
+        "avg_length": 4.0,
+        "runs_per_8notes": 1.01
+      },
+      "arpeggio_runs": {
+        "total_runs": 381,
+        "avg_length": 3.4,
+        "runs_per_8notes": 0.32
+      },
+      "pitch_class_usage": {
+        "0": 13.0,
+        "1": 5.7,
+        "2": 9.6,
+        "3": 4.8,
+        "4": 10.4,
+        "5": 8.6,
+        "6": 3.9,
+        "7": 14.1,
+        "8": 5.1,
+        "9": 9.0,
+        "10": 11.7,
+        "11": 4.1
+      }
+    },
+    "min7": {
+      "sample_size": 4912,
+      "total_intervals": 4911,
+      "intervals": {
+        "unison_pct": 3.4,
+        "stepwise_pct": 54.6,
+        "thirds_pct": 24.1,
+        "fourths_pct": 5.8,
+        "leaps_pct": 12.1
+      },
+      "direction": {
+        "up_pct": 45.9,
+        "down_pct": 50.7,
+        "direction_changes_per_8notes": 3.43
+      },
+      "chord_tones": {
+        "strong_beat_ct_pct": 51.4,
+        "strong_beat_guide_tone_pct": 32.9,
+        "weak_beat_ct_pct": 53.4,
+        "strong_beat_sample": 2506,
+        "weak_beat_sample": 2406
+      },
+      "approach_patterns": {
+        "total_detected": 1177,
+        "single_below_pct": 42.4,
+        "single_above_pct": 46.4,
+        "enclosure_pct": 11.2
+      },
+      "scalar_runs": {
+        "total_runs": 606,
+        "avg_length": 4.0,
+        "runs_per_8notes": 0.99
+      },
+      "arpeggio_runs": {
+        "total_runs": 233,
+        "avg_length": 3.4,
+        "runs_per_8notes": 0.38
+      },
+      "pitch_class_usage": {
+        "0": 14.4,
+        "1": 3.4,
+        "2": 10.9,
+        "3": 15.1,
+        "4": 3.3,
+        "5": 11.3,
+        "6": 3.7,
+        "7": 13.3,
+        "8": 4.5,
+        "9": 5.5,
+        "10": 9.6,
+        "11": 5.0
+      }
+    },
+    "maj7": {
+      "sample_size": 3003,
+      "total_intervals": 3002,
+      "intervals": {
+        "unison_pct": 4.8,
+        "stepwise_pct": 49.9,
+        "thirds_pct": 25.7,
+        "fourths_pct": 7.2,
+        "leaps_pct": 12.4
+      },
+      "direction": {
+        "up_pct": 48.2,
+        "down_pct": 47.0,
+        "direction_changes_per_8notes": 3.5
+      },
+      "chord_tones": {
+        "strong_beat_ct_pct": 57.4,
+        "strong_beat_guide_tone_pct": 30.7,
+        "weak_beat_ct_pct": 54.4,
+        "strong_beat_sample": 1544,
+        "weak_beat_sample": 1459
+      },
+      "approach_patterns": {
+        "total_detected": 602,
+        "single_below_pct": 44.7,
+        "single_above_pct": 46.5,
+        "enclosure_pct": 8.8
+      },
+      "scalar_runs": {
+        "total_runs": 359,
+        "avg_length": 3.6,
+        "runs_per_8notes": 0.96
+      },
+      "arpeggio_runs": {
+        "total_runs": 135,
+        "avg_length": 3.4,
+        "runs_per_8notes": 0.36
+      },
+      "pitch_class_usage": {
+        "0": 15.5,
+        "1": 2.1,
+        "2": 12.4,
+        "3": 3.8,
+        "4": 13.1,
+        "5": 7.5,
+        "6": 2.8,
+        "7": 16.6,
+        "8": 2.7,
+        "9": 9.5,
+        "10": 3.3,
+        "11": 10.7
+      }
+    },
+    "min7b5": {
+      "sample_size": 774,
+      "total_intervals": 773,
+      "intervals": {
+        "unison_pct": 6.5,
+        "stepwise_pct": 54.3,
+        "thirds_pct": 20.6,
+        "fourths_pct": 4.7,
+        "leaps_pct": 14.0
+      },
+      "direction": {
+        "up_pct": 42.0,
+        "down_pct": 51.5,
+        "direction_changes_per_8notes": 3.67
+      },
+      "chord_tones": {
+        "strong_beat_ct_pct": 48.8,
+        "strong_beat_guide_tone_pct": 35.0,
+        "weak_beat_ct_pct": 47.0,
+        "strong_beat_sample": 389,
+        "weak_beat_sample": 385
+      },
+      "approach_patterns": {
+        "total_detected": 155,
+        "single_below_pct": 35.5,
+        "single_above_pct": 54.8,
+        "enclosure_pct": 9.7
+      },
+      "scalar_runs": {
+        "total_runs": 99,
+        "avg_length": 3.7,
+        "runs_per_8notes": 1.02
+      },
+      "arpeggio_runs": {
+        "total_runs": 20,
+        "avg_length": 3.2,
+        "runs_per_8notes": 0.21
+      },
+      "pitch_class_usage": {
+        "0": 11.2,
+        "1": 7.4,
+        "2": 2.5,
+        "3": 14.7,
+        "4": 3.6,
+        "5": 13.7,
+        "6": 9.9,
+        "7": 3.9,
+        "8": 10.7,
+        "9": 6.6,
+        "10": 12.0,
+        "11": 3.7
+      }
+    },
+    "dim": {
+      "sample_size": 84,
+      "total_intervals": 83,
+      "intervals": {
+        "unison_pct": 4.8,
+        "stepwise_pct": 45.8,
+        "thirds_pct": 28.9,
+        "fourths_pct": 4.8,
+        "leaps_pct": 15.7
+      },
+      "direction": {
+        "up_pct": 49.4,
+        "down_pct": 45.8,
+        "direction_changes_per_8notes": 3.37
+      },
+      "chord_tones": {
+        "strong_beat_ct_pct": 29.8,
+        "strong_beat_guide_tone_pct": 31.9,
+        "weak_beat_ct_pct": 29.7,
+        "strong_beat_sample": 47,
+        "weak_beat_sample": 37
+      },
+      "approach_patterns": {
+        "total_detected": 17,
+        "single_below_pct": 47.1,
+        "single_above_pct": 47.1,
+        "enclosure_pct": 5.9
+      },
+      "scalar_runs": {
+        "total_runs": 9,
+        "avg_length": 3.3,
+        "runs_per_8notes": 0.86
+      },
+      "arpeggio_runs": {
+        "total_runs": 4,
+        "avg_length": 3.8,
+        "runs_per_8notes": 0.38
+      },
+      "pitch_class_usage": {
+        "0": 7.1,
+        "1": 6.0,
+        "2": 6.0,
+        "3": 7.1,
+        "4": 11.9,
+        "5": 6.0,
+        "6": 15.5,
+        "7": 4.8,
+        "8": 10.7,
+        "9": 10.7,
+        "10": 3.6,
+        "11": 10.7
+      }
+    },
+    "dim7": {
+      "sample_size": 220,
+      "total_intervals": 219,
+      "intervals": {
+        "unison_pct": 2.7,
+        "stepwise_pct": 53.0,
+        "thirds_pct": 27.9,
+        "fourths_pct": 3.7,
+        "leaps_pct": 12.8
+      },
+      "direction": {
+        "up_pct": 47.5,
+        "down_pct": 49.8,
+        "direction_changes_per_8notes": 3.69
+      },
+      "chord_tones": {
+        "strong_beat_ct_pct": 34.9,
+        "strong_beat_guide_tone_pct": 33.9,
+        "weak_beat_ct_pct": 47.7,
+        "strong_beat_sample": 109,
+        "weak_beat_sample": 111
+      },
+      "approach_patterns": {
+        "total_detected": 42,
+        "single_below_pct": 50.0,
+        "single_above_pct": 45.2,
+        "enclosure_pct": 4.8
+      },
+      "scalar_runs": {
+        "total_runs": 29,
+        "avg_length": 3.5,
+        "runs_per_8notes": 1.05
+      },
+      "arpeggio_runs": {
+        "total_runs": 13,
+        "avg_length": 3.3,
+        "runs_per_8notes": 0.47
+      },
+      "pitch_class_usage": {
+        "0": 12.3,
+        "1": 8.2,
+        "2": 8.2,
+        "3": 8.6,
+        "4": 6.4,
+        "5": 3.2,
+        "6": 8.6,
+        "7": 4.5,
+        "8": 10.0,
+        "9": 11.8,
+        "10": 5.9,
+        "11": 12.3
+      }
+    },
+    "minMaj7": {
+      "sample_size": 36,
+      "total_intervals": 35,
+      "intervals": {
+        "unison_pct": 28.6,
+        "stepwise_pct": 45.7,
+        "thirds_pct": 8.6,
+        "fourths_pct": 5.7,
+        "leaps_pct": 11.4
+      },
+      "direction": {
+        "up_pct": 34.3,
+        "down_pct": 37.1,
+        "direction_changes_per_8notes": 3.2
+      },
+      "chord_tones": {
+        "strong_beat_ct_pct": 37.5,
+        "strong_beat_guide_tone_pct": 25.0,
+        "weak_beat_ct_pct": 55.0,
+        "strong_beat_sample": 16,
+        "weak_beat_sample": 20
+      },
+      "approach_patterns": {
+        "total_detected": 4,
+        "single_below_pct": 25.0,
+        "single_above_pct": 75.0,
+        "enclosure_pct": 0.0
+      },
+      "scalar_runs": {
+        "total_runs": 4,
+        "avg_length": 3.0,
+        "runs_per_8notes": 0.89
+      },
+      "arpeggio_runs": {
+        "total_runs": 0,
+        "avg_length": 0.0,
+        "runs_per_8notes": 0.0
+      },
+      "pitch_class_usage": {
+        "0": 19.4,
+        "2": 25.0,
+        "4": 2.8,
+        "5": 25.0,
+        "7": 8.3,
+        "11": 19.4
+      }
+    }
+  },
+  "parker": {
+    "overall": {
+      "sample_size": 5635,
+      "total_intervals": 5634,
+      "intervals": {
+        "unison_pct": 2.5,
+        "stepwise_pct": 57.0,
+        "thirds_pct": 26.8,
+        "fourths_pct": 5.2,
+        "leaps_pct": 8.5
+      },
+      "direction": {
+        "up_pct": 44.4,
+        "down_pct": 53.1,
+        "direction_changes_per_8notes": 3.19
+      },
+      "chord_tones": {
+        "strong_beat_ct_pct": 51.4,
+        "strong_beat_guide_tone_pct": 31.4,
+        "weak_beat_ct_pct": 54.4,
+        "strong_beat_sample": 2755,
+        "weak_beat_sample": 2880
+      },
+      "approach_patterns": {
+        "total_detected": 1404,
+        "single_below_pct": 35.3,
+        "single_above_pct": 54.6,
+        "enclosure_pct": 10.1
+      },
+      "scalar_runs": {
+        "total_runs": 715,
+        "avg_length": 4.1,
+        "runs_per_8notes": 1.02
+      },
+      "arpeggio_runs": {
+        "total_runs": 309,
+        "avg_length": 3.4,
+        "runs_per_8notes": 0.44
+      },
+      "pitch_class_usage": {
+        "0": 13.2,
+        "1": 4.2,
+        "2": 10.6,
+        "3": 7.6,
+        "4": 9.2,
+        "5": 10.0,
+        "6": 3.5,
+        "7": 15.2,
+        "8": 4.1,
+        "9": 7.2,
+        "10": 9.3,
+        "11": 5.9
+      }
+    },
+    "by_quality": {
+      "dom7": {
+        "sample_size": 2685,
+        "total_intervals": 2684,
+        "intervals": {
+          "unison_pct": 3.1,
+          "stepwise_pct": 55.1,
+          "thirds_pct": 24.8,
+          "fourths_pct": 5.2,
+          "leaps_pct": 11.8
+        },
+        "direction": {
+          "up_pct": 40.6,
+          "down_pct": 56.3,
+          "direction_changes_per_8notes": 3.25
+        },
+        "chord_tones": {
+          "strong_beat_ct_pct": 47.7,
+          "strong_beat_guide_tone_pct": 29.3,
+          "weak_beat_ct_pct": 53.0,
+          "strong_beat_sample": 1278,
+          "weak_beat_sample": 1407
+        },
+        "approach_patterns": {
+          "total_detected": 650,
+          "single_below_pct": 30.9,
+          "single_above_pct": 59.1,
+          "enclosure_pct": 10.0
+        },
+        "scalar_runs": {
+          "total_runs": 329,
+          "avg_length": 4.1,
+          "runs_per_8notes": 0.98
+        },
+        "arpeggio_runs": {
+          "total_runs": 140,
+          "avg_length": 3.4,
+          "runs_per_8notes": 0.42
+        },
+        "pitch_class_usage": {
+          "0": 11.9,
+          "1": 6.1,
+          "2": 9.7,
+          "3": 4.5,
+          "4": 11.0,
+          "5": 9.9,
+          "6": 3.0,
+          "7": 15.8,
+          "8": 4.9,
+          "9": 7.7,
+          "10": 11.8,
+          "11": 3.8
+        }
+      },
+      "min7": {
+        "sample_size": 1549,
+        "total_intervals": 1548,
+        "intervals": {
+          "unison_pct": 2.8,
+          "stepwise_pct": 51.5,
+          "thirds_pct": 26.1,
+          "fourths_pct": 5.2,
+          "leaps_pct": 14.3
+        },
+        "direction": {
+          "up_pct": 45.9,
+          "down_pct": 51.3,
+          "direction_changes_per_8notes": 3.43
+        },
+        "chord_tones": {
+          "strong_beat_ct_pct": 53.6,
+          "strong_beat_guide_tone_pct": 34.5,
+          "weak_beat_ct_pct": 54.9,
+          "strong_beat_sample": 771,
+          "weak_beat_sample": 778
+        },
+        "approach_patterns": {
+          "total_detected": 358,
+          "single_below_pct": 40.5,
+          "single_above_pct": 47.5,
+          "enclosure_pct": 12.0
+        },
+        "scalar_runs": {
+          "total_runs": 174,
+          "avg_length": 3.9,
+          "runs_per_8notes": 0.9
+        },
+        "arpeggio_runs": {
+          "total_runs": 82,
+          "avg_length": 3.5,
+          "runs_per_8notes": 0.42
+        },
+        "pitch_class_usage": {
+          "0": 14.5,
+          "1": 2.5,
+          "2": 11.4,
+          "3": 15.7,
+          "4": 3.0,
+          "5": 11.4,
+          "6": 3.8,
+          "7": 14.1,
+          "8": 3.6,
+          "9": 5.5,
+          "10": 9.9,
+          "11": 4.6
+        }
+      },
+      "maj7": {
+        "sample_size": 1195,
+        "total_intervals": 1194,
+        "intervals": {
+          "unison_pct": 2.3,
+          "stepwise_pct": 50.8,
+          "thirds_pct": 28.8,
+          "fourths_pct": 7.0,
+          "leaps_pct": 11.2
+        },
+        "direction": {
+          "up_pct": 49.7,
+          "down_pct": 48.1,
+          "direction_changes_per_8notes": 3.38
+        },
+        "chord_tones": {
+          "strong_beat_ct_pct": 57.7,
+          "strong_beat_guide_tone_pct": 31.3,
+          "weak_beat_ct_pct": 57.1,
+          "strong_beat_sample": 600,
+          "weak_beat_sample": 595
+        },
+        "approach_patterns": {
+          "total_detected": 256,
+          "single_below_pct": 43.4,
+          "single_above_pct": 48.4,
+          "enclosure_pct": 8.2
+        },
+        "scalar_runs": {
+          "total_runs": 148,
+          "avg_length": 3.7,
+          "runs_per_8notes": 0.99
+        },
+        "arpeggio_runs": {
+          "total_runs": 64,
+          "avg_length": 3.4,
+          "runs_per_8notes": 0.43
+        },
+        "pitch_class_usage": {
+          "0": 14.4,
+          "1": 2.3,
+          "2": 12.3,
+          "3": 2.9,
+          "4": 13.9,
+          "5": 8.2,
+          "6": 2.7,
+          "7": 17.2,
+          "8": 2.7,
+          "9": 8.4,
+          "10": 3.1,
+          "11": 11.9
+        }
+      },
+      "min7b5": {
+        "sample_size": 141,
+        "total_intervals": 140,
+        "intervals": {
+          "unison_pct": 7.1,
+          "stepwise_pct": 54.3,
+          "thirds_pct": 17.9,
+          "fourths_pct": 2.9,
+          "leaps_pct": 17.9
+        },
+        "direction": {
+          "up_pct": 46.4,
+          "down_pct": 46.4,
+          "direction_changes_per_8notes": 3.54
+        },
+        "chord_tones": {
+          "strong_beat_ct_pct": 53.4,
+          "strong_beat_guide_tone_pct": 38.4,
+          "weak_beat_ct_pct": 55.9,
+          "strong_beat_sample": 73,
+          "weak_beat_sample": 68
+        },
+        "approach_patterns": {
+          "total_detected": 32,
+          "single_below_pct": 43.8,
+          "single_above_pct": 46.9,
+          "enclosure_pct": 9.4
+        },
+        "scalar_runs": {
+          "total_runs": 18,
+          "avg_length": 3.8,
+          "runs_per_8notes": 1.02
+        },
+        "arpeggio_runs": {
+          "total_runs": 3,
+          "avg_length": 3.0,
+          "runs_per_8notes": 0.17
+        },
+        "pitch_class_usage": {
+          "0": 13.5,
+          "1": 5.0,
+          "2": 5.0,
+          "3": 18.4,
+          "4": 5.0,
+          "5": 14.9,
+          "6": 12.1,
+          "7": 1.4,
+          "8": 4.3,
+          "9": 5.7,
+          "10": 10.6,
+          "11": 4.3
+        }
+      },
+      "dim": {
+        "sample_size": 31,
+        "total_intervals": 30,
+        "intervals": {
+          "unison_pct": 6.7,
+          "stepwise_pct": 60.0,
+          "thirds_pct": 10.0,
+          "fourths_pct": 3.3,
+          "leaps_pct": 20.0
+        },
+        "direction": {
+          "up_pct": 50.0,
+          "down_pct": 43.3,
+          "direction_changes_per_8notes": 2.67
+        },
+        "chord_tones": {
+          "strong_beat_ct_pct": 37.5,
+          "strong_beat_guide_tone_pct": 25.0,
+          "weak_beat_ct_pct": 40.0,
+          "strong_beat_sample": 16,
+          "weak_beat_sample": 15
+        },
+        "approach_patterns": {
+          "total_detected": 10,
+          "single_below_pct": 40.0,
+          "single_above_pct": 50.0,
+          "enclosure_pct": 10.0
+        },
+        "scalar_runs": {
+          "total_runs": 5,
+          "avg_length": 3.4,
+          "runs_per_8notes": 1.29
+        },
+        "arpeggio_runs": {
+          "total_runs": 0,
+          "avg_length": 0.0,
+          "runs_per_8notes": 0.0
+        },
+        "pitch_class_usage": {
+          "0": 9.7,
+          "2": 6.5,
+          "3": 9.7,
+          "4": 3.2,
+          "5": 6.5,
+          "6": 19.4,
+          "8": 12.9,
+          "9": 12.9,
+          "11": 19.4
+        }
+      },
+      "dim7": {
+        "sample_size": 34,
+        "total_intervals": 33,
+        "intervals": {
+          "unison_pct": 6.1,
+          "stepwise_pct": 57.6,
+          "thirds_pct": 18.2,
+          "fourths_pct": 9.1,
+          "leaps_pct": 9.1
+        },
+        "direction": {
+          "up_pct": 36.4,
+          "down_pct": 57.6,
+          "direction_changes_per_8notes": 4.12
+        },
+        "chord_tones": {
+          "strong_beat_ct_pct": 23.5,
+          "strong_beat_guide_tone_pct": 29.4,
+          "weak_beat_ct_pct": 52.9,
+          "strong_beat_sample": 17,
+          "weak_beat_sample": 17
+        },
+        "approach_patterns": {
+          "total_detected": 8,
+          "single_below_pct": 25.0,
+          "single_above_pct": 75.0,
+          "enclosure_pct": 0.0
+        },
+        "scalar_runs": {
+          "total_runs": 3,
+          "avg_length": 4.0,
+          "runs_per_8notes": 0.71
+        },
+        "arpeggio_runs": {
+          "total_runs": 2,
+          "avg_length": 3.0,
+          "runs_per_8notes": 0.47
+        },
+        "pitch_class_usage": {
+          "0": 23.5,
+          "2": 11.8,
+          "3": 2.9,
+          "4": 5.9,
+          "5": 5.9,
+          "6": 2.9,
+          "7": 11.8,
+          "8": 11.8,
+          "9": 8.8,
+          "10": 5.9,
+          "11": 8.8
+        }
+      }
+    }
+  },
+  "bebop_non_parker": {
+    "sample_size": 12914,
+    "total_intervals": 12913,
+    "intervals": {
+      "unison_pct": 4.8,
+      "stepwise_pct": 59.5,
+      "thirds_pct": 23.5,
+      "fourths_pct": 5.4,
+      "leaps_pct": 6.8
+    },
+    "direction": {
+      "up_pct": 44.9,
+      "down_pct": 50.3,
+      "direction_changes_per_8notes": 3.37
+    },
+    "chord_tones": {
+      "strong_beat_ct_pct": 49.5,
+      "strong_beat_guide_tone_pct": 30.8,
+      "weak_beat_ct_pct": 50.5,
+      "strong_beat_sample": 6546,
+      "weak_beat_sample": 6368
+    },
+    "approach_patterns": {
+      "total_detected": 3054,
+      "single_below_pct": 41.3,
+      "single_above_pct": 48.7,
+      "enclosure_pct": 10.0
+    },
+    "scalar_runs": {
+      "total_runs": 1716,
+      "avg_length": 4.1,
+      "runs_per_8notes": 1.06
+    },
+    "arpeggio_runs": {
+      "total_runs": 499,
+      "avg_length": 3.4,
+      "runs_per_8notes": 0.31
+    },
+    "pitch_class_usage": {
+      "0": 13.9,
+      "1": 4.7,
+      "2": 9.9,
+      "3": 7.9,
+      "4": 8.4,
+      "5": 9.0,
+      "6": 4.3,
+      "7": 13.1,
+      "8": 5.1,
+      "9": 8.5,
+      "10": 9.8,
+      "11": 5.4
+    }
+  },
+  "bebop_performers": {
+    "Charlie Parker": {
+      "sample_size": 5635,
+      "total_intervals": 5634,
+      "intervals": {
+        "unison_pct": 2.5,
+        "stepwise_pct": 57.0,
+        "thirds_pct": 26.8,
+        "fourths_pct": 5.2,
+        "leaps_pct": 8.5
+      },
+      "direction": {
+        "up_pct": 44.4,
+        "down_pct": 53.1,
+        "direction_changes_per_8notes": 3.19
+      },
+      "chord_tones": {
+        "strong_beat_ct_pct": 51.4,
+        "strong_beat_guide_tone_pct": 31.4,
+        "weak_beat_ct_pct": 54.4,
+        "strong_beat_sample": 2755,
+        "weak_beat_sample": 2880
+      },
+      "approach_patterns": {
+        "total_detected": 1404,
+        "single_below_pct": 35.3,
+        "single_above_pct": 54.6,
+        "enclosure_pct": 10.1
+      },
+      "scalar_runs": {
+        "total_runs": 715,
+        "avg_length": 4.1,
+        "runs_per_8notes": 1.02
+      },
+      "arpeggio_runs": {
+        "total_runs": 309,
+        "avg_length": 3.4,
+        "runs_per_8notes": 0.44
+      },
+      "pitch_class_usage": {
+        "0": 13.2,
+        "1": 4.2,
+        "2": 10.6,
+        "3": 7.6,
+        "4": 9.2,
+        "5": 10.0,
+        "6": 3.5,
+        "7": 15.2,
+        "8": 4.1,
+        "9": 7.2,
+        "10": 9.3,
+        "11": 5.9
+      }
+    },
+    "Dexter Gordon": {
+      "sample_size": 4119,
+      "total_intervals": 4118,
+      "intervals": {
+        "unison_pct": 6.5,
+        "stepwise_pct": 51.7,
+        "thirds_pct": 26.5,
+        "fourths_pct": 7.1,
+        "leaps_pct": 8.1
+      },
+      "direction": {
+        "up_pct": 44.7,
+        "down_pct": 48.7,
+        "direction_changes_per_8notes": 3.49
+      },
+      "chord_tones": {
+        "strong_beat_ct_pct": 51.6,
+        "strong_beat_guide_tone_pct": 28.8,
+        "weak_beat_ct_pct": 51.3,
+        "strong_beat_sample": 2064,
+        "weak_beat_sample": 2055
+      },
+      "approach_patterns": {
+        "total_detected": 912,
+        "single_below_pct": 43.3,
+        "single_above_pct": 47.6,
+        "enclosure_pct": 9.1
+      },
+      "scalar_runs": {
+        "total_runs": 465,
+        "avg_length": 3.9,
+        "runs_per_8notes": 0.9
+      },
+      "arpeggio_runs": {
+        "total_runs": 189,
+        "avg_length": 3.5,
+        "runs_per_8notes": 0.37
+      },
+      "pitch_class_usage": {
+        "0": 14.4,
+        "1": 3.9,
+        "2": 10.5,
+        "3": 7.4,
+        "4": 7.3,
+        "5": 10.0,
+        "6": 3.9,
+        "7": 15.9,
+        "8": 4.3,
+        "9": 8.3,
+        "10": 9.8,
+        "11": 4.2
+      }
+    },
+    "Dizzy Gillespie": {
+      "sample_size": 1795,
+      "total_intervals": 1794,
+      "intervals": {
+        "unison_pct": 3.6,
+        "stepwise_pct": 63.6,
+        "thirds_pct": 22.7,
+        "fourths_pct": 4.3,
+        "leaps_pct": 5.9
+      },
+      "direction": {
+        "up_pct": 42.5,
+        "down_pct": 53.9,
+        "direction_changes_per_8notes": 3.55
+      },
+      "chord_tones": {
+        "strong_beat_ct_pct": 47.2,
+        "strong_beat_guide_tone_pct": 29.5,
+        "weak_beat_ct_pct": 46.2,
+        "strong_beat_sample": 901,
+        "weak_beat_sample": 894
+      },
+      "approach_patterns": {
+        "total_detected": 446,
+        "single_below_pct": 37.4,
+        "single_above_pct": 50.7,
+        "enclosure_pct": 11.9
+      },
+      "scalar_runs": {
+        "total_runs": 236,
+        "avg_length": 4.3,
+        "runs_per_8notes": 1.05
+      },
+      "arpeggio_runs": {
+        "total_runs": 44,
+        "avg_length": 3.4,
+        "runs_per_8notes": 0.2
+      },
+      "pitch_class_usage": {
+        "0": 12.5,
+        "1": 5.5,
+        "2": 7.5,
+        "3": 9.1,
+        "4": 6.7,
+        "5": 11.6,
+        "6": 4.4,
+        "7": 12.2,
+        "8": 6.8,
+        "9": 7.4,
+        "10": 11.1,
+        "11": 5.1
+      }
+    },
+    "Don Byas": {
+      "sample_size": 336,
+      "total_intervals": 335,
+      "intervals": {
+        "unison_pct": 1.5,
+        "stepwise_pct": 61.8,
+        "thirds_pct": 22.4,
+        "fourths_pct": 6.0,
+        "leaps_pct": 8.4
+      },
+      "direction": {
+        "up_pct": 48.4,
+        "down_pct": 50.1,
+        "direction_changes_per_8notes": 2.84
+      },
+      "chord_tones": {
+        "strong_beat_ct_pct": 44.8,
+        "strong_beat_guide_tone_pct": 33.7,
+        "weak_beat_ct_pct": 50.9,
+        "strong_beat_sample": 163,
+        "weak_beat_sample": 173
+      },
+      "approach_patterns": {
+        "total_detected": 90,
+        "single_below_pct": 47.8,
+        "single_above_pct": 36.7,
+        "enclosure_pct": 15.6
+      },
+      "scalar_runs": {
+        "total_runs": 45,
+        "avg_length": 4.3,
+        "runs_per_8notes": 1.07
+      },
+      "arpeggio_runs": {
+        "total_runs": 14,
+        "avg_length": 3.3,
+        "runs_per_8notes": 0.33
+      },
+      "pitch_class_usage": {
+        "0": 14.6,
+        "1": 3.0,
+        "2": 9.2,
+        "3": 8.0,
+        "4": 6.8,
+        "5": 6.2,
+        "6": 4.5,
+        "7": 12.2,
+        "8": 7.1,
+        "9": 9.8,
+        "10": 9.5,
+        "11": 8.9
+      }
+    },
+    "Fats Navarro": {
+      "sample_size": 1949,
+      "total_intervals": 1948,
+      "intervals": {
+        "unison_pct": 1.3,
+        "stepwise_pct": 66.6,
+        "thirds_pct": 21.6,
+        "fourths_pct": 4.8,
+        "leaps_pct": 5.7
+      },
+      "direction": {
+        "up_pct": 43.9,
+        "down_pct": 54.8,
+        "direction_changes_per_8notes": 3.25
+      },
+      "chord_tones": {
+        "strong_beat_ct_pct": 49.0,
+        "strong_beat_guide_tone_pct": 32.8,
+        "weak_beat_ct_pct": 51.0,
+        "strong_beat_sample": 1013,
+        "weak_beat_sample": 936
+      },
+      "approach_patterns": {
+        "total_detected": 490,
+        "single_below_pct": 36.9,
+        "single_above_pct": 54.5,
+        "enclosure_pct": 8.6
+      },
+      "scalar_runs": {
+        "total_runs": 273,
+        "avg_length": 4.5,
+        "runs_per_8notes": 1.12
+      },
+      "arpeggio_runs": {
+        "total_runs": 74,
+        "avg_length": 3.3,
+        "runs_per_8notes": 0.3
+      },
+      "pitch_class_usage": {
+        "0": 12.9,
+        "1": 5.1,
+        "2": 10.5,
+        "3": 7.6,
+        "4": 8.9,
+        "5": 7.4,
+        "6": 3.7,
+        "7": 12.9,
+        "8": 5.5,
+        "9": 8.6,
+        "10": 11.0,
+        "11": 5.9
+      }
+    },
+    "J.J. Johnson": {
+      "sample_size": 3270,
+      "total_intervals": 3269,
+      "intervals": {
+        "unison_pct": 11.8,
+        "stepwise_pct": 55.3,
+        "thirds_pct": 21.0,
+        "fourths_pct": 5.3,
+        "leaps_pct": 6.6
+      },
+      "direction": {
+        "up_pct": 42.4,
+        "down_pct": 45.8,
+        "direction_changes_per_8notes": 3.6
+      },
+      "chord_tones": {
+        "strong_beat_ct_pct": 51.7,
+        "strong_beat_guide_tone_pct": 29.4,
+        "weak_beat_ct_pct": 51.7,
+        "strong_beat_sample": 1689,
+        "weak_beat_sample": 1581
+      },
+      "approach_patterns": {
+        "total_detected": 739,
+        "single_below_pct": 41.0,
+        "single_above_pct": 48.4,
+        "enclosure_pct": 10.6
+      },
+      "scalar_runs": {
+        "total_runs": 394,
+        "avg_length": 4.0,
+        "runs_per_8notes": 0.96
+      },
+      "arpeggio_runs": {
+        "total_runs": 66,
+        "avg_length": 3.3,
+        "runs_per_8notes": 0.16
+      },
+      "pitch_class_usage": {
+        "0": 15.1,
+        "1": 3.1,
+        "2": 11.1,
+        "3": 7.0,
+        "4": 9.0,
+        "5": 10.0,
+        "6": 4.1,
+        "7": 13.3,
+        "8": 3.8,
+        "9": 9.6,
+        "10": 8.8,
+        "11": 5.2
+      }
+    },
+    "Kai Winding": {
+      "sample_size": 208,
+      "total_intervals": 207,
+      "intervals": {
+        "unison_pct": 5.8,
+        "stepwise_pct": 58.0,
+        "thirds_pct": 20.3,
+        "fourths_pct": 5.8,
+        "leaps_pct": 10.1
+      },
+      "direction": {
+        "up_pct": 35.7,
+        "down_pct": 58.5,
+        "direction_changes_per_8notes": 3.71
+      },
+      "chord_tones": {
+        "strong_beat_ct_pct": 50.0,
+        "strong_beat_guide_tone_pct": 32.9,
+        "weak_beat_ct_pct": 53.2,
+        "strong_beat_sample": 82,
+        "weak_beat_sample": 126
+      },
+      "approach_patterns": {
+        "total_detected": 47,
+        "single_below_pct": 34.0,
+        "single_above_pct": 61.7,
+        "enclosure_pct": 4.3
+      },
+      "scalar_runs": {
+        "total_runs": 26,
+        "avg_length": 4.0,
+        "runs_per_8notes": 1.0
+      },
+      "arpeggio_runs": {
+        "total_runs": 3,
+        "avg_length": 3.0,
+        "runs_per_8notes": 0.12
+      },
+      "pitch_class_usage": {
+        "0": 16.8,
+        "1": 1.9,
+        "2": 7.7,
+        "3": 5.3,
+        "4": 10.6,
+        "5": 9.6,
+        "6": 3.4,
+        "7": 15.4,
+        "8": 4.3,
+        "9": 10.1,
+        "10": 9.1,
+        "11": 5.8
+      }
+    },
+    "Kenny Dorham": {
+      "sample_size": 1592,
+      "total_intervals": 1591,
+      "intervals": {
+        "unison_pct": 3.0,
+        "stepwise_pct": 64.6,
+        "thirds_pct": 22.7,
+        "fourths_pct": 4.9,
+        "leaps_pct": 4.8
+      },
+      "direction": {
+        "up_pct": 42.9,
+        "down_pct": 54.1,
+        "direction_changes_per_8notes": 3.14
+      },
+      "chord_tones": {
+        "strong_beat_ct_pct": 52.6,
+        "strong_beat_guide_tone_pct": 32.2,
+        "weak_beat_ct_pct": 50.8,
+        "strong_beat_sample": 804,
+        "weak_beat_sample": 788
+      },
+      "approach_patterns": {
+        "total_detected": 426,
+        "single_below_pct": 36.4,
+        "single_above_pct": 54.7,
+        "enclosure_pct": 8.9
+      },
+      "scalar_runs": {
+        "total_runs": 231,
+        "avg_length": 4.1,
+        "runs_per_8notes": 1.16
+      },
+      "arpeggio_runs": {
+        "total_runs": 46,
+        "avg_length": 3.3,
+        "runs_per_8notes": 0.23
+      },
+      "pitch_class_usage": {
+        "0": 11.9,
+        "1": 4.7,
+        "2": 10.7,
+        "3": 7.8,
+        "4": 10.4,
+        "5": 10.2,
+        "6": 3.2,
+        "7": 15.3,
+        "8": 3.1,
+        "9": 7.4,
+        "10": 8.5,
+        "11": 6.7
+      }
+    },
+    "Miles Davis": {
+      "sample_size": 2633,
+      "total_intervals": 2632,
+      "intervals": {
+        "unison_pct": 9.4,
+        "stepwise_pct": 59.9,
+        "thirds_pct": 20.8,
+        "fourths_pct": 4.0,
+        "leaps_pct": 5.9
+      },
+      "direction": {
+        "up_pct": 46.1,
+        "down_pct": 44.5,
+        "direction_changes_per_8notes": 3.3
+      },
+      "chord_tones": {
+        "strong_beat_ct_pct": 51.6,
+        "strong_beat_guide_tone_pct": 29.6,
+        "weak_beat_ct_pct": 49.7,
+        "strong_beat_sample": 1313,
+        "weak_beat_sample": 1320
+      },
+      "approach_patterns": {
+        "total_detected": 595,
+        "single_below_pct": 49.7,
+        "single_above_pct": 41.5,
+        "enclosure_pct": 8.7
+      },
+      "scalar_runs": {
+        "total_runs": 284,
+        "avg_length": 4.4,
+        "runs_per_8notes": 0.86
+      },
+      "arpeggio_runs": {
+        "total_runs": 66,
+        "avg_length": 3.2,
+        "runs_per_8notes": 0.2
+      },
+      "pitch_class_usage": {
+        "0": 15.4,
+        "1": 3.2,
+        "2": 12.2,
+        "3": 6.4,
+        "4": 8.4,
+        "5": 9.2,
+        "6": 3.5,
+        "7": 14.4,
+        "8": 3.1,
+        "9": 10.1,
+        "10": 8.6,
+        "11": 5.4
+      }
+    },
+    "Milt Jackson": {
+      "sample_size": 2271,
+      "total_intervals": 2270,
+      "intervals": {
+        "unison_pct": 6.0,
+        "stepwise_pct": 61.9,
+        "thirds_pct": 22.3,
+        "fourths_pct": 5.7,
+        "leaps_pct": 4.1
+      },
+      "direction": {
+        "up_pct": 45.2,
+        "down_pct": 48.8,
+        "direction_changes_per_8notes": 2.89
+      },
+      "chord_tones": {
+        "strong_beat_ct_pct": 53.5,
+        "strong_beat_guide_tone_pct": 31.5,
+        "weak_beat_ct_pct": 52.6,
+        "strong_beat_sample": 1156,
+        "weak_beat_sample": 1115
+      },
+      "approach_patterns": {
+        "total_detected": 507,
+        "single_below_pct": 42.8,
+        "single_above_pct": 49.9,
+        "enclosure_pct": 7.3
+      },
+      "scalar_runs": {
+        "total_runs": 326,
+        "avg_length": 4.1,
+        "runs_per_8notes": 1.15
+      },
+      "arpeggio_runs": {
+        "total_runs": 69,
+        "avg_length": 3.4,
+        "runs_per_8notes": 0.24
+      },
+      "pitch_class_usage": {
+        "0": 16.2,
+        "1": 6.4,
+        "2": 7.4,
+        "3": 10.4,
+        "4": 8.1,
+        "5": 8.1,
+        "6": 4.6,
+        "7": 13.2,
+        "8": 5.9,
+        "9": 5.9,
+        "10": 9.3,
+        "11": 4.4
+      }
+    },
+    "Phil Woods": {
+      "sample_size": 2787,
+      "total_intervals": 2786,
+      "intervals": {
+        "unison_pct": 4.1,
+        "stepwise_pct": 56.1,
+        "thirds_pct": 25.9,
+        "fourths_pct": 5.5,
+        "leaps_pct": 8.5
+      },
+      "direction": {
+        "up_pct": 46.6,
+        "down_pct": 49.3,
+        "direction_changes_per_8notes": 3.28
+      },
+      "chord_tones": {
+        "strong_beat_ct_pct": 49.9,
+        "strong_beat_guide_tone_pct": 32.6,
+        "weak_beat_ct_pct": 49.3,
+        "strong_beat_sample": 1402,
+        "weak_beat_sample": 1385
+      },
+      "approach_patterns": {
+        "total_detected": 619,
+        "single_below_pct": 44.9,
+        "single_above_pct": 45.2,
+        "enclosure_pct": 9.9
+      },
+      "scalar_runs": {
+        "total_runs": 369,
+        "avg_length": 3.9,
+        "runs_per_8notes": 1.06
+      },
+      "arpeggio_runs": {
+        "total_runs": 155,
+        "avg_length": 3.4,
+        "runs_per_8notes": 0.44
+      },
+      "pitch_class_usage": {
+        "0": 14.0,
+        "1": 5.7,
+        "2": 9.0,
+        "3": 8.5,
+        "4": 7.9,
+        "5": 7.8,
+        "6": 5.0,
+        "7": 11.8,
+        "8": 5.4,
+        "9": 8.5,
+        "10": 10.3,
+        "11": 6.1
+      }
+    },
+    "Sonny Stitt": {
+      "sample_size": 1755,
+      "total_intervals": 1754,
+      "intervals": {
+        "unison_pct": 0.8,
+        "stepwise_pct": 57.4,
+        "thirds_pct": 28.3,
+        "fourths_pct": 6.6,
+        "leaps_pct": 6.9
+      },
+      "direction": {
+        "up_pct": 48.9,
+        "down_pct": 50.3,
+        "direction_changes_per_8notes": 3.17
+      },
+      "chord_tones": {
+        "strong_beat_ct_pct": 47.7,
+        "strong_beat_guide_tone_pct": 29.4,
+        "weak_beat_ct_pct": 53.2,
+        "strong_beat_sample": 853,
+        "weak_beat_sample": 902
+      },
+      "approach_patterns": {
+        "total_detected": 415,
+        "single_below_pct": 43.1,
+        "single_above_pct": 48.2,
+        "enclosure_pct": 8.7
+      },
+      "scalar_runs": {
+        "total_runs": 242,
+        "avg_length": 4.0,
+        "runs_per_8notes": 1.1
+      },
+      "arpeggio_runs": {
+        "total_runs": 105,
+        "avg_length": 3.5,
+        "runs_per_8notes": 0.48
+      },
+      "pitch_class_usage": {
+        "0": 13.2,
+        "1": 4.3,
+        "2": 11.1,
+        "3": 7.6,
+        "4": 9.2,
+        "5": 8.4,
+        "6": 4.1,
+        "7": 14.9,
+        "8": 4.5,
+        "9": 9.5,
+        "10": 8.8,
+        "11": 4.4
+      }
+    }
+  }
+}
