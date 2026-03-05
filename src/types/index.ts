@@ -32,4 +32,6 @@ export type {
   PhraseAnalysis,
   SkeletonMeta,
   DigitalPatternTag,
+  RhythmType,
+  Lick,
 } from './music';

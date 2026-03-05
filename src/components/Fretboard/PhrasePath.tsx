@@ -1,12 +1,36 @@
 import type { GeneratedPhrase } from '../../types';
 import { FW, SG, TP, LP } from '../../constants';
 
-/** Beat-indexed color gradient: warm pink (beat 1) → cool violet (beat 8).
- *  Hue-shifted rather than darkened so all beats stay readable. */
-const BEAT_COLORS = [
-  '#FFA0B0', '#FF90B8', '#FF80C8', '#FF7ED8',
-  '#EE80E8', '#DD88F0', '#CC90F8', '#BBA0FF',
-];
+/** Generate a beat color via linear interpolation between start and end hues.
+ *  Warm pink (first note) → cool violet (last note). */
+function getBeatColor(i: number, total: number): string {
+  if (total <= 1) return '#FFA0B0';
+  const t = i / (total - 1);
+  // Interpolate hue from 340 (pink) to 260 (violet)
+  const h = Math.round(340 - t * 80);
+  const s = Math.round(90 + t * 10);
+  const l = Math.round(75 - t * 5);
+  return `hsl(${h}, ${s}%, ${l}%)`;
+}
+
+/** Rhythm marker sizes: quarter=6, eighth=5, triplet=4, sixteenth=3.5 */
+const RHYTHM_MARKER_SIZE: Record<string, number> = {
+  'q': 6, 'e': 5, 't': 4, 's': 3.5,
+};
+
+/** Generate beat label from beatStart (0-based fractional) */
+function beatLabel(beatStart: number | undefined, beatPosition: number): string {
+  if (beatStart == null) return String(beatPosition);
+  const beat = Math.floor(beatStart) + 1;
+  const frac = beatStart - Math.floor(beatStart);
+  if (Math.abs(frac) < 0.05) return String(beat);
+  if (Math.abs(frac - 0.5) < 0.05) return `${beat}+`;
+  if (Math.abs(frac - 1/3) < 0.05) return `${beat}t`;
+  if (Math.abs(frac - 2/3) < 0.05) return `${beat}t`;
+  if (Math.abs(frac - 0.25) < 0.05) return `${beat}e`;
+  if (Math.abs(frac - 0.75) < 0.05) return `${beat}e`;
+  return String(beatPosition);
+}
 
 /** Clamp value to [lo, hi] */
 function clamp(val: number, lo: number, hi: number): number {
@@ -118,7 +142,7 @@ export function PhrasePath({ phrase, animKey, animSpeed = 350 }: PhrasePathProps
       {/* Per-beat groups: segment + marker + number appear together */}
       {phrase.notes.map((n, i) => {
         const { x, y } = points[i];
-        const color = BEAT_COLORS[i];
+        const color = getBeatColor(i, phrase.notes.length);
 
         // Beat number y-offset for revisited positions
         let visitIdx = 0;
@@ -129,14 +153,16 @@ export function PhrasePath({ phrase, animKey, animSpeed = 350 }: PhrasePathProps
         const offsets = [-11, 15, 26, -22];
         const yOff = offsets[visitIdx % offsets.length];
 
-        // Note marker element
+        // Note marker element — size varies by rhythm type
+        const mSize = RHYTHM_MARKER_SIZE[n.duration ?? 'e'] ?? 5;
         let marker: React.ReactNode;
         if (n.isChordTone) {
-          marker = <circle cx={x} cy={y} r={5} fill={color} stroke="#FFF" strokeWidth={1} opacity={0.9} />;
+          marker = <circle cx={x} cy={y} r={mSize} fill={color} stroke="#FFF" strokeWidth={1} opacity={0.9} />;
         } else if (n.isApproach) {
-          marker = <rect x={x - 3.5} y={y - 3.5} width={7} height={7} transform={`rotate(45,${x},${y})`} fill={color} opacity={0.7} />;
+          const hs = mSize * 0.7;
+          marker = <rect x={x - hs} y={y - hs} width={hs * 2} height={hs * 2} transform={`rotate(45,${x},${y})`} fill={color} opacity={0.7} />;
         } else {
-          marker = <circle cx={x} cy={y} r={4} fill="none" stroke={color} strokeWidth={1.5} opacity={0.85} />;
+          marker = <circle cx={x} cy={y} r={mSize - 1} fill="none" stroke={color} strokeWidth={1.5} opacity={0.85} />;
         }
 
         return (
@@ -152,7 +178,7 @@ export function PhrasePath({ phrase, animKey, animSpeed = 350 }: PhrasePathProps
               fontSize="9" fontWeight="800" fill={color}
               stroke="#1a1a2e" strokeWidth={2.5} paintOrder="stroke"
               fontFamily="monospace" opacity={0.95}>
-              {n.beatPosition}
+              {beatLabel(n.beatStart, n.beatPosition)}
             </text>
           </g>
         );

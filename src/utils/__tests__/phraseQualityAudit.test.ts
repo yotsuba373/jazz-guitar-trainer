@@ -920,3 +920,121 @@ describe('Progression Context Quality', () => {
     });
   }
 });
+
+// ---------------------------------------------------------------------------
+// Quality-Specific Profile Behavior (Parker data-driven scoring)
+// ---------------------------------------------------------------------------
+
+describe('Quality-Specific Profile Behavior', () => {
+  const N = 500;
+  const approachTypes: ApproachType[] = ['single-below', 'single-above', 'enclosure'];
+
+  function generateForQuality(rootName: string, modeIdx: number, n: number) {
+    const { mode, fretMap, allPos } = setup(rootName, modeIdx);
+    const pos = allPos[0];
+    const config = makeConfig(approachTypes);
+    const phrases: GeneratedPhrase[] = [];
+    for (let i = 0; i < n; i++) {
+      phrases.push(generatePhrase(pos, mode, fretMap, config));
+    }
+    return { phrases, mode };
+  }
+
+  function computeThirdsPct(phrases: GeneratedPhrase[]): number {
+    let thirds = 0, total = 0;
+    for (const p of phrases) {
+      for (let i = 1; i < p.notes.length; i++) {
+        const interval = Math.abs(absolutePitch(p.notes[i]) - absolutePitch(p.notes[i - 1]));
+        total++;
+        if (interval >= 3 && interval <= 4) thirds++;
+      }
+    }
+    return total > 0 ? (thirds / total) * 100 : 0;
+  }
+
+  function computeStepwisePct(phrases: GeneratedPhrase[]): number {
+    let stepwise = 0, total = 0;
+    for (const p of phrases) {
+      for (let i = 1; i < p.notes.length; i++) {
+        const interval = Math.abs(absolutePitch(p.notes[i]) - absolutePitch(p.notes[i - 1]));
+        total++;
+        if (interval <= 2) stepwise++;
+      }
+    }
+    return total > 0 ? (stepwise / total) * 100 : 0;
+  }
+
+  function computeApproachDirection(phrases: GeneratedPhrase[]): { abovePct: number; belowPct: number } {
+    let above = 0, below = 0;
+    for (const p of phrases) {
+      for (let i = 1; i < p.notes.length; i++) {
+        const n = p.notes[i];
+        if (n.approachGroup?.role === 'approach') {
+          const targetIdx = p.notes.findIndex(
+            t => t.approachGroup?.groupId === n.approachGroup!.groupId && t.approachGroup?.role === 'target'
+          );
+          if (targetIdx >= 0) {
+            const approachPitch = absolutePitch(n);
+            const targetPitch = absolutePitch(p.notes[targetIdx]);
+            if (approachPitch > targetPitch) above++;
+            else if (approachPitch < targetPitch) below++;
+          }
+        }
+      }
+    }
+    const total = above + below;
+    return {
+      abovePct: total > 0 ? (above / total) * 100 : 50,
+      belowPct: total > 0 ? (below / total) * 100 : 50,
+    };
+  }
+
+  function computeContourDistribution(phrases: GeneratedPhrase[]): Record<string, number> {
+    const counts: Record<string, number> = { arch: 0, 'reverse-arch': 0, descending: 0, wave: 0 };
+    for (const p of phrases) {
+      const c = p.config.contour;
+      if (c && c in counts) counts[c]++;
+    }
+    return counts;
+  }
+
+  it('min7 has higher thirds% than dom7', () => {
+    const { phrases: min7Phrases } = generateForQuality('C', 1, N);  // Dorian = m7
+    const { phrases: dom7Phrases } = generateForQuality('C', 4, N);  // Mixolydian = 7
+    const min7Thirds = computeThirdsPct(min7Phrases);
+    const dom7Thirds = computeThirdsPct(dom7Phrases);
+    console.log(`\n  [Profile] min7 thirds: ${min7Thirds.toFixed(1)}% vs dom7: ${dom7Thirds.toFixed(1)}%`);
+    expect(min7Thirds).toBeGreaterThan(dom7Thirds);
+  });
+
+  it('min7b5 has stepwise > 45%', () => {
+    const { phrases } = generateForQuality('C', 6, N);  // Locrian = m7b5
+    const stepwise = computeStepwisePct(phrases);
+    console.log(`\n  [Profile] min7b5 stepwise: ${stepwise.toFixed(1)}%`);
+    expect(stepwise).toBeGreaterThanOrEqual(45);
+  });
+
+  it('dom7 has more above-approach than below-approach', () => {
+    const { phrases } = generateForQuality('C', 4, 300);  // Mixolydian
+    const { abovePct, belowPct } = computeApproachDirection(phrases);
+    console.log(`\n  [Profile] dom7 approach: above=${abovePct.toFixed(1)}% below=${belowPct.toFixed(1)}%`);
+    expect(abovePct).toBeGreaterThan(belowPct);
+  });
+
+  it('descending contour is most frequent', () => {
+    const { phrases } = generateForQuality('C', 4, 300);  // Mixolydian
+    const dist = computeContourDistribution(phrases);
+    console.log(`\n  [Profile] contour: arch=${dist.arch} rev-arch=${dist['reverse-arch']} desc=${dist.descending} wave=${dist.wave}`);
+    expect(dist.descending).toBeGreaterThanOrEqual(dist.arch);
+    expect(dist.descending).toBeGreaterThanOrEqual(dist['reverse-arch']);
+  });
+
+  it('overall profile preserves existing quality thresholds', () => {
+    const { phrases, mode } = generateForQuality('C', 4, N);
+    const stats = aggregate(phrases, mode);
+    expect(stats.avgStepwisePct).toBeGreaterThanOrEqual(40);
+    expect(stats.avgLeapPct).toBeLessThanOrEqual(46);
+    expect(stats.avgWeakBeatFunctionPct).toBeGreaterThanOrEqual(60);
+    expect(stats.avgUniqueStrongBeatCTs).toBeGreaterThanOrEqual(2.8);
+  });
+});

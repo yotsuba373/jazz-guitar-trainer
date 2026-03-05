@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import type { GeneratedPhrase, Mode } from '../../types';
 import { analyzePhrase } from '../../utils';
+import { PianoRoll } from './PianoRoll';
 
 interface PhraseAnalysisPanelProps {
   phrase: GeneratedPhrase;
@@ -143,7 +144,7 @@ export function PhraseAnalysisPanel({ phrase, mode }: PhraseAnalysisPanelProps) 
 
           {/* Composition summary */}
           <div className="mt-2 pt-1 flex gap-3 flex-wrap" style={{ borderTop: '1px solid #333', color: '#666' }}>
-            <span title="コードトーン (R, 3rd, 5th, 7th) の数。強拍に配置されるほど調性が明確">CT: <b style={{ color: '#DDD' }}>{summary.chordToneCount}/8</b></span>
+            <span title="コードトーン (R, 3rd, 5th, 7th) の数。強拍に配置されるほど調性が明確">CT: <b style={{ color: '#DDD' }}>{summary.chordToneCount}/{phrase.notes.length}</b></span>
             <span title="アプローチノート（半音/エンクロージャー等でCTに解決する装飾音）の数">アプローチ: <b style={{ color: '#CC9' }}>{summary.approachNoteCount}</b></span>
             <span title="スケール音（CTでもアプローチでもない音階上の音）の数">スケール: <b style={{ color: '#888' }}>{summary.scaleNoteCount}</b></span>
             {summary.bebopPassingCount != null && summary.bebopPassingCount > 0 && (
@@ -152,6 +153,18 @@ export function PhraseAnalysisPanel({ phrase, mode }: PhraseAnalysisPanelProps) 
             {summary.extensionCount != null && summary.extensionCount > 0 && (
               <span title="テンション（9th, 13th等）。コードに色彩を加えるスケール外の音">テンション: <b style={{ color: EXT_COLOR }}>{summary.extensionCount}</b></span>
             )}
+          </div>
+
+          {/* Lick info */}
+          {phrase.lickId && (
+            <div className="mt-1 pt-1" style={{ borderTop: '1px solid #333', color: '#666' }}>
+              <span>リック: <b style={{ color: '#DDD' }}>{phrase.lickId}</b></span>
+            </div>
+          )}
+
+          {/* Piano Roll visualization */}
+          <div className="mt-2 pt-1" style={{ borderTop: '1px solid #333' }}>
+            <PianoRoll phrase={phrase} noteAnalysis={notes} />
           </div>
         </div>
       )}

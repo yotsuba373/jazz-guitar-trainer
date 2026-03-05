@@ -140,31 +140,41 @@ export function playChordStrum(
  *
  * @returns composite handle whose `stop()` fades out all scheduled notes.
  */
+/** Rhythm type duration in beats */
+const RHYTHM_BEATS: Record<string, number> = {
+  'q': 1.0, 't': 2/3, 'e': 0.5, 's': 0.25,
+};
+
 export function schedulePhrase(
   ctx: AudioContext,
   phrase: GeneratedPhrase,
   startTime: number,
   eighthNoteDur: number,
   volume: number,
-  maxNotes = 8,
-): { stop: () => void } {
+  maxNotes = 99,
+): { stop: () => void; totalDuration: number } {
   if (ctx.state === 'suspended') ctx.resume();
 
   const notes = phrase.notes.slice(0, maxNotes);
   const handles: { stop: () => void }[] = [];
+  const beatDurSec = eighthNoteDur * 2; // one beat = two eighth notes
 
+  let accTime = 0;
   for (let i = 0; i < notes.length; i++) {
     const n = notes[i];
     const freq = fretToFrequency(n.stringIdx, n.fret);
-    const noteStart = startTime + i * eighthNoteDur;
+    const rhythmDur = RHYTHM_BEATS[n.duration ?? 'e'] * beatDurSec;
+    const noteStart = startTime + accTime;
     // Last note sustains longer; others get slight overlap for legato
-    const dur = i < notes.length - 1 ? eighthNoteDur * 1.2 : eighthNoteDur * 2;
+    const dur = i < notes.length - 1 ? rhythmDur * 1.2 : rhythmDur * 2;
     handles.push(playKSNote(ctx, freq, volume, noteStart, dur));
+    accTime += rhythmDur;
   }
 
   return {
     stop() {
       handles.forEach(h => h.stop());
     },
+    totalDuration: accTime,
   };
 }

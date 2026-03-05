@@ -1,3 +1,6 @@
+/** Rhythm duration type: q=quarter(1 beat), t=triplet(2/3), e=eighth(1/2), s=sixteenth(1/4) */
+export type RhythmType = 'q' | 't' | 'e' | 's';
+
 /** A single note on the fretboard: [noteName, fretNumber, semitoneValue] */
 export type FretNote = [string, number, number];
 
@@ -192,6 +195,8 @@ export interface PhraseNote {
   digitalPattern?: DigitalPatternTag;   // present if this note belongs to a digital pattern
   isBebopPassing?: boolean;             // true if bebop-scale passing tone (e.g. nat7 in Mixolydian)
   isSkeletonBeat?: boolean;             // true if this note was a skeleton target (beats 1,3,5,goal)
+  duration?: RhythmType;                // note duration (default 'e' = eighth note)
+  beatStart?: number;                   // absolute beat position (0-based, fractional)
 }
 
 /** Approach note types */
@@ -224,6 +229,12 @@ export interface PhraseConfig {
   };
   /** Previous phrase's motivic pattern — signed interval sequence (WP6) */
   prevMotif?: number[];
+  /** Beat count for normal mode (2/3/4 beats, default 4) */
+  beatCount?: 2 | 3 | 4;
+  /** User-specified goal note override (from fretboard click) */
+  goalNoteOverride?: {
+    noteName: string; stringIdx: number; fret: number; semitone: number;
+  };
 }
 
 /** A fully generated phrase */
@@ -239,6 +250,26 @@ export interface GeneratedPhrase {
   skeleton?: SkeletonMeta;
   /** Reason for goal note selection */
   goalReason?: string;
+  /** ID of the lick used for generation (if lick-driven) */
+  lickId?: string;
+  /** Total number of beats in the phrase */
+  totalBeats: number;
+}
+
+// --- Lick Library Types ---
+
+/** A melodic pattern extracted from transcription data */
+export interface Lick {
+  id: string;
+  steps: number[];          // interval-from-root (0-11) per note
+  intervals: number[];      // signed semitone interval between consecutive notes
+  rhythm: RhythmType[];     // duration per note
+  direction: 'asc' | 'desc' | 'mixed';
+  length: number;
+  startStep: number;
+  endStep: number;
+  durationBeats: number;    // sum of rhythm durations in beats
+  source: 'omnibook' | 'wjd';
 }
 
 // --- Phrase Analysis Types ---
