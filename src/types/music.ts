@@ -197,6 +197,7 @@ export interface PhraseNote {
   isSkeletonBeat?: boolean;             // true if this note was a skeleton target (beats 1,3,5,goal)
   duration?: RhythmType;                // note duration (default 'e' = eighth note)
   beatStart?: number;                   // absolute beat position (0-based, fractional)
+  lickIdx?: number;                     // 0 = 1st lick, 1 = 2nd lick (chained), undefined = connector
 }
 
 /** Approach note types */

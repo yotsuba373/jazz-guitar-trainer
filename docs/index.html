@@ -368,7 +368,7 @@
 <pre>npm install       # 依存インストール
 npm run dev       # 開発サーバー → http://localhost:5173
 npm run build     # tsc + vite build
-npm test          # vitest run (711 tests)
+npm test          # vitest run (712 tests)
 npm run lint      # ESLint</pre>
 
 <h2 id="architecture">Architecture</h2>
@@ -522,6 +522,7 @@ degree ラベル、フレーバーテキストを持ちます。</p>
   <li><strong>拍数選択</strong>: 通常モードで2/3/4拍のフレーズ長を選択可能</li>
   <li><strong>ゴールノート選択</strong>: 指板クリックでゴール音を指定し、フレーズの到達点を制御</li>
   <li><strong>ピアノロール</strong>: PhraseAnalysisPanel に時間×ピッチのSVG可視化を追加</li>
+  <li><strong>リック境界表示</strong>: 連結フレーズで各ノートのリック帰属 (①/②/接続) を分析テーブルに表示。ピアノロールにも境界の垂直破線を描画</li>
 </ul>
 
 <div class="callout success">
@@ -1184,7 +1185,7 @@ degree ラベル、フレーバーテキストを持ちます。</p>
   <tr><td>thirdsPct</td><td>3-4st の割合</td></tr>
   <tr><td>rangeSemitones</td><td>フレーズ全体の音域幅</td></tr>
   <tr><td>directionChanges</td><td>方向転換の回数</td></tr>
-  <tr><td>goalReason</td><td>ゴール音の選択理由</td></tr>
+  <tr><td>goalReason</td><td>ゴール音の選択理由（事後検証済み: 実際の最終音がゴールと異なる場合は「CT到達」または「リック終端」に更新）</td></tr>
   <tr><td>motifLabel</td><td>モチーフパターン (例: "+3, -2")</td></tr>
 </table>
 
@@ -1364,6 +1365,7 @@ CSS Grid 描画</div>
   </li>
   <li><strong>矢印マーカー</strong>: 進行方向を示す</li>
   <li><strong>拍番号</strong>: 各ノートの横に表示</li>
+  <li><strong>アニメーション</strong>: 各ノートのフェードインは <code>beatStart</code> ベースのタイミング（リズムに忠実な表示）</li>
 </ul>
 
 <h2 id="ui-layout">UI Layout</h2>
@@ -1453,6 +1455,7 @@ interface PhraseNote {
   isSkeletonBeat?: boolean             // スケルトン拍
   duration?: RhythmType                // 音価 (q/t/e/s)
   beatStart?: number                   // 絶対拍位置 (0起点)
+  lickIdx?: number                     // 0=1st lick, 1=2nd lick (連結時), undefined=コネクタ
 }
 
 type RhythmType = 'q' | 't' | 'e' | 's'  // 4分/3連/8分/16分
@@ -1512,13 +1515,13 @@ interface Progression {
 
 <!-- ==================== TESTING ==================== -->
 <h2 id="testing">Test Suite</h2>
-<p><code>npm test</code> — Vitest による <strong>711テスト</strong>。</p>
+<p><code>npm test</code> — Vitest による <strong>715テスト</strong>。</p>
 
 <table>
   <tr><th>Test File</th><th>Tests</th><th>Coverage</th></tr>
   <tr><td>fretboard.test.ts</td><td>388</td><td>Pos1リファレンス、度数オフセット不変条件、構造検証</td></tr>
   <tr><td>progression.test.ts</td><td>125</td><td>parseChordSymbol, QUALITY_TO_MODES, 近接ランキング</td></tr>
-  <tr><td>phraseGenerator.test.ts</td><td>39</td><td>buildNotePool + getApproachNotes + 構造不変条件 + メタデータ + startHint連結 + スケール互換フィルタ + chainFromStepフィルタ + リック連結 + resolveLick品質ゲート</td></tr>
+  <tr><td>phraseGenerator.test.ts</td><td>43</td><td>buildNotePool + getApproachNotes + 構造不変条件 + メタデータ + startHint連結 + スケール互換フィルタ + chainFromStepフィルタ + リック連結 + lickIdxタグ検証 + resolveLick品質ゲート + ゴールラベル事後検証</td></tr>
   <tr><td>phraseQualityAudit.test.ts</td><td>1</td><td>プレースホルダー (リック品質監査は今後再構築予定)</td></tr>
   <tr><td>jazzStandards.test.ts</td><td>42</td><td>パース、エンディング、リピート、ビート幅</td></tr>
   <tr><td>chordForms.test.ts</td><td>36</td><td>Drop 2/3 ボイシング検索、テンプレート構造</td></tr>
