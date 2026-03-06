@@ -272,6 +272,7 @@
     <a href="#phrase-overview" class="nav-link">Overview &amp; Architecture</a>
     <a href="#phrase-notepool" class="nav-link">Note Pool</a>
     <a href="#phrase-goal" class="nav-link">Goal Note Selection</a>
+    <a href="#phrase-lick-library" class="nav-link">Lick Library &amp; Extraction</a>
     <a href="#phrase-lick" class="nav-link">Lick Selection &amp; Resolution</a>
     <a href="#phrase-analysis" class="nav-link">Analysis</a>
   </div>
@@ -639,9 +640,377 @@ degree ラベル、フレーバーテキストを持ちます。</p>
   </table>
 </div>
 
+<!-- ==================== LICK LIBRARY & EXTRACTION ==================== -->
+<h2 id="phrase-lick-library">Lick Library — 抽出アルゴリズムと統計</h2>
+<p>
+  フレーズジェネレーターの核となるリックライブラリは、2つのビバップソロデータベースから
+  Python スクリプト (<code>scripts/extract_licks_v2.py</code>) で自動抽出されます。
+  計算音楽学の研究に基づく3段階のアルゴリズム (LBDM + MLA + DTL) で
+  音楽的に妥当なフレーズ境界を検出し、<strong>~11,000 リック</strong> を
+  <code>public/data/lick_library.json</code> (~2.1 MB) として静的配信します。
+</p>
+
+<h3>参考研究</h3>
+<table>
+  <tr><th>手法</th><th>論文</th><th>用途</th></tr>
+  <tr>
+    <td><strong>LBDM</strong></td>
+    <td>Cambouropoulos, E. (2001). "The Local Boundary Detection Model (LBDM) and its Application in the Study of Expressive Timing"</td>
+    <td>ピッチ・IOI・レストの3プロファイルからフレーズ境界を検出</td>
+  </tr>
+  <tr>
+    <td><strong>MLA</strong></td>
+    <td>Frieler, K. &amp; Pfleiderer, M. (2016). "Melodic Lick Analysis" (Weimar Jazz Database プロジェクト)</td>
+    <td>フレーズを lick / line / other に分類</td>
+  </tr>
+  <tr>
+    <td><strong>DTL</strong></td>
+    <td>Levenshtein距離ベースのパターン頻度スコアリング（DTL着想）</td>
+    <td>複数ソロに出現するパターンに高スコアを付与</td>
+  </tr>
+</table>
+
+<h3>データソース</h3>
+<table>
+  <tr><th>ソース</th><th>内容</th><th>形式</th><th>ソロ数</th><th>ノート数</th></tr>
+  <tr>
+    <td><strong>Parker Omnibook</strong></td>
+    <td>チャーリー・パーカーのトランスクリプション集</td>
+    <td>MusicXML (.xml / .mxl)</td>
+    <td>50 ソロ</td>
+    <td>27,163</td>
+  </tr>
+  <tr>
+    <td><strong>Weimar Jazz Database (WJD)</strong></td>
+    <td>ビバップ/ハードバップ/クール系ジャズソロ</td>
+    <td>SQLite3</td>
+    <td>186 ソロ (BEBOP / HARDBOP / COOL)</td>
+    <td>76,427</td>
+  </tr>
+</table>
+
+<h3>抽出パイプライン全体像</h3>
+<div class="flow">
+  <span class="flow-step highlight">1. ソロ読込</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-step highlight">2. LBDM フレーズ境界検出</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-step highlight">3. コード境界分割</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-step highlight">4. リズム量子化</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-step highlight">5. 構造バリデーション</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-step highlight">6. MLA 分類</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-step highlight">7. 正規化</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-step highlight">8. DTL スコアリング + 重複除去</span>
+</div>
+
+<h3>Step 1 — ソロ読込</h3>
+<h4>WJD (SQLite)</h4>
+<p>
+  <code>solo_info</code> テーブルからスタイルが BEBOP / HARDBOP / COOL のソロを取得。
+  各ソロについて <code>melody</code> テーブル (pitch, onset, duration, bar, beat, beatdur) と
+  <code>beats</code> テーブル (onset, chord) をクエリします。
+</p>
+<h4>Omnibook (MusicXML)</h4>
+<p>
+  music21 ライブラリで MusicXML をパース。メロディパート (第1パート) から音符を、
+  <code>ChordSymbol</code> / <code>Harmony</code> 要素からコード進行を抽出します。
+  和音ノートは最高音のみ使用。テンポ情報 (<code>MetronomeMark</code>) から
+  ビート長 (秒) を算出し、LBDM の IOI/レスト計算に使用します (デフォルト: BPM 160)。
+</p>
+
+<h3>Step 2 — LBDM フレーズ境界検出 (Cambouropoulos 2001)</h3>
+<p>
+  LBDM (Local Boundary Detection Model) は、メロディの各遷移点について
+  <strong>ピッチ・IOI (音符間時間) ・レスト (休符長)</strong> の3つのパラメータから
+  境界強度を計算し、局所的な極大値をフレーズ境界として検出します。
+</p>
+
+<h4>3つのプロファイル</h4>
+<table>
+  <tr><th>プロファイル</th><th>計算対象</th><th>重み</th></tr>
+  <tr><td><strong>Pitch</strong></td><td>隣接音間の |MIDI pitch差|</td><td>0.25</td></tr>
+  <tr><td><strong>IOI</strong></td><td>隣接音間の onset 差 (秒)</td><td>0.50</td></tr>
+  <tr><td><strong>Rest</strong></td><td>前の音の終了〜次の音の開始 (秒、0以上)</td><td>0.25</td></tr>
+</table>
+<p>IOI に最大重み (0.50) が割り当てられているのは、フレーズの切れ目は時間的な間隔で最も明確に現れるためです。</p>
+
+<h4>境界強度の計算 (Cambouropoulos 2001 の公式)</h4>
+<p>各プロファイルについて、遷移 i での境界強度 S<sub>i</sub> を次の2つのルールで計算します:</p>
+<div class="card">
+  <div class="card-title">Change Rule (変化度)</div>
+  <p>隣接するインターバル間の変化比率:</p>
+<pre>r(k, k+1) = |x_k - x_{k+1}| / max(|x_k|, |x_{k+1}|)</pre>
+  <p>
+    直前のインターバルと比べてどれだけ変化したかを 0〜1 で表す。
+    例: [2半音, 7半音] の遷移 → r = |2-7|/max(2,7) = 5/7 ≈ 0.71 (大きな変化)。
+  </p>
+</div>
+<div class="card">
+  <div class="card-title">Proximity Rule (近接度) × Change Rule</div>
+<pre>S_i = |x_i| × (r(i-1, i) + r(i, i+1))</pre>
+  <p>
+    インターバルの絶対値 (大きな跳躍ほど高い) に、
+    両側の変化度を掛け合わせる。つまり「大きなインターバルが、かつ前後と大きく異なる箇所」で
+    境界強度が最大になります。
+  </p>
+</div>
+
+<h4>重み付き合成</h4>
+<pre>Combined_i = 0.25 × S_pitch_i + 0.50 × S_ioi_i + 0.25 × S_rest_i</pre>
+
+<h4>境界選択: 局所極大値のピック</h4>
+<p>
+  合成された境界強度プロファイルから、<strong>局所極大値</strong> (両隣より大きい点) を検出し、
+  <strong>最大強度の 50%</strong> 以上の点のみをフレーズ境界として採用します。
+  各境界でソロを分割し、<strong>4音以上</strong>のフレーズのみを保持します。
+</p>
+
+<div class="diagram">ソロのメロディ:    ♪ ♪ ♪ ♪ ♪ ♪ ♪  ♪ ♪ ♪ ♪ ♪  ♪ ♪ ♪ ♪ ♪ ♪
+境界強度:          ─ ─ ─ ▓ ─ ─ ─  ─ ─ ▓ ─ ─  ─ ─ ─ ─ ─ ─
+                         ↑ 極大値        ↑ 極大値
+                         │(≥50%の閾値)   │(≥50%の閾値)
+フレーズ:         [────phrase 1────] [──phrase 2──] [────phrase 3────]</div>
+
+<div class="callout design">
+  <div class="callout-label">なぜ LBDM か</div>
+  <p>
+    v1 ではスライディングウィンドウ方式 (3〜16音の全部分列を列挙) を使用していましたが、
+    41万個の候補からアドホックなフィルタ (音域/反復/跳躍) で除去する必要がありました。
+    LBDM はピッチ・時間・休符の情報から音楽的に妥当な境界を直接検出するため、
+    アドホックフィルタが不要になり、抽出されるリックの品質も向上します。
+  </p>
+</div>
+
+<h3>Step 3 — コード境界分割</h3>
+<p>
+  LBDM で検出されたフレーズを、さらにコード変更点で分割します。
+  各ノートの onset を見て、そのタイミングで有効なコードを特定し、
+  コード変更が起きた箇所でサブフレーズに分割します。
+</p>
+<div class="diagram">LBDM フレーズ:     [───────── phrase ─────────────────]
+コードタイムライン:  Dm7 (onset=0) ────── G7 (onset=4) ──────
+                    └── min7 サブフレーズ ─┘ └── dom7 サブフレーズ ─┘</div>
+<p>
+  これにより、各リックは特定のコード品質のコンテキスト内に収まり、
+  品質別に分類されたライブラリが構築されます。
+</p>
+
+<h3>Step 4 — リズム量子化</h3>
+<p>
+  音符の duration を4種類のリズムタイプに量子化します。
+  WJD では <code>duration / beatdur</code> (ビート相対値)、Omnibook では <code>quarterLength</code> を使用。
+</p>
+<table>
+  <tr><th>リズムタイプ</th><th>記号</th><th>閾値</th><th>拍数</th></tr>
+  <tr><td>4分音符</td><td><code>q</code></td><td>≥ 0.875</td><td>1.0 拍</td></tr>
+  <tr><td>8分音符</td><td><code>e</code></td><td>≥ 0.417</td><td>0.5 拍</td></tr>
+  <tr><td>3連符</td><td><code>t</code></td><td>≥ 0.292</td><td>2/3 拍</td></tr>
+  <tr><td>16分音符</td><td><code>s</code></td><td>&lt; 0.292</td><td>0.25 拍</td></tr>
+</table>
+
+<h3>Step 5 — 構造バリデーション</h3>
+<p>
+  LBDM がフレーズ境界を正確に検出するため、音楽的品質フィルタ (音域/反復/跳躍) は不要です。
+  フロントエンドの <code>selectLick()</code> が要求する最小限の構造制約のみチェックします:
+</p>
+<table>
+  <tr><th>制約</th><th>条件</th><th>リジェクト数</th></tr>
+  <tr><td>ノート数</td><td>3 ≤ length ≤ 20</td><td>WJD: 3,037 / Omnibook: 444</td></tr>
+  <tr><td>拍数</td><td>0.5 ≤ durationBeats ≤ 8.5</td><td>WJD: 98 / Omnibook: 47</td></tr>
+</table>
+
+<h3>Step 6 — MLA 分類 (Frieler/Pfleiderer 2016)</h3>
+<p>
+  Melodic Lick Analysis (MLA) の基準でフレーズを <strong>lick / line / other</strong> に分類し、
+  <code>line</code> (リズム的に均一なスケーラーラン) を除外します。
+</p>
+<table>
+  <tr><th>分類</th><th>条件</th><th>ライブラリへの採否</th></tr>
+  <tr>
+    <td><strong>line</strong></td>
+    <td>16音超 かつ 最頻リズムが全体の 70%以上</td>
+    <td>除外 (WJD: 87 / Omnibook: 16)</td>
+  </tr>
+  <tr>
+    <td><strong>lick</strong></td>
+    <td>16音以下、またはリズム種類が2種以上</td>
+    <td>採用</td>
+  </tr>
+  <tr>
+    <td><strong>other</strong></td>
+    <td>上記に該当しない</td>
+    <td>除外</td>
+  </tr>
+</table>
+<div class="callout design">
+  <div class="callout-label">lick vs line の区別</div>
+  <p>
+    ビバップソロには、コード上を駆け上がる/駆け下りるスケーラーラン (line) が頻出します。
+    これらはリズム的に均一 (ほぼ全て8分音符など) で長いパッセージであり、
+    短いフレーズ生成に再利用する「リック」としては不適切です。
+    MLA の基準で除外することで、リズム的多様性のあるリックのみをライブラリに残します。
+  </p>
+</div>
+
+<h3>Step 7 — 正規化</h3>
+<p>バリデーションと MLA を通過したフレーズを、キーに依存しない形式に正規化します。</p>
+
+<div class="card">
+  <div class="card-title">リックのデータ構造</div>
+<pre>{
+  id:            string,    // MD5ハッシュ先頭12文字 (重複除去キー)
+  steps:         number[],  // ルートからの半音オフセット (0-11)
+  intervals:     number[],  // 隣接音間のインターバル (符号付き半音)
+  rhythm:        string[],  // リズムタイプ配列 ['e','e','s','s','e']
+  direction:     string,    // 'asc' | 'desc' | 'mixed'
+  length:        number,    // ノート数
+  startStep:     number,    // 開始音の steps[0]
+  endStep:       number,    // 終了音の steps[last]
+  durationBeats: number,    // 総拍数 (リズムから計算)
+  source:        string     // 'wjd' | 'omnibook'
+}</pre>
+</div>
+
+<h4>steps (ルート相対半音) の計算</h4>
+<p>
+  各ノートの MIDI ピッチからコードのルート PC (0=C, 2=D, ..., 11=B) を引き、
+  <code>mod 12</code> で 0〜11 に正規化します。これにより:
+</p>
+<ul>
+  <li>異なるキーで演奏された同一パターンが同じ <code>steps</code> 配列になる</li>
+  <li>フレーズジェネレーターが任意のキーに移調して再利用できる</li>
+  <li><code>steps[i] = 0</code> はルート、<code>4</code> は長3度、<code>7</code> は完全5度、など</li>
+</ul>
+
+<h4>direction の判定</h4>
+<table>
+  <tr><th>値</th><th>条件</th></tr>
+  <tr><td><code>asc</code></td><td>全インターバルが ≥ 0 (上行または同音)</td></tr>
+  <tr><td><code>desc</code></td><td>全インターバルが ≤ 0 (下行または同音)</td></tr>
+  <tr><td><code>mixed</code></td><td>上行と下行が混在</td></tr>
+</table>
+
+<h3>Step 8 — DTL パターン頻度スコアリング + 重複除去</h3>
+
+<h4>DTL パターン頻度分析</h4>
+<p>
+  各品質カテゴリ内で、リックのインターバル列を <strong>Levenshtein距離</strong> でクラスタリングし、
+  複数ソロに出現するパターンにボーナスを付与します。
+</p>
+<ol>
+  <li>各リックのインターバル列 (intervals) をタプル化</li>
+  <li>同じ長さ ± 1 のインターバル列をバケット化し、バケット内で Levenshtein距離を計算</li>
+  <li>距離 ≤ 2 のペアを Union-Find でクラスタリング</li>
+  <li>クラスタサイズ ≥ 3 → 最大 +10 ボーナス</li>
+  <li>複数ソースにまたがるクラスタ → <strong>+15 ボーナス</strong> (WJD と Omnibook 両方に出現)</li>
+</ol>
+<div class="callout design">
+  <div class="callout-label">DTL の意義</div>
+  <p>
+    複数の異なるソロに共通して出現するパターンは、ビバップの「定型句」である可能性が高い。
+    Levenshtein距離を使うことで、完全一致だけでなく1〜2音の変形を含む類似パターンも
+    同一クラスタとして扱い、イディオムの検出精度を高めます。
+  </p>
+</div>
+
+<h4>重複除去</h4>
+<p>
+  <strong>(steps, rhythm)</strong> のタプルが同一のリックを重複とみなします。
+  重複がある場合は DTL スコア + ソース優先度 (Omnibook +5) が高い方を保持します。
+</p>
+
+<h4>品質ごとの上限 (max_per_quality = 8,000)</h4>
+<p>
+  重複除去後のリック数が 8,000 を超える品質カテゴリでは、
+  DTL スコア順に上位を選択します。現在どの品質も上限に達していません。
+</p>
+
+<h3>コード品質分類</h3>
+<p>各コードシンボルを <strong>5つの品質カテゴリ</strong> に分類します。</p>
+<table>
+  <tr><th>品質キー</th><th>対象コード例</th><th>分類ルール</th></tr>
+  <tr><td><code>dom7</code></td><td>C7, G7sus, F9</td><td>dominant-seventh、接尾辞なし、sus、+7 等 (デフォルト)</td></tr>
+  <tr><td><code>min7</code></td><td>Dm7, Am, Cm9</td><td>接尾辞に - / m / minor を含む</td></tr>
+  <tr><td><code>maj7</code></td><td>Cmaj7, F6, G69</td><td>接尾辞に maj7 / j7 / 6 / 69 を含む</td></tr>
+  <tr><td><code>min7b5</code></td><td>Bm7b5, Aø7</td><td>m7b5 / ø (half-diminished)</td></tr>
+  <tr><td><code>dim7</code></td><td>Bo7, Cdim7, Edim</td><td>dim / o を含む</td></tr>
+</table>
+<p>
+  WJD と Omnibook で別々の分類関数を使用しますが、出力する5品質キーは共通です。
+  スラッシュコード (例: <code>Dm7/G</code>) はスラッシュ前のコード本体 (<code>Dm7</code>) で品質・ルートを判定し、分数ベース音 (<code>G</code>) は無視します。
+  判別不能なシンボルは <code>dom7</code> にフォールバック（ジャズの慣例に従う）。
+</p>
+
+<h3>統計サマリー</h3>
+
+<div class="callout success">
+  <div class="callout-label">抽出結果</div>
+  <strong>103,590 ノート (WJD: 76,427 + Omnibook: 27,163) → LBDM で 2,891 フレーズ検出 → MLA フィルタ後 11,262 → 重複除去後 11,078 リック</strong>
+</div>
+
+<h4>フレーズ検出統計</h4>
+<table>
+  <tr><th>ソース</th><th>ソロ数</th><th>ノート数</th><th>LBDM検出</th><th>採用</th><th>リジェクト (length)</th><th>リジェクト (duration)</th><th>リジェクト (MLA line)</th></tr>
+  <tr><td>WJD</td><td>186</td><td>76,427</td><td>1,836</td><td>10,714</td><td>3,037</td><td>98</td><td>87</td></tr>
+  <tr><td>Omnibook</td><td>50</td><td>27,163</td><td>1,055</td><td>548</td><td>444</td><td>47</td><td>16</td></tr>
+</table>
+<p>
+  LBDM 検出数よりも採用数が多いのは、1つのフレーズがコード境界で複数のサブフレーズに分割されるためです。
+</p>
+
+<h4>品質別内訳</h4>
+<table>
+  <tr><th>品質</th><th>リック数</th><th>WJD由来</th><th>Omnibook由来</th><th>DTL マルチソロクラスタ</th></tr>
+  <tr><td><code>dom7</code></td><td>5,597</td><td>5,440</td><td>157</td><td>4,268</td></tr>
+  <tr><td><code>min7</code></td><td>3,038</td><td>2,918</td><td>120</td><td>2,396</td></tr>
+  <tr><td><code>maj7</code></td><td>1,874</td><td>1,658</td><td>216</td><td>1,317</td></tr>
+  <tr><td><code>min7b5</code></td><td>410</td><td>410</td><td>0</td><td>0</td></tr>
+  <tr><td><code>dim7</code></td><td>159</td><td>159</td><td>0</td><td>0</td></tr>
+</table>
+<p>
+  dom7 が最多 (50.5%) で、ジャズにおけるドミナント7thコードの頻出を反映。
+  min7b5 と dim7 は WJD のみから抽出 (Omnibook のコード分析で該当セグメントが少ない)。
+  DTL マルチソロクラスタ列は、複数ソロにまたがるパターンの数を示しています。
+</p>
+
+<h4>ノート長分布</h4>
+<table>
+  <tr><th>品質</th><th>3-4音</th><th>5-6音</th><th>7-8音</th><th>9-12音</th><th>13-20音</th></tr>
+  <tr><td>dom7</td><td>2,112</td><td>1,280</td><td>1,097</td><td>764</td><td>344</td></tr>
+  <tr><td>min7</td><td>1,273</td><td>734</td><td>578</td><td>309</td><td>144</td></tr>
+  <tr><td>maj7</td><td>650</td><td>427</td><td>417</td><td>250</td><td>130</td></tr>
+  <tr><td>min7b5</td><td>213</td><td>104</td><td>59</td><td>26</td><td>8</td></tr>
+  <tr><td>dim7</td><td>73</td><td>38</td><td>25</td><td>23</td><td>0</td></tr>
+</table>
+<p>
+  3〜4音の短いリックが最多で、フレーズ生成の2〜4拍に最も適合。
+  LBDM ベースのため 9音以上の長いリックも自然なフレーズ境界で切り出されており、
+  v1 (スライディングウィンドウ) と異なりアドホックフィルタなしで品質を確保しています。
+</p>
+
+<h4>方向分布</h4>
+<table>
+  <tr><th>品質</th><th>上行 (asc)</th><th>下行 (desc)</th><th>混合 (mixed)</th></tr>
+  <tr><td>dom7</td><td>657 (11.7%)</td><td>873 (15.6%)</td><td>4,067 (72.7%)</td></tr>
+  <tr><td>min7</td><td>473 (15.6%)</td><td>467 (15.4%)</td><td>2,098 (69.1%)</td></tr>
+  <tr><td>maj7</td><td>264 (14.1%)</td><td>221 (11.8%)</td><td>1,389 (74.1%)</td></tr>
+  <tr><td>min7b5</td><td>77 (18.8%)</td><td>68 (16.6%)</td><td>265 (64.6%)</td></tr>
+  <tr><td>dim7</td><td>18 (11.3%)</td><td>24 (15.1%)</td><td>117 (73.6%)</td></tr>
+</table>
+<p>
+  全品質で混合 (mixed) が 65〜74% と圧倒的に多く、ビバップフレーズの特徴的な
+  上下に波打つ動きを反映しています。純粋な上行・下行はそれぞれ 12〜19% 程度。
+</p>
+
+<!-- ==================== LICK SELECTION & RESOLUTION ==================== -->
 <h2 id="phrase-lick">Lick Selection &amp; Resolution</h2>
 <p>
-  フレーズ生成の中核。リックライブラリ (~20,000リック) から条件に最適なリックを検索し、
+  フレーズ生成の中核。リックライブラリ (~11,000リック) から条件に最適なリックを検索し、
   指板上の物理的な座標に解決します。スコアリングによる自動生成は行わず、
   <strong>実際のビバップソロから抽出したリックの品質に依存</strong>するアーキテクチャです。
 </p>
@@ -649,7 +1018,7 @@ degree ラベル、フレーバーテキストを持ちます。</p>
 <div class="callout design">
   <div class="callout-label">設計根拠</div>
   リックの品質が高ければ、スコアリングで1音ずつ生成するより遥かに自然なフレーズが得られる。
-  WJD 186ソロ + Omnibook 50ソロから抽出した ~20,000 リックは、ビバップの語彙を十分にカバーしている。
+  WJD 186ソロ + Omnibook 50ソロから LBDM + MLA + DTL で抽出した ~11,000 リックは、ビバップの語彙を十分にカバーしている。
   失敗時は null を返却し、UI は前回のフレーズを維持する。
 </div>
 
