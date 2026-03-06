@@ -1368,9 +1368,18 @@ CSS Grid 描画</div>
       <li>スケールトーン = 枠円（ストロークのみ）</li>
     </ul>
   </li>
-  <li><strong>矢印マーカー</strong>: 進行方向を示す</li>
   <li><strong>拍番号</strong>: 各ノートの横に表示</li>
   <li><strong>アニメーション</strong>: 各ノートのフェードインは <code>beatStart</code> ベースのタイミング（リズムに忠実な表示）</li>
+  <li><strong>視認性改善</strong>:
+    <ul>
+      <li><strong>Crowding-aware routing</strong>: 各セグメントの中点近接度を距離減衰で計測し、密集エリアの線を垂直方向にファンアウト（最大3層）</li>
+      <li><strong>タンジェント抑制</strong>: 短セグメント（同フレット弦移動等）は Catmull-Rom タンジェントをセグメント長比例で減衰させ、ほぼ直線に</li>
+      <li><strong>折り返しbow抑制</strong>: 近接フレット間の方向反転でのbow量をセグメント長に比例してスケール</li>
+      <li><strong>再訪問マーカー</strong>: 75%縮小 + 次ノート方向に6pxオフセット</li>
+      <li><strong>ストローク幅テーパリング</strong>: 始点2.2px → 終点1.4pxで時間方向を明示</li>
+      <li><strong>開始ノート強調</strong>: マーカー1.2倍 + 半透明リング</li>
+    </ul>
+  </li>
 </ul>
 
 <h2 id="ui-layout">UI Layout</h2>
