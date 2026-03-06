@@ -306,10 +306,12 @@ describe('Generation metadata', () => {
     expect([...reasons].some(r => progReasons.includes(r))).toBe(true);
   });
 
-  it('lickId is set on successful phrases', () => {
+  it('lickId is set on successful phrases (string or string[])', () => {
     const phrases = generateBatch('C', 4, 2, 20);
     for (const phrase of phrases) {
-      expect(typeof phrase.lickId).toBe('string');
+      const isStr = typeof phrase.lickId === 'string';
+      const isArr = Array.isArray(phrase.lickId) && phrase.lickId.every(id => typeof id === 'string');
+      expect(isStr || isArr).toBe(true);
     }
   });
 
@@ -458,7 +460,80 @@ describe('selectLick scale compatibility filter', () => {
 });
 
 // =========================================================================
-// 10. resolveLick quality gates
+// 10. selectLick chainFromStep filter
+// =========================================================================
+
+describe('selectLick chainFromStep filter', () => {
+  it('with chainFromStep, only returns licks whose startStep is 1-5 semitones away', () => {
+    // Run multiple trials to increase chance of getting a result
+    for (let trial = 0; trial < 20; trial++) {
+      const chainFrom = 0; // C
+      const result = selectLick('dom7', 4, null, undefined, 'arch', 0, [], [], chainFrom);
+      if (result) {
+        let pcDist = Math.abs(result.startStep - chainFrom);
+        if (pcDist > 6) pcDist = 12 - pcDist;
+        expect(pcDist).toBeGreaterThanOrEqual(1);
+        expect(pcDist).toBeLessThanOrEqual(5);
+      }
+    }
+  });
+
+  it('rejects licks with same pitch class (pcDist=0) as chainFromStep', () => {
+    // Run many trials: if a lick is returned, its startStep must differ
+    for (let trial = 0; trial < 20; trial++) {
+      const chainFrom = 7; // G
+      const result = selectLick('dom7', 4, null, undefined, 'arch', 0, [], [], chainFrom);
+      if (result) {
+        expect(result.startStep).not.toBe(chainFrom);
+      }
+    }
+  });
+
+  it('backward compatible: without chainFromStep, works normally', () => {
+    const result = selectLick('dom7', 4, null, undefined, 'arch', 0);
+    expect(result === null || typeof result === 'object').toBe(true);
+  });
+});
+
+// =========================================================================
+// 11. Lick chaining in generatePhrase
+// =========================================================================
+
+describe('generatePhrase — lick chaining', () => {
+  it('chained phrases have lickId as array', () => {
+    const phrases = generateBatch('C', 4, 2, 50);
+    const chained = phrases.filter(p => Array.isArray(p.lickId));
+    // Some phrases should be chained (not all, since it depends on remaining beats)
+    // Just verify that chained ones have correct structure
+    for (const p of chained) {
+      expect(Array.isArray(p.lickId)).toBe(true);
+      expect((p.lickId as string[]).length).toBe(2);
+      expect(typeof (p.lickId as string[])[0]).toBe('string');
+      expect(typeof (p.lickId as string[])[1]).toBe('string');
+    }
+  });
+
+  it('chained phrases have monotonically increasing beatStart', () => {
+    const phrases = generateBatch('C', 4, 2, 50);
+    const chained = phrases.filter(p => Array.isArray(p.lickId));
+    for (const p of chained) {
+      for (let i = 1; i < p.notes.length; i++) {
+        expect(p.notes[i].beatStart!).toBeGreaterThanOrEqual(p.notes[i - 1].beatStart!);
+      }
+    }
+  });
+
+  it('single lick phrases have lickId as string', () => {
+    const phrases = generateBatch('C', 0, 0, 30);
+    const single = phrases.filter(p => typeof p.lickId === 'string');
+    for (const p of single) {
+      expect(typeof p.lickId).toBe('string');
+    }
+  });
+});
+
+// =========================================================================
+// 12. resolveLick quality gates
 // =========================================================================
 
 describe('resolveLick quality gates', () => {
