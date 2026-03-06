@@ -1,4 +1,4 @@
-import type { ApproachType, InstrumentType } from '../../types';
+import type { ApproachType } from '../../types';
 
 interface PhraseControlsProps {
   approachTypes: ApproachType[];
@@ -28,9 +28,6 @@ interface PhraseControlsProps {
   goalSelectMode?: boolean;
   onGoalSelectModeChange?: (on: boolean) => void;
   selectedGoalNote?: { noteName: string } | null;
-  /** Instrument selection (shown in normal mode only; prog mode uses volume panel) */
-  instrument?: InstrumentType;
-  onInstrumentChange?: (inst: InstrumentType) => void;
 }
 
 const PHRASE_COLOR = '#FF6B9D';
@@ -55,7 +52,6 @@ export function PhraseControls({
   isPlaying,
   beatCount, onBeatCountChange,
   goalSelectMode, onGoalSelectModeChange, selectedGoalNote,
-  instrument, onInstrumentChange,
 }: PhraseControlsProps) {
   const autoPlaying = phraseAutoPlay && isPlaying;
 
@@ -111,29 +107,6 @@ export function PhraseControls({
                 fontWeight: beatCount === bc ? 700 : 400,
               }}>
               {bc}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* Instrument selector (normal mode only; prog mode uses volume panel) */}
-      {!progMode && onInstrumentChange && (
-        <div className="flex gap-0.5 items-center">
-          <span className="text-[10px] text-text-muted mr-0.5">音色:</span>
-          {([
-            { key: 'guitar' as InstrumentType, label: '\uD83C\uDFB8', title: 'ギター' },
-            { key: 'saxophone' as InstrumentType, label: '\uD83C\uDFB7', title: 'サクソフォン' },
-          ]).map(({ key, label, title }) => (
-            <button key={key}
-              onClick={() => onInstrumentChange(key)}
-              title={title}
-              className={`${btnBase} text-[13px] px-1.5 py-[2px]`}
-              style={{
-                border: `1px solid ${instrument === key ? PHRASE_COLOR : '#555'}`,
-                background: instrument === key ? '#2a1020' : '#1a1a1a',
-                color: instrument === key ? PHRASE_COLOR : '#888',
-              }}>
-              {label}
             </button>
           ))}
         </div>

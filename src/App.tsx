@@ -13,7 +13,7 @@ import {
   generatePhrase, schedulePhrase,
 } from './utils';
 import { Fretboard } from './components/Fretboard';
-import { RootSelector, ModeSelector, PositionSelector, OptionBar, PhraseControls, PhraseAnalysisPanel } from './components/Controls';
+import { RootSelector, ModeSelector, PositionSelector, OptionBar, PhraseControls, PhraseAnalysisPanel, GlobalAudioControls } from './components/Controls';
 import { PositionGrid } from './components/PositionGrid';
 import { ProgressionEditor, ProgressionPlayer } from './components/Progression';
 import { Footer } from './components/Footer';
@@ -141,6 +141,7 @@ export default function App() {
   });
   const audioCtxRef = useRef<AudioContext | null>(null);
   const metBeatRef = useRef(0);
+  const [metSyncKey, setMetSyncKey] = useState(0);
   const metVolumeRef = useRef(metVolume);
   // Chord audio state
   const [chordAudioOn, setChordAudioOn] = useState(false);
@@ -172,8 +173,11 @@ export default function App() {
   const instrumentRef = useRef(instrument);
   const phraseAutoPlayRef = useRef(phraseAutoPlay);
   const activePhraseStopRef = useRef<{ stop: () => void } | null>(null);
-  const [phraseMap, setPhraseMap] = useState<Map<number, GeneratedPhrase>>(new Map());
-  const phraseMapRef = useRef(phraseMap);
+  const [autoPlayPhrase, setAutoPlayPhrase] = useState<GeneratedPhrase | null>(null);
+  // Refs for on-the-fly phrase chaining across chords
+  const prevLastNoteRef = useRef<PhraseNote | undefined>(undefined);
+  const prevContourRef = useRef<PhraseContour | undefined>(undefined);
+  const prevMotifRef = useRef<number[] | undefined>(undefined);
 
   const template = MODE_TEMPLATES[modeIdx];
   const mode = useMemo(() => resolveMode(rootName, template), [rootName, modeIdx]);
@@ -233,14 +237,14 @@ export default function App() {
   }, [rootName, modeIdx, selPosIds, activeChordIdx]);
 
   const activePhrase = useMemo(() => {
-    // During auto-play in progression mode, show the current chord's pre-generated phrase
-    if (phraseAutoPlay && progMode && phraseMap.has(activeChordIdx))
-      return phraseMap.get(activeChordIdx)!;
+    // During auto-play in progression mode, show the on-the-fly generated phrase
+    if (phraseAutoPlay && progMode && autoPlayPhrase)
+      return autoPlayPhrase;
     // Normal manual mode
     if (showPhrase && phraseHistory.length > 0)
       return phraseHistory[activePhraseIdx] ?? null;
     return null;
-  }, [phraseAutoPlay, progMode, phraseMap, activeChordIdx, showPhrase, phraseHistory, activePhraseIdx]);
+  }, [phraseAutoPlay, progMode, autoPlayPhrase, showPhrase, phraseHistory, activePhraseIdx]);
 
   const deg = mode.degrees;
   const rootNote = mode.notes[0];
@@ -395,104 +399,91 @@ export default function App() {
   useEffect(() => { noteVolumeRef.current = noteVolume; localStorage.setItem('noteVolume', String(noteVolume)); }, [noteVolume]);
   useEffect(() => { instrumentRef.current = instrument; localStorage.setItem('phraseInstrument', instrument); }, [instrument]);
   useEffect(() => { phraseAutoPlayRef.current = phraseAutoPlay; }, [phraseAutoPlay]);
-  useEffect(() => { phraseMapRef.current = phraseMap; }, [phraseMap]);
 
   // Auto-enable showPhrase when phraseAutoPlay is turned on
   useEffect(() => { if (phraseAutoPlay && !showPhrase) setShowPhrase(true); }, [phraseAutoPlay]);
   // Turn off phraseAutoPlay when leaving progression mode
   useEffect(() => { if (!progMode) setPhraseAutoPlay(false); }, [progMode]);
 
-  // Generate phrases for ALL chords in the active progression
-  // Phrases are chained in playback order: each phrase's last note feeds the next
-  // phrase's startHint for smooth voice leading across chord boundaries.
-  const generatePhraseMap = useCallback(() => {
-    if (!activeProg) { setPhraseMap(new Map()); return; }
-    const chords = activeProg.chords;
-    const effAll = computeEffectiveSelections(chords, activeProg.songKey);
-    const map = new Map<number, GeneratedPhrase>();
+  // Generate a phrase on-the-fly for a given chord index (used during auto-advance)
+  function generatePhraseForChord(
+    chordIdx: number,
+    prog: Progression,
+    step: { beats: number },
+  ): GeneratedPhrase | null {
+    const chords = prog.chords;
+    const effAll = computeEffectiveSelections(chords, prog.songKey);
+    const chord = chords[chordIdx];
+    const eff = effAll[chordIdx];
+    if (!chord || !eff || !QUALITY_TO_MODES[chord.quality]) return null;
 
-    // Process in playback order (respecting repeats/endings) for proper chaining
-    const seq = buildPlaybackSeq(getChartLayout(activeProg));
+    const chordMode = resolveMode(chord.rootName, MODE_TEMPLATES[eff.modeIdx]);
+    if (chordMode.notes.length > 7) return null;
 
-    let prevLastNote: PhraseNote | undefined;
-    let prevContour: PhraseContour | undefined;
-    let prevMotif: number[] | undefined;
+    const chordFretMap = buildFretMap(chordMode.semi, chordMode.notes);
+    const positions = generatePositions(chordFretMap, chordMode.notes);
+    const pos = positions.find(p => p.id === eff.posId);
+    if (!pos) return null;
 
-    for (const step of seq) {
-      const i = step.chordIdx;
-      if (map.has(i)) continue; // already generated (from repeat)
-
-      const chord = chords[i];
-      const eff = effAll[i];
-      if (!chord || !eff || !QUALITY_TO_MODES[chord.quality]) continue;
-
-      const chordMode = resolveMode(chord.rootName, MODE_TEMPLATES[eff.modeIdx]);
-      if (chordMode.notes.length > 7) continue; // skip dim (8-note) chords
-
-      const chordFretMap = buildFretMap(chordMode.semi, chordMode.notes);
-      const positions = generatePositions(chordFretMap, chordMode.notes);
-      const pos = positions.find(p => p.id === eff.posId);
-      if (!pos) continue;
-
-      // Target: next chord's 3rd (wrap-around for last chord)
-      let targetThirdNote: string | undefined;
-      let nextChordContext: PhraseConfig['nextChordContext'] | undefined;
-      const nextIdx = (i + 1) % chords.length;
-      if (nextIdx !== i) {
-        const nextChord = chords[nextIdx];
-        const nextEff = effAll[nextIdx];
-        if (nextChord && nextEff && QUALITY_TO_MODES[nextChord.quality]) {
-          const nextMode = resolveMode(nextChord.rootName, MODE_TEMPLATES[nextEff.modeIdx]);
-          if (nextMode.notes.length <= 7) {
-            const gt = getGuideTones(nextMode);
-            targetThirdNote = gt.third;
-            nextChordContext = {
-              thirdNote: gt.third,
-              seventhNote: gt.seventh,
-              rootNote: nextMode.notes[0],
-              quality: nextChord.quality,
-            };
-          }
+    let targetThirdNote: string | undefined;
+    let nextChordContext: PhraseConfig['nextChordContext'] | undefined;
+    const nextIdx = (chordIdx + 1) % chords.length;
+    if (nextIdx !== chordIdx) {
+      const nextChord = chords[nextIdx];
+      const nextEff = effAll[nextIdx];
+      if (nextChord && nextEff && QUALITY_TO_MODES[nextChord.quality]) {
+        const nextMode = resolveMode(nextChord.rootName, MODE_TEMPLATES[nextEff.modeIdx]);
+        if (nextMode.notes.length <= 7) {
+          const gt = getGuideTones(nextMode);
+          targetThirdNote = gt.third;
+          nextChordContext = {
+            thirdNote: gt.third,
+            seventhNote: gt.seventh,
+            rootNote: nextMode.notes[0],
+            quality: nextChord.quality,
+          };
         }
       }
-
-      // Phrase length matches chord duration (2-beat → 4 notes, 4-beat → 8 notes)
-      const phraseLength = Math.min(8, Math.max(4, Math.round(step.beats * 2)));
-
-      const config: PhraseConfig = {
-        approachTypes: phraseApproachTypes,
-        startHint: prevLastNote ? {
-          noteName: prevLastNote.noteName,
-          stringIdx: prevLastNote.stringIdx,
-          fret: prevLastNote.fret,
-          semitone: prevLastNote.semitone,
-        } : undefined,
-        phraseLength,
-        prevContour,
-        nextChordContext,
-        prevMotif,
-      };
-
-      const phrase = generatePhrase(pos, chordMode, chordFretMap, config, targetThirdNote);
-      if (phrase) {
-        map.set(i, phrase);
-        prevLastNote = phrase.notes[phrase.notes.length - 1];
-        prevContour = phrase.config.contour;
-        prevMotif = phrase.motif;
-      } else {
-        prevLastNote = undefined;
-        prevContour = undefined;
-        prevMotif = undefined;
-      }
     }
-    setPhraseMap(map);
-  }, [activeProg, phraseApproachTypes]);
 
-  // Regenerate phrase map when auto-play is enabled or relevant state changes
+    const phraseLength = Math.min(8, Math.max(4, Math.round(step.beats * 2)));
+    const pln = prevLastNoteRef.current;
+    const config: PhraseConfig = {
+      approachTypes: phraseApproachTypes,
+      startHint: pln ? {
+        noteName: pln.noteName,
+        stringIdx: pln.stringIdx,
+        fret: pln.fret,
+        semitone: pln.semitone,
+      } : undefined,
+      phraseLength,
+      prevContour: prevContourRef.current,
+      nextChordContext,
+      prevMotif: prevMotifRef.current,
+    };
+
+    const phrase = generatePhrase(pos, chordMode, chordFretMap, config, targetThirdNote);
+    if (phrase) {
+      prevLastNoteRef.current = phrase.notes[phrase.notes.length - 1];
+      prevContourRef.current = phrase.config.contour;
+      prevMotifRef.current = phrase.motif;
+    } else {
+      prevLastNoteRef.current = undefined;
+      prevContourRef.current = undefined;
+      prevMotifRef.current = undefined;
+    }
+    return phrase;
+  }
+
+  // Reset chaining refs when auto-play is toggled off
   useEffect(() => {
-    if (phraseAutoPlay && progMode && activeProg) generatePhraseMap();
-    else setPhraseMap(new Map());
-  }, [phraseAutoPlay, progMode, activeProg, phraseApproachTypes, generatePhraseMap]);
+    if (!phraseAutoPlay) {
+      setAutoPlayPhrase(null);
+      prevLastNoteRef.current = undefined;
+      prevContourRef.current = undefined;
+      prevMotifRef.current = undefined;
+    }
+  }, [phraseAutoPlay]);
 
   // BPM auto-advance: drift-free, respects section repeats and volta endings
   useEffect(() => {
@@ -527,11 +518,16 @@ export default function App() {
           activeStrumRef.current = playChordStrum(ctx, strumNotes, chordVolumeRef.current, ctx.currentTime);
         }
       }
-      // Schedule phrase for initial chord on playback start
+      // Generate + schedule phrase for initial chord on playback start
       if (isPlaybackStart && phraseAutoPlayRef.current) {
         activePhraseStopRef.current?.stop();
-        const phrase = phraseMapRef.current.get(activeChordIdx);
+        prevLastNoteRef.current = undefined;
+        prevContourRef.current = undefined;
+        prevMotifRef.current = undefined;
+        const initStep = seq[playPosRef.current];
+        const phrase = initStep ? generatePhraseForChord(activeChordIdx, activeProg, initStep) : null;
         if (phrase) {
+          setAutoPlayPhrase(phrase);
           if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
           const ctx = audioCtxRef.current;
           const eighthDur = (60 / bpm) / 2;
@@ -566,11 +562,13 @@ export default function App() {
         }
       }
 
-      // Schedule phrase for the next chord on auto-advance
-      if (phraseAutoPlayRef.current) {
+      // Generate + schedule phrase for the next chord on auto-advance
+      if (phraseAutoPlayRef.current && activeProg) {
         activePhraseStopRef.current?.stop();
-        const phrase = phraseMapRef.current.get(nextChordIdx);
+        const nextStep = seq[nextPos];
+        const phrase = generatePhraseForChord(nextChordIdx, activeProg, nextStep);
         if (phrase) {
+          setAutoPlayPhrase(phrase);
           if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
           const ctx = audioCtxRef.current;
           const eighthDur = (60 / bpm) / 2;
@@ -583,30 +581,36 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [isPlaying, activeChordIdx, bpm, activeProg, progMode]);
 
-  // Metronome: waits for next beat on the grid, then setInterval.
-  // Computes global beat from playback sequence so accent aligns to measure downbeat
-  // even when toggled ON mid-playback.
+  // Metronome: progression mode uses beat-grid alignment; normal mode uses simple interval.
   useEffect(() => {
-    if (!isPlaying || !isMetronomeOn || !progMode || !activeProg) return;
+    if (!isMetronomeOn) return;
+
     if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
     const ctx = audioCtxRef.current;
-
-    // Compute global beat position from playback sequence
     const beatMs = 60000 / bpm;
-    const seq = buildPlaybackSeq(getChartLayout(activeProg));
-    let cumBeats = 0;
-    for (let i = 0; i < playPosRef.current && i < seq.length; i++) {
-      cumBeats += seq[i].beats;
+
+    let delayToNext = 0;
+
+    // Progression mode with active playback: grid-aligned metronome
+    if (isPlaying && progMode && activeProg) {
+      const seq = buildPlaybackSeq(getChartLayout(activeProg));
+      let cumBeats = 0;
+      for (let i = 0; i < playPosRef.current && i < seq.length; i++) {
+        cumBeats += seq[i].beats;
+      }
+      const elapsedMs = chordStartRef.current > 0 ? performance.now() - chordStartRef.current : 0;
+      const globalBeat = cumBeats + elapsedMs / beatMs;
+
+      const nextBeat = Math.ceil(globalBeat - 15 / beatMs);
+      metBeatRef.current = nextBeat;
+      delayToNext = Math.max(0, (nextBeat - globalBeat) * beatMs);
+    } else {
+      // Normal mode (or prog mode not playing): simple metronome
+      metBeatRef.current = 0;
+      delayToNext = 0;
     }
-    const elapsedMs = chordStartRef.current > 0 ? performance.now() - chordStartRef.current : 0;
-    const globalBeat = cumBeats + elapsedMs / beatMs;
 
-    // Next integer beat (within 15ms tolerance = treat as that beat)
-    const nextBeat = Math.ceil(globalBeat - 15 / beatMs);
-    metBeatRef.current = nextBeat;
-    const delayToNext = Math.max(0, (nextBeat - globalBeat) * beatMs);
-
-    // Wait until the next beat on the grid, then fire + start interval
+    // Wait until the next beat, then fire + start interval
     let intervalId: ReturnType<typeof setInterval>;
     const timerId = setTimeout(() => {
       const accent = metBeatRef.current % 4 === 0;
@@ -619,7 +623,7 @@ export default function App() {
       }, beatMs);
     }, delayToNext);
     return () => { clearTimeout(timerId); clearInterval(intervalId); };
-  }, [isPlaying, isMetronomeOn, progMode, bpm, activeProg]);
+  }, [isPlaying, isMetronomeOn, progMode, bpm, activeProg, metSyncKey]);
 
   function handleSaveProgressions(progs: Progression[]) {
     setProgressions(progs);
@@ -681,6 +685,56 @@ export default function App() {
   const [isPhraseAudioPlaying, setIsPhraseAudioPlaying] = useState(false);
   const [phraseAnimKey, setPhraseAnimKey] = useState(0);
 
+  // Play a phrase with audio + animation sync
+  const playPhraseAudio = useCallback((phrase: GeneratedPhrase) => {
+    // Stop any current playback
+    manualPhraseRef.current?.stop();
+    if (manualPhraseTimer.current) clearTimeout(manualPhraseTimer.current);
+
+    // Prevent the activePhrase-change effect from killing this playback
+    justStartedPlayRef.current = true;
+
+    if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
+    const ctx = audioCtxRef.current;
+    if (ctx.state === 'suspended') ctx.resume();
+    // When metronome is on, sync phrase to BPM; otherwise use speed slider
+    const eighthDur = isMetronomeOn
+      ? (60 / bpm) / 2
+      : Math.max(0.1, phraseAnimSpeed / 1000);
+    const result = schedulePhrase(ctx, phrase, ctx.currentTime, eighthDur, noteVolumeRef.current, 99, instrumentRef.current);
+    manualPhraseRef.current = result;
+    setIsPhraseAudioPlaying(true);
+    setPhraseAnimKey(k => k + 1);
+    manualPhraseTimer.current = setTimeout(() => {
+      manualPhraseRef.current = null;
+      setIsPhraseAudioPlaying(false);
+    }, result.totalDuration * 1000 + 200);
+
+    // Restart metronome interval to sync downbeat with phrase start
+    if (isMetronomeOn) setMetSyncKey(k => k + 1);
+
+    // Normal mode chord strum on phrase play
+    if (!progMode && chordAudioOnRef.current) {
+      activeStrumRef.current?.stop();
+      // Build strum from current position's chord tones
+      if (selPos && selPos.instances.length > 0) {
+        const inst = selPos.instances[0];
+        const ct = new Set(mode.chordTones);
+        const strumNotes: { stringIdx: number; fret: number }[] = [];
+        for (let s = 5; s >= 0; s--) {
+          const strNotes = inst.strings[s];
+          if (!strNotes) continue;
+          const ctNote = strNotes.find(([n]) => ct.has(n));
+          if (ctNote) strumNotes.push({ stringIdx: s, fret: ctNote[1] });
+          if (strumNotes.length >= 4) break;
+        }
+        if (strumNotes.length > 0) {
+          activeStrumRef.current = playChordStrum(ctx, strumNotes, chordVolumeRef.current, ctx.currentTime);
+        }
+      }
+    }
+  }, [phraseAnimSpeed, progMode, selPos, mode.chordTones, isMetronomeOn, bpm]);
+
   const handlePlayPhrase = useCallback(() => {
     // Toggle off if already playing
     if (manualPhraseRef.current) {
@@ -691,22 +745,17 @@ export default function App() {
       return;
     }
     if (!activePhrase) return;
-    if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
-    const ctx = audioCtxRef.current;
-    if (ctx.state === 'suspended') ctx.resume();
-    const eighthDur = Math.max(0.1, phraseAnimSpeed / 1000);
-    const result = schedulePhrase(ctx, activePhrase, ctx.currentTime, eighthDur, noteVolumeRef.current, 99, instrumentRef.current);
-    manualPhraseRef.current = result;
-    setIsPhraseAudioPlaying(true);
-    setPhraseAnimKey(k => k + 1);
-    manualPhraseTimer.current = setTimeout(() => {
-      manualPhraseRef.current = null;
-      setIsPhraseAudioPlaying(false);
-    }, result.totalDuration * 1000 + 200);
-  }, [activePhrase, phraseAnimSpeed]);
+    playPhraseAudio(activePhrase);
+  }, [activePhrase, playPhraseAudio]);
 
-  // Stop manual phrase on context change
+  // Stop manual phrase on context change — but skip if we just started playback
+  // (Generate triggers both activePhrase change and playPhraseAudio in the same tick)
+  const justStartedPlayRef = useRef(false);
   useEffect(() => {
+    if (justStartedPlayRef.current) {
+      justStartedPlayRef.current = false;
+      return;
+    }
     manualPhraseRef.current?.stop();
     manualPhraseRef.current = null;
     if (manualPhraseTimer.current) clearTimeout(manualPhraseTimer.current);
@@ -772,7 +821,10 @@ export default function App() {
     setActivePhraseIdx(
       Math.min(phraseHistory.length, 19)
     );
-  }, [canShowPhrase, selPosIds, allPos, mode, fretMap, phraseApproachTypes, progMode, activeProg, activeChordIdx, effectiveAll, phraseHistory.length, beatCount, selectedGoalNote]);
+
+    // Auto-play the generated phrase
+    playPhraseAudio(phrase);
+  }, [canShowPhrase, selPosIds, allPos, mode, fretMap, phraseApproachTypes, progMode, activeProg, activeChordIdx, effectiveAll, phraseHistory.length, beatCount, selectedGoalNote, playPhraseAudio]);
 
   function getLabel(nn: string): string {
     return labelMode === 'degree' ? (deg[nn] || nn) : nn;
@@ -826,6 +878,27 @@ export default function App() {
           )}
         </div>
 
+        {/* Global audio controls — always visible */}
+        <GlobalAudioControls
+          bpm={bpm}
+          onBpmChange={setBpm}
+          isMetronomeOn={isMetronomeOn}
+          onToggleMetronome={() => setIsMetronomeOn(p => !p)}
+          chordAudioOn={chordAudioOn}
+          onToggleChordAudio={() => setChordAudioOn(p => !p)}
+          metVolume={metVolume}
+          onMetVolumeChange={setMetVolume}
+          chordVolume={chordVolume}
+          onChordVolumeChange={setChordVolume}
+          noteVolume={noteVolume}
+          onNoteVolumeChange={setNoteVolume}
+          instrument={instrument}
+          onInstrumentChange={setInstrument}
+          isPlaying={isPlaying}
+          onTogglePlay={() => setIsPlaying(p => !p)}
+          showPlayButton={progMode && !!activeProg && activeProg.chords.length > 0}
+        />
+
         {/* Progression mode */}
         {progMode && (
           <>
@@ -850,26 +923,10 @@ export default function App() {
                 onModeChange={handleChordModeChange}
                 onPosChange={handleChordPosChange}
                 onReset={handleResetSelections}
-                isPlaying={isPlaying}
-                bpm={bpm}
-                onTogglePlay={() => setIsPlaying(p => !p)}
-                onBpmChange={setBpm}
-                isMetronomeOn={isMetronomeOn}
-                onToggleMetronome={() => setIsMetronomeOn(p => !p)}
-                metVolume={metVolume}
-                onMetVolumeChange={setMetVolume}
-                chordAudioOn={chordAudioOn}
-                onToggleChordAudio={() => setChordAudioOn(p => !p)}
-                chordVolume={chordVolume}
-                onChordVolumeChange={setChordVolume}
-                noteVolume={noteVolume}
-                onNoteVolumeChange={setNoteVolume}
                 selPosIds={selPosIds}
                 availableVoicings={showChordForms ? deduplicatedVoicings : undefined}
                 selectedVoicingIdx={effectiveVoicingIdx}
                 onSelectVoicing={handleSelectVoicing}
-                instrument={instrument}
-                onInstrumentChange={setInstrument}
               />
             )}
 
@@ -933,11 +990,11 @@ export default function App() {
           <PhraseControls
             approachTypes={phraseApproachTypes}
             onApproachTypesChange={setPhraseApproachTypes}
-            onGenerate={phraseAutoPlay ? generatePhraseMap : handleGeneratePhrase}
+            onGenerate={handleGeneratePhrase}
             onPlayPhrase={handlePlayPhrase}
             isPhraseAudioPlaying={isPhraseAudioPlaying}
             hasPhrase={!!activePhrase}
-            phraseCount={phraseAutoPlay ? phraseMap.size : phraseHistory.length}
+            phraseCount={phraseHistory.length}
             phraseIdx={activePhraseIdx}
             onPhraseNav={setActivePhraseIdx}
             animSpeed={phraseAnimSpeed}
@@ -946,15 +1003,13 @@ export default function App() {
             progMode={progMode}
             phraseAutoPlay={phraseAutoPlay}
             onTogglePhraseAutoPlay={() => setPhraseAutoPlay(p => !p)}
-            onRegeneratePhraseMap={generatePhraseMap}
+            onRegeneratePhraseMap={handleGeneratePhrase}
             isPlaying={isPlaying}
             beatCount={beatCount}
             onBeatCountChange={setBeatCount}
             goalSelectMode={goalSelectMode}
             onGoalSelectModeChange={setGoalSelectMode}
             selectedGoalNote={selectedGoalNote}
-            instrument={instrument}
-            onInstrumentChange={setInstrument}
           />
         )}
 
@@ -971,7 +1026,7 @@ export default function App() {
           onNoteClick={handleNoteClick}
           activePhrase={activePhrase}
           phraseAnimKey={phraseAnimKey}
-          phraseAnimSpeed={(phraseAutoPlay && progMode && isPlaying)
+          phraseAnimSpeed={(phraseAutoPlay && progMode && isPlaying) || isMetronomeOn
             ? Math.round((60000 / bpm) / 2)
             : phraseAnimSpeed}
           selectedGoalNote={selectedGoalNote}
