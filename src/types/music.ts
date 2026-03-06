@@ -4,6 +4,9 @@ export type RhythmType = 'q' | 't' | 'e' | 's';
 /** Instrument type for phrase playback synthesis */
 export type InstrumentType = 'guitar' | 'saxophone';
 
+/** Phrase engine type: lick-based or rule-based */
+export type PhraseEngine = 'lick' | 'rule';
+
 /** A single note on the fretboard: [noteName, fretNumber, semitoneValue] */
 export type FretNote = [string, number, number];
 
@@ -201,6 +204,7 @@ export interface PhraseNote {
   duration?: RhythmType;                // note duration (default 'e' = eighth note)
   beatStart?: number;                   // absolute beat position (0-based, fractional)
   lickIdx?: number;                     // 0 = 1st lick, 1 = 2nd lick (chained), undefined = connector
+  segmentIdx?: number;                  // segment index within rule-based template
 }
 
 /** Approach note types */
@@ -256,6 +260,8 @@ export interface GeneratedPhrase {
   goalReason?: string;
   /** ID of the lick(s) used for generation — single or chained */
   lickId?: string | string[];
+  /** Template ID for rule-based generation */
+  templateId?: string;
   /** Total number of beats in the phrase */
   totalBeats: number;
 }
@@ -314,6 +320,7 @@ export interface PhraseAnalysisSummary {
   motifLabel?: string;           // e.g. "+3, -2"
   bebopPassingCount?: number;
   extensionCount?: number;
+  templateLabel?: string;           // rule-based engine: template name (e.g. "Arp↑+Scale↓")
 }
 
 /** Complete analysis result */

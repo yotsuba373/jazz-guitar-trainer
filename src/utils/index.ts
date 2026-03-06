@@ -55,8 +55,11 @@ export {
 } from './audioEngine';
 export {
   generatePhrase,
+  generatePhraseLick,
   buildNotePool,
   getApproachNotes,
   absolutePitch,
 } from './phraseGenerator';
+export type { PoolNote } from './phraseGenerator';
+export { generatePhraseRule } from './bebopGenerator';
 export { analyzePhrase } from './phraseAnalysis';
