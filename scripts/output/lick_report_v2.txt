@@ -48,4 +48,4 @@ Omnibook: 50 solos, 27163 notes
 Total before dedup: 11262
 Total after dedup:  11078
 
-v1 library had: 16063 licks
+v1 library had: 11078 licks
