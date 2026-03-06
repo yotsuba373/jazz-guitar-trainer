@@ -1,4 +1,4 @@
-import { useRef, useEffect, useMemo, Fragment } from 'react';
+import { useRef, useMemo, Fragment } from 'react';
 import type { Progression, ChordNotationPrefs, ChartMeasure } from '../../types';
 import type { EffectiveChord } from '../../utils/progression';
 import { POS_COLORS } from '../../constants';
@@ -16,12 +16,7 @@ export function ChordChart({
   progression, activeChordIdx, effectiveAll, chordPrefs, onChordSelect,
 }: ChordChartProps) {
   const layout = useMemo(() => getChartLayout(progression), [progression]);
-  const activeRef = useRef<HTMLButtonElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    activeRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-  }, [activeChordIdx]);
 
   const { sections, barsPerRow } = layout;
   const chords = progression.chords;
@@ -41,7 +36,6 @@ export function ChordChart({
     return (
       <button
         key={ci}
-        ref={active ? activeRef : undefined}
         onClick={() => onChordSelect(ci)}
         className="cursor-pointer font-mono text-[12px] font-bold px-1 py-0.5 rounded"
         style={{

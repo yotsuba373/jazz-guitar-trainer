@@ -349,7 +349,7 @@
     <li><strong>ビバップフレーズ自動生成</strong> — Charlie Parker スタイルの8音フレーズ</li>
     <li><strong>Drop 2/3 ボイシング</strong> — 20テンプレートによるコードフォーム表示</li>
     <li><strong>ガイドトーン表示</strong> — 3rd/7th のボイスリーディング可視化</li>
-    <li><strong>BPM自動再生</strong> — メトロノーム、コード音声、フレーズ再生</li>
+    <li><strong>BPM自動再生</strong> — メトロノーム、コード音声、フレーズ再生 (両モード共通)</li>
   </ul>
 </div>
 
@@ -1328,7 +1328,8 @@ actualBeats = (beatWidth / sumOfBeatWidths) * 4</pre>
   <tr><td>Single Note</td><td><code>noteVolume</code></td><td>0.4</td><td><code>playNote()</code> + <code>schedulePhrase()</code></td></tr>
   <tr><td>Instrument</td><td><code>phraseInstrument</code></td><td>'guitar'</td><td>楽器選択 (guitar/saxophone)</td></tr>
 </table>
-<p>全て localStorage に永続化。<code>useRef</code> 経由でコールバック内から参照（再レンダリング回避）。</p>
+<p>全て localStorage に永続化。<code>useRef</code> 経由でコールバック内から参照（再レンダリング回避）。
+<code>GlobalAudioControls</code> コンポーネントで両モード共通の UI を提供。</p>
 
 <!-- ==================== UI ==================== -->
 <h2 id="chart-layout">Chart Layout (iReal Pro Style)</h2>
@@ -1377,6 +1378,7 @@ CSS Grid 描画</div>
 <h4>Normal Mode</h4>
 <pre>RootSelector (12キー)
 ModeSelector (18モード)
+GlobalAudioControls (BPM, メトロノーム, コード音, 音量ミキサー, 楽器)
 PositionSelector (Pos 1-7 + 全表示 + 重ねる) ＋ VoicingGrid
 OptionBar (CT, ラベル, 記法, ガイドトーン, コードフォーム, フレーズ)
 PhraseControls (フレーズON時)
@@ -1387,7 +1389,8 @@ Footer</pre>
 
 <h4>Progression Mode</h4>
 <pre>ProgressionEditor (編集時のみ)
-ProgressionPlayer (BPM + ChordChart + モード/ポジション選択 + VoicingGrid)
+GlobalAudioControls (▶/■ + BPM, メトロノーム, コード音, 音量ミキサー, 楽器)
+ProgressionPlayer (ChordChart + モード/ポジション選択 + VoicingGrid)
 OptionBar (フレーズ含む)
 PhraseControls (フレーズON時)
 Fretboard (SVG + PhrasePath)
