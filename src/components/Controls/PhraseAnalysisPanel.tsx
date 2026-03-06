@@ -32,6 +32,8 @@ export function PhraseAnalysisPanel({ phrase, mode }: PhraseAnalysisPanelProps) 
     ? summary.approachPatternsUsed.map(p => `${APPROACH_TYPE_SHORT[p.type] ?? p.type}×${p.count}`).join(' ')
     : 'なし';
 
+  const isChained = Array.isArray(phrase.lickId);
+
   return (
     <div className="mb-2" style={{ background: '#1a1a1a', border: `1px solid ${PHRASE_COLOR}30`, borderRadius: 6, fontSize: 10, fontFamily: 'monospace' }}>
       {/* Summary bar — Row 1: existing stats */}
@@ -74,6 +76,7 @@ export function PhraseAnalysisPanel({ phrase, mode }: PhraseAnalysisPanelProps) 
           <table className="w-full" style={{ borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ color: '#666' }}>
+                {isChained && <th className="text-left py-[2px] pr-1" style={{ width: 20 }}></th>}
                 <th className="text-left py-[2px] pr-2" style={{ width: 28 }}>拍</th>
                 <th className="text-left py-[2px] pr-2" style={{ width: 36 }}>音名</th>
                 <th className="text-left py-[2px] pr-2" style={{ width: 36 }}>度数</th>
@@ -109,8 +112,19 @@ export function PhraseAnalysisPanel({ phrase, mode }: PhraseAnalysisPanelProps) 
                   : isInDp ? `2px solid ${DIGITAL_COLOR}60`
                   : '2px solid transparent';
 
+                // Lick boundary detection for chained phrases
+                const curLickIdx = phrase.notes[i].lickIdx;
+                const prevLickIdx = i > 0 ? phrase.notes[i - 1].lickIdx : curLickIdx;
+                const isBoundary = isChained && i > 0 && curLickIdx !== prevLickIdx;
+                const lickBadge = curLickIdx === 0 ? '①' : curLickIdx === 1 ? '②' : '∙';
+
                 return (
-                  <tr key={i} style={{ color: rowColor, borderLeft }}>
+                  <tr key={i} style={{ color: rowColor, borderLeft, ...(isBoundary ? { borderTop: '2px solid #FF6B9D80' } : {}) }}>
+                    {isChained && (
+                      <td className="py-[2px] pr-1" style={{ color: '#666', fontSize: 8 }}>
+                        {(i === 0 || isBoundary) ? lickBadge : ''}
+                      </td>
+                    )}
                     <td className="py-[2px] pr-2" style={{
                       color: n.beatPosition === 1 || n.beatPosition === 8 ? PHRASE_COLOR : rowColor,
                       fontWeight: n.isSkeletonBeat ? 700 : 400,
@@ -163,9 +177,16 @@ export function PhraseAnalysisPanel({ phrase, mode }: PhraseAnalysisPanelProps) 
                   ? phrase.lickId.join(' → ')
                   : phrase.lickId
               }</b></span>
-              {Array.isArray(phrase.lickId) && (
-                <span style={{ color: '#888', marginLeft: 6 }}>(連結)</span>
-              )}
+              {isChained && (() => {
+                const lick1Count = phrase.notes.filter(n => n.lickIdx === 0).length;
+                const lick2Count = phrase.notes.filter(n => n.lickIdx === 1).length;
+                const connCount = phrase.notes.filter(n => n.lickIdx == null).length;
+                return (
+                  <span style={{ color: '#888', marginLeft: 6 }}>
+                    (①{lick1Count}音 → ②{lick2Count}音{connCount > 0 ? ` + 接続${connCount}音` : ''})
+                  </span>
+                );
+              })()}
             </div>
           )}
 

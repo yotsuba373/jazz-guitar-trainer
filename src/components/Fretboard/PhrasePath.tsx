@@ -124,10 +124,11 @@ export function PhrasePath({ phrase, animKey, animSpeed = 350 }: PhrasePathProps
   const points = phrase.notes.map(n => toSvg(n.stringIdx, n.fret));
   const segs = buildSegments(points);
   const fadeDur = Math.max(60, Math.round(animSpeed * 0.4));
-  const fadeStyle = (i: number): React.CSSProperties =>
-    animSpeed > 0
-      ? { animation: `phraseIn ${fadeDur}ms ease-out ${i * animSpeed}ms both` }
-      : {};
+  const fadeStyle = (i: number): React.CSSProperties => {
+    if (animSpeed <= 0) return {};
+    const delay = (phrase.notes[i].beatStart ?? 0) * animSpeed * 2;
+    return { animation: `phraseIn ${fadeDur}ms ease-out ${Math.round(delay)}ms both` };
+  };
 
   // Key forces remount on phrase change or play trigger → restarts CSS animations
   const phraseId = phrase.notes.map(n => `${n.stringIdx}:${n.fret}`).join(',') + (animKey ? `:${animKey}` : '');

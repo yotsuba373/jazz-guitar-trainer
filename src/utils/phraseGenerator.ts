@@ -588,9 +588,10 @@ export function generatePhrase(
     const resolved1 = resolveLick(lick, activePool, mode, startRef, 0);
     if (!resolved1 || resolved1.length < 3) continue;
 
-    // Assign default duration
+    // Assign default duration + lick index tag
     for (let i = 0; i < resolved1.length; i++) {
       if (!resolved1[i].duration) resolved1[i].duration = 'e';
+      resolved1[i].lickIdx = 0;
     }
 
     // --- Lick chaining: try to append a 2nd lick if enough beats remain ---
@@ -620,6 +621,7 @@ export function generatePhrase(
         if (resolved2 && resolved2.length >= 3) {
           for (let i = 0; i < resolved2.length; i++) {
             if (!resolved2[i].duration) resolved2[i].duration = 'e';
+            resolved2[i].lickIdx = 1;
           }
           resolved = [...resolved1, ...resolved2];
           lickId = [lick.id, lick2.id];
@@ -652,6 +654,18 @@ export function generatePhrase(
       }
     }
 
+    // Verify goal achievement — update reason if actual last note differs
+    const finalNote = resolved[resolved.length - 1];
+    let actualGoalReason = goalResult.reason;
+    if (finalNote.noteName !== goalNote.noteName) {
+      const chordToneSet = new Set(mode.chordTones);
+      if (chordToneSet.has(finalNote.noteName)) {
+        actualGoalReason = `CT到達 (${finalNote.noteName})`;
+      } else {
+        actualGoalReason = 'リック終端';
+      }
+    }
+
     // Extract motif from resolved notes
     const lickMotif: number[] = [];
     for (let i = 1; i < Math.min(3, resolved.length); i++) {
@@ -665,7 +679,7 @@ export function generatePhrase(
       rootName: mode.notes[0],
       config: { ...config, contour },
       motif: lickMotif,
-      goalReason: goalResult.reason,
+      goalReason: actualGoalReason,
       lickId,
       totalBeats: maxLickBeats,
     };
