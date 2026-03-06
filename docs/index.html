@@ -1329,7 +1329,8 @@ actualBeats = (beatWidth / sumOfBeatWidths) * 4</pre>
   <tr><td>Instrument</td><td><code>phraseInstrument</code></td><td>'guitar'</td><td>楽器選択 (guitar/saxophone)</td></tr>
 </table>
 <p>全て localStorage に永続化。<code>useRef</code> 経由でコールバック内から参照（再レンダリング回避）。
-<code>GlobalAudioControls</code> コンポーネントで両モード共通の UI を提供。</p>
+<code>GlobalAudioControls</code> コンポーネントで両モード共通の UI を提供。
+各チャンネルにミュートボタン付き（メトロノーム/コード/単音）。タップテンポ対応（TAPボタン連続タップでBPM設定）。</p>
 
 <!-- ==================== UI ==================== -->
 <h2 id="chart-layout">Chart Layout (iReal Pro Style)</h2>
@@ -1387,7 +1388,7 @@ CSS Grid 描画</div>
 <h4>Normal Mode</h4>
 <pre>RootSelector (12キー)
 ModeSelector (18モード)
-GlobalAudioControls (BPM, メトロノーム, コード音, 音量ミキサー, 楽器)
+GlobalAudioControls (音量ミキサー, メトロノーム, BPM, タップテンポ)
 PositionSelector (Pos 1-7 + 全表示 + 重ねる) ＋ VoicingGrid
 OptionBar (CT, ラベル, 記法, ガイドトーン, コードフォーム, フレーズ)
 PhraseControls (フレーズON時)
@@ -1398,7 +1399,7 @@ Footer</pre>
 
 <h4>Progression Mode</h4>
 <pre>ProgressionEditor (編集時のみ)
-GlobalAudioControls (▶/■ + BPM, メトロノーム, コード音, 音量ミキサー, 楽器)
+GlobalAudioControls (▶/■ + 音量ミキサー, メトロノーム, BPM, タップテンポ)
 ProgressionPlayer (ChordChart + モード/ポジション選択 + VoicingGrid)
 OptionBar (フレーズ含む)
 PhraseControls (フレーズON時)

@@ -1005,6 +1005,7 @@ export default function App() {
             onTogglePhraseAutoPlay={() => setPhraseAutoPlay(p => !p)}
             onRegeneratePhraseMap={handleGeneratePhrase}
             isPlaying={isPlaying}
+            isMetronomeOn={isMetronomeOn}
             beatCount={beatCount}
             onBeatCountChange={setBeatCount}
             goalSelectMode={goalSelectMode}

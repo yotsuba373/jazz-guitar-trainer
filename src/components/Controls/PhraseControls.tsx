@@ -21,6 +21,8 @@ interface PhraseControlsProps {
   onTogglePhraseAutoPlay?: () => void;
   onRegeneratePhraseMap?: () => void;
   isPlaying?: boolean;
+  /** Metronome active (normal mode — speed slider disabled when on) */
+  isMetronomeOn?: boolean;
   /** Beat count selector (normal mode) */
   beatCount?: 2 | 3 | 4;
   onBeatCountChange?: (bc: 2 | 3 | 4) => void;
@@ -50,6 +52,7 @@ export function PhraseControls({
   onPlayPhrase, isPhraseAudioPlaying, hasPhrase,
   progMode, phraseAutoPlay, onTogglePhraseAutoPlay, onRegeneratePhraseMap: _onRegeneratePhraseMap,
   isPlaying,
+  isMetronomeOn,
   beatCount, onBeatCountChange,
   goalSelectMode, onGoalSelectModeChange, selectedGoalNote,
 }: PhraseControlsProps) {
@@ -204,17 +207,21 @@ export function PhraseControls({
         </div>
       )}
 
-      {/* Animation speed slider — hidden during auto-play (BPM-synced) */}
-      {!autoPlaying && (
-        <div className="flex gap-1 items-center text-[10px] text-text-muted">
-          <span>速度</span>
-          <input type="range" min={0} max={500} step={50}
-            value={500 - animSpeed}
-            onChange={e => onAnimSpeedChange(500 - Number(e.target.value))}
-            className="w-16 accent-pink-400"
-          />
-        </div>
-      )}
+      {/* Animation speed slider — hidden during auto-play (BPM-synced), disabled when metronome on */}
+      {!autoPlaying && (() => {
+        const disabled = !!isMetronomeOn;
+        return (
+          <div className="flex gap-1 items-center text-[10px]" style={{ color: disabled ? '#555' : undefined, opacity: disabled ? 0.5 : 1 }}>
+            <span>{disabled ? '速度 (BPM同期)' : '速度'}</span>
+            <input type="range" min={0} max={500} step={50}
+              value={500 - animSpeed}
+              onChange={e => onAnimSpeedChange(500 - Number(e.target.value))}
+              className="w-16 accent-pink-400"
+              disabled={disabled}
+            />
+          </div>
+        );
+      })()}
     </div>
   );
 }
