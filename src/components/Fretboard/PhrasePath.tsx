@@ -63,20 +63,70 @@ function inset(from: Point, to: Point, px: number): Point {
   return { x: from.x + dx * r, y: from.y + dy * r };
 }
 
-const SEG_GAP = 7;  // inset from note center (approx marker radius)
-const BOW_PX = 8;   // vertical bow for same-string fold-backs
+const SEG_GAP = 7;     // inset from note center (approx marker radius)
+const BOW_PX = 8;      // vertical bow for same-string fold-backs
+const CROWD_SPREAD = 6; // px perpendicular offset per crowding layer
+const CROWD_RADIUS = FW * 1.5; // midpoint proximity threshold
+const CROWD_RADIUS_SQ = CROWD_RADIUS ** 2;
+const MAX_CROWD = 3; // cap layers to prevent extreme offsets
+
+/** Revisited note: shrink + offset toward next note */
+const REVISIT_SCALE = 0.75;
+const REVISIT_MAG = 6; // px
+
+interface VisitMeta {
+  visitIdx: number;
+  sizeScale: number;
+  xOff: number;
+  yOff: number;
+}
+
+/** Pre-compute visit metadata.
+ *  Revisited notes are offset toward their next destination. */
+function computeVisitMeta(notes: GeneratedPhrase['notes']): VisitMeta[] {
+  return notes.map((n, i) => {
+    let visitIdx = 0;
+    for (let j = 0; j < i; j++) {
+      if (notes[j].stringIdx === n.stringIdx && notes[j].fret === n.fret) visitIdx++;
+    }
+    if (visitIdx === 0) return { visitIdx: 0, sizeScale: 1, xOff: 0, yOff: 0 };
+
+    // Skip offset for consecutive unisons (no new line to separate)
+    const isUnison = i > 0 &&
+      notes[i - 1].stringIdx === n.stringIdx && notes[i - 1].fret === n.fret;
+    if (isUnison) return { visitIdx, sizeScale: REVISIT_SCALE, xOff: 0, yOff: 0 };
+
+    // Offset toward next note (or previous if last)
+    const cur = toSvg(n.stringIdx, n.fret);
+    const ref = i < notes.length - 1
+      ? toSvg(notes[i + 1].stringIdx, notes[i + 1].fret)
+      : toSvg(notes[i - 1].stringIdx, notes[i - 1].fret);
+    const dx = ref.x - cur.x, dy = ref.y - cur.y;
+    const len = Math.hypot(dx, dy);
+    if (len < 0.1) return { visitIdx, sizeScale: REVISIT_SCALE, xOff: 0, yOff: 0 };
+    return {
+      visitIdx, sizeScale: REVISIT_SCALE,
+      xOff: (dx / len) * REVISIT_MAG,
+      yOff: (dy / len) * REVISIT_MAG,
+    };
+  });
+}
 
 interface Segment { d: string }
 
 /**
- * Build individual Catmull-Rom → Cubic Bezier segment paths.
- * - Inset from note centers to create gaps at markers.
- * - Y-axis control point clamping prevents zigzag self-crossing.
- * - Same-string segments are bowed up/down by X-direction so
- *   fold-back lines (e.g. fret 4→3→2→3) don't overlap.
+ * Build Catmull-Rom → Cubic Bezier segments with crowding-aware routing.
+ *
+ * For each segment we check how many prior segments have a nearby midpoint
+ * (within CROWD_RADIUS). Crowded segments are offset perpendicular to their
+ * direction, fanning out like parallel lanes. This handles both exact
+ * duplicate edges AND distinct edges passing through the same fretboard area.
  */
 function buildSegments(points: Point[]): Segment[] {
   if (points.length < 2) return [];
+
+  // Collect midpoints for crowding detection
+  const midpoints: Point[] = [];
 
   return points.slice(0, -1).map((_, i) => {
     const p0 = points[Math.max(0, i - 1)];
@@ -84,27 +134,63 @@ function buildSegments(points: Point[]): Segment[] {
     const p2 = points[i + 1];
     const p3 = points[Math.min(points.length - 1, i + 2)];
 
+    // Crowding: distance-weighted count of prior segments with nearby midpoints
+    const mid = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+    let crowdScore = 0;
+    for (const prev of midpoints) {
+      const dx = mid.x - prev.x, dy = mid.y - prev.y;
+      const distSq = dx * dx + dy * dy;
+      if (distSq < CROWD_RADIUS_SQ) {
+        crowdScore += 1 - Math.sqrt(distSq) / CROWD_RADIUS; // 1.0 at center → 0 at edge
+      }
+    }
+    midpoints.push(mid);
+    const crowd = Math.min(Math.round(crowdScore), MAX_CROWD);
+
     // Catmull-Rom to Bezier control points (uniform, tension=0)
-    const cp1x = p1.x + (p2.x - p0.x) / 6;
-    let cp1y = p1.y + (p2.y - p0.y) / 6;
-    const cp2x = p2.x - (p3.x - p1.x) / 6;
-    let cp2y = p2.y - (p3.y - p1.y) / 6;
+    // Dampen tangents for short segments (e.g. same-fret string hops)
+    // so they stay nearly straight instead of bowing from distant neighbors
+    const segLen = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+    const tScale = Math.min(1, segLen / (SG * 2)) / 6;
+    let cp1x = p1.x + (p2.x - p0.x) * tScale;
+    let cp1y = p1.y + (p2.y - p0.y) * tScale;
+    let cp2x = p2.x - (p3.x - p1.x) * tScale;
+    let cp2y = p2.y - (p3.y - p1.y) * tScale;
+
+    // Perpendicular offset for crowded segments
+    if (crowd > 0) {
+      const ex = p2.x - p1.x, ey = p2.y - p1.y;
+      const eLen = Math.hypot(ex, ey);
+      if (eLen > 0.1) {
+        const nx = -ey / eLen, ny = ex / eLen;
+        // Alternate sides: +1, -1, +2, -2, ...
+        const sign = crowd % 2 === 1 ? 1 : -1;
+        const layer = Math.ceil(crowd / 2);
+        const off = sign * layer * CROWD_SPREAD;
+        cp1x += nx * off;
+        cp1y += ny * off;
+        cp2x += nx * off;
+        cp2y += ny * off;
+      }
+    }
 
     // Clamp y to prevent overshoot on zigzag string crossings
-    const pad = SG * 0.35;
+    const pad = SG * 0.35 + crowd * CROWD_SPREAD * 0.5;
     const yLo = Math.min(p1.y, p2.y) - pad;
     const yHi = Math.max(p1.y, p2.y) + pad;
     cp1y = clamp(cp1y, yLo, yHi);
     cp2y = clamp(cp2y, yLo, yHi);
 
     // Bow on fold-backs (X direction reversal) for same & adjacent strings
+    // Scale bow by segment length so nearby-fret segments don't over-curve
     const dy = Math.abs(p2.y - p1.y);
+    const lenScale = Math.min(1, segLen / (FW * 3));
     const nearScale = Math.max(0, 1 - dy / (SG * 1.5));
-    if (nearScale > 0) {
+    if (nearScale > 0 && crowd === 0) {
       const prevDx = p1.x - p0.x;
       const curDx = p2.x - p1.x;
-      if (prevDx * curDx < 0) {  // direction reversal
-        const bow = ((curDx > 0) ? 1 : -1) * BOW_PX * nearScale;
+      if (prevDx * curDx < 0) {
+        const bow = ((curDx > 0) ? 1 : -1) * BOW_PX * nearScale * lenScale;
         cp1y += bow;
         cp2y += bow;
       }
@@ -121,7 +207,11 @@ function buildSegments(points: Point[]): Segment[] {
 }
 
 export function PhrasePath({ phrase, animKey, animSpeed = 350 }: PhrasePathProps) {
-  const points = phrase.notes.map(n => toSvg(n.stringIdx, n.fret));
+  const visitMeta = computeVisitMeta(phrase.notes);
+  const points = phrase.notes.map((n, i) => {
+    const base = toSvg(n.stringIdx, n.fret);
+    return { x: base.x + visitMeta[i].xOff, y: base.y + visitMeta[i].yOff };
+  });
   const segs = buildSegments(points);
   const fadeDur = Math.max(60, Math.round(animSpeed * 0.4));
   const fadeStyle = (i: number): React.CSSProperties => {
@@ -146,16 +236,14 @@ export function PhrasePath({ phrase, animKey, animSpeed = 350 }: PhrasePathProps
         const color = getBeatColor(i, phrase.notes.length);
 
         // Beat number y-offset for revisited positions
-        let visitIdx = 0;
-        for (let j = 0; j < i; j++) {
-          if (phrase.notes[j].stringIdx === n.stringIdx &&
-              phrase.notes[j].fret === n.fret) visitIdx++;
-        }
+        const { visitIdx } = visitMeta[i];
         const offsets = [-11, 15, 26, -22];
         const yOff = offsets[visitIdx % offsets.length];
 
-        // Note marker element — size varies by rhythm type
-        const mSize = RHYTHM_MARKER_SIZE[n.duration ?? 'e'] ?? 5;
+        // Note marker element — size varies by rhythm type, shrunk on revisit
+        let mSize = (RHYTHM_MARKER_SIZE[n.duration ?? 'e'] ?? 5) * visitMeta[i].sizeScale;
+        // Enlarge first note for emphasis
+        if (i === 0) mSize *= 1.2;
         let marker: React.ReactNode;
         if (n.isChordTone) {
           marker = <circle cx={x} cy={y} r={mSize} fill={color} stroke="#FFF" strokeWidth={1} opacity={0.9} />;
@@ -168,9 +256,15 @@ export function PhrasePath({ phrase, animKey, animSpeed = 350 }: PhrasePathProps
 
         return (
           <g key={`beat-${i}`} style={fadeStyle(i)}>
-            {/* Curve segment leading TO this beat (from previous) */}
+            {/* Curve segment leading TO this beat (from previous) — tapered */}
             {i > 0 && (
-              <path d={segs[i - 1].d} fill="none" stroke={color} strokeWidth={2} opacity={0.6} strokeLinecap="round" />
+              <path d={segs[i - 1].d} fill="none" stroke={color}
+                strokeWidth={2.2 - (i / phrase.notes.length) * 0.8}
+                opacity={0.6} strokeLinecap="round" />
+            )}
+            {/* Start note emphasis ring */}
+            {i === 0 && (
+              <circle cx={x} cy={y} r={mSize + 3} fill="none" stroke={color} strokeWidth={1} opacity={0.3} />
             )}
             {/* Note marker */}
             {marker}
