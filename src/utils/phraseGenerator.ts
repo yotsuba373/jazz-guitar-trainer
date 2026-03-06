@@ -5,7 +5,7 @@ import { OPEN_STRINGS, getLicksForQuality } from '../constants';
 // Types (internal)
 // ---------------------------------------------------------------------------
 
-interface PoolNote {
+export interface PoolNote {
   noteName: string;
   stringIdx: number;
   fret: number;
@@ -82,7 +82,7 @@ const CHARACTERISTIC_TONES: Record<string, number[]> = {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function isStrongBeat(beat: number, goalBeat = 8): boolean {
+export function isStrongBeat(beat: number, goalBeat = 8): boolean {
   if (beat === goalBeat) return true;
   if (beat === 1 || beat === 3) return true;
   if (beat === 5 && goalBeat >= 8) return true;
@@ -97,11 +97,11 @@ export function absolutePitch(note: { stringIdx: number; fret: number }): number
   return OPEN_MIDI[note.stringIdx] + note.fret;
 }
 
-function pickRandom<T>(arr: T[]): T {
+export function pickRandom<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-function pickWeighted<T>(items: T[], weights: number[]): T {
+export function pickWeighted<T>(items: T[], weights: number[]): T {
   const total = weights.reduce((a, b) => a + b, 0);
   if (total <= 0) return items[0];
   let r = Math.random() * total;
@@ -292,7 +292,7 @@ const EXTENSION_DEGREES: Record<string, number[]> = {
   'dim7':  [],      // Symmetric — no extensions
 };
 
-function isExtensionTone(noteName: string, mode: Mode): boolean {
+export function isExtensionTone(noteName: string, mode: Mode): boolean {
   const indices = EXTENSION_DEGREES[mode.chordQuality];
   if (!indices || indices.length === 0) return false;
   return indices.some(idx => mode.notes[idx] === noteName);
@@ -510,7 +510,7 @@ export function resolveLick(
 // Core generation — lick-search only
 // ---------------------------------------------------------------------------
 
-const ALL_CONTOURS: PhraseContour[] = ['arch', 'reverse-arch', 'descending', 'wave'];
+export const ALL_CONTOURS: PhraseContour[] = ['arch', 'reverse-arch', 'descending', 'wave'];
 
 /** Complement contour for the 2nd lick in a chain */
 const COMPLEMENT_CONTOUR: Record<PhraseContour, PhraseContour> = {
@@ -520,7 +520,7 @@ const COMPLEMENT_CONTOUR: Record<PhraseContour, PhraseContour> = {
   'wave': 'reverse-arch',
 };
 
-export function generatePhrase(
+export function generatePhraseLick(
   position: Position,
   mode: Mode,
   fretMap: FretMap,
@@ -693,9 +693,9 @@ export function generatePhrase(
 // Goal & start note selection
 // ---------------------------------------------------------------------------
 
-interface GoalResult { note: PoolNote; reason: string }
+export interface GoalResult { note: PoolNote; reason: string }
 
-function chooseGoalNote(
+export function chooseGoalNote(
   ctPool: PoolNote[],
   mode: Mode,
   targetThirdNote?: string,
@@ -757,7 +757,7 @@ function chooseGoalNote(
 }
 
 /** Find the closest physical instance of a note name relative to a reference position */
-function nearestInstance(
+export function nearestInstance(
   noteName: string,
   ref: { stringIdx: number; fret: number },
   pool: PoolNote[],
@@ -784,3 +784,6 @@ const SEMI_MAP: Record<string, number> = {
 function findSemitone(noteName: string): number | null {
   return SEMI_MAP[noteName] ?? null;
 }
+
+/** Backward-compatible alias */
+export const generatePhrase = generatePhraseLick;

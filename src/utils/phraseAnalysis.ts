@@ -239,6 +239,9 @@ function computeSummary(phrase: GeneratedPhrase, notes: NoteAnalysis[]): PhraseA
   const bebopPassingCount = phrase.notes.filter(n => n.isBebopPassing).length;
   const extensionCount = phrase.notes.filter(n => n.isExtension).length;
 
+  // Template label (rule-based engine)
+  const templateLabel = phrase.templateId ?? undefined;
+
   return {
     stepwisePct: pct(stepwise),
     thirdsPct: pct(thirds),
@@ -258,5 +261,6 @@ function computeSummary(phrase: GeneratedPhrase, notes: NoteAnalysis[]): PhraseA
     motifLabel,
     bebopPassingCount: bebopPassingCount > 0 ? bebopPassingCount : undefined,
     extensionCount: extensionCount > 0 ? extensionCount : undefined,
+    templateLabel,
   };
 }

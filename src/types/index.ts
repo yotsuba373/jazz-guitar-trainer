@@ -35,4 +35,5 @@ export type {
   RhythmType,
   Lick,
   InstrumentType,
+  PhraseEngine,
 } from './music';

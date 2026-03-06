@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import type { LabelMode, RootName, Progression, ChordNotationPrefs, ChartLayout, SongKey, ChordSlot, ApproachType, GeneratedPhrase, PhraseConfig, PhraseNote, PhraseContour, InstrumentType } from './types';
+import type { LabelMode, RootName, Progression, ChordNotationPrefs, ChartLayout, SongKey, ChordSlot, ApproachType, GeneratedPhrase, PhraseConfig, PhraseNote, PhraseContour, InstrumentType, PhraseEngine } from './types';
 import { MODE_TEMPLATES, ROOTS, MODE_COLORS, OPEN_STRINGS, loadLickLibrary } from './constants';
 import {
   buildFretMap, generatePositions, generateDimPositions, resolveMode,
@@ -10,7 +10,7 @@ import {
   getGuideTones, findNoteLocations, classifyResolution,
   findVoicingsInPosition,
   playNote, playChordStrum, fretToFrequency,
-  generatePhrase, schedulePhrase,
+  generatePhraseLick, generatePhraseRule, schedulePhrase,
 } from './utils';
 import { Fretboard } from './components/Fretboard';
 import { RootSelector, ModeSelector, PositionSelector, OptionBar, PhraseControls, PhraseAnalysisPanel, GlobalAudioControls } from './components/Controls';
@@ -191,6 +191,12 @@ export default function App() {
 
   // Chord form voicings (only when exactly 1 position selected)
   const canShowChordForms = selPosIds.length === 1 && !overlay && !is8Note && modeIdx <= 6;
+
+  // Phrase engine selection (lick-based or rule-based)
+  const [phraseEngine, setPhraseEngine] = useState<PhraseEngine>(() =>
+    (localStorage.getItem('phraseEngine') as PhraseEngine) || 'lick'
+  );
+  useEffect(() => { localStorage.setItem('phraseEngine', phraseEngine); }, [phraseEngine]);
 
   // Phrase beat count (normal mode) and goal selection
   const [beatCount, setBeatCount] = useState<2 | 3 | 4>(4);
@@ -462,7 +468,8 @@ export default function App() {
       prevMotif: prevMotifRef.current,
     };
 
-    const phrase = generatePhrase(pos, chordMode, chordFretMap, config, targetThirdNote);
+    const genFn = phraseEngine === 'rule' ? generatePhraseRule : generatePhraseLick;
+    const phrase = genFn(pos, chordMode, chordFretMap, config, targetThirdNote);
     if (phrase) {
       prevLastNoteRef.current = phrase.notes[phrase.notes.length - 1];
       prevContourRef.current = phrase.config.contour;
@@ -810,7 +817,8 @@ export default function App() {
       ...(!progMode && { beatCount }),
       ...(selectedGoalNote && { goalNoteOverride: selectedGoalNote }),
     };
-    const phrase = generatePhrase(pos, mode, fretMap, config, targetThirdNote);
+    const genFn = phraseEngine === 'rule' ? generatePhraseRule : generatePhraseLick;
+    const phrase = genFn(pos, mode, fretMap, config, targetThirdNote);
     if (!phrase) return;
 
     setPhraseHistory(prev => {
@@ -1011,6 +1019,8 @@ export default function App() {
             goalSelectMode={goalSelectMode}
             onGoalSelectModeChange={setGoalSelectMode}
             selectedGoalNote={selectedGoalNote}
+            phraseEngine={phraseEngine}
+            onPhraseEngineChange={setPhraseEngine}
           />
         )}
 

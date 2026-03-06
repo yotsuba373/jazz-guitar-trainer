@@ -33,6 +33,8 @@ export function PhraseAnalysisPanel({ phrase, mode }: PhraseAnalysisPanelProps) 
     : 'なし';
 
   const isChained = Array.isArray(phrase.lickId);
+  const isSegmented = !!phrase.templateId && phrase.notes.some(n => n.segmentIdx != null);
+  const hasMultiSections = isChained || isSegmented;
 
   return (
     <div className="mb-2" style={{ background: '#1a1a1a', border: `1px solid ${PHRASE_COLOR}30`, borderRadius: 6, fontSize: 10, fontFamily: 'monospace' }}>
@@ -76,7 +78,7 @@ export function PhraseAnalysisPanel({ phrase, mode }: PhraseAnalysisPanelProps) 
           <table className="w-full" style={{ borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ color: '#666' }}>
-                {isChained && <th className="text-left py-[2px] pr-1" style={{ width: 20 }}></th>}
+                {hasMultiSections && <th className="text-left py-[2px] pr-1" style={{ width: 20 }}></th>}
                 <th className="text-left py-[2px] pr-2" style={{ width: 28 }}>拍</th>
                 <th className="text-left py-[2px] pr-2" style={{ width: 36 }}>音名</th>
                 <th className="text-left py-[2px] pr-2" style={{ width: 36 }}>度数</th>
@@ -112,17 +114,21 @@ export function PhraseAnalysisPanel({ phrase, mode }: PhraseAnalysisPanelProps) 
                   : isInDp ? `2px solid ${DIGITAL_COLOR}60`
                   : '2px solid transparent';
 
-                // Lick boundary detection for chained phrases
+                // Boundary detection for chained licks or segmented templates
                 const curLickIdx = phrase.notes[i].lickIdx;
                 const prevLickIdx = i > 0 ? phrase.notes[i - 1].lickIdx : curLickIdx;
-                const isBoundary = isChained && i > 0 && curLickIdx !== prevLickIdx;
-                const lickBadge = curLickIdx === 0 ? '①' : curLickIdx === 1 ? '②' : '∙';
+                const curSegIdx = phrase.notes[i].segmentIdx;
+                const prevSegIdx = i > 0 ? phrase.notes[i - 1].segmentIdx : curSegIdx;
+                const isBoundary = (isChained && i > 0 && curLickIdx !== prevLickIdx) ||
+                  (isSegmented && i > 0 && curSegIdx !== prevSegIdx);
+                const sectionNum = isChained ? (curLickIdx ?? -1) : (curSegIdx ?? -1);
+                const sectionBadge = sectionNum === 0 ? '①' : sectionNum === 1 ? '②' : sectionNum === 2 ? '③' : '∙';
 
                 return (
                   <tr key={i} style={{ color: rowColor, borderLeft, ...(isBoundary ? { borderTop: '2px dashed #FF6B9D80' } : {}) }}>
-                    {isChained && (
+                    {hasMultiSections && (
                       <td className="py-[2px] pr-1" style={{ color: '#666', fontSize: 8 }}>
-                        {(i === 0 || isBoundary) ? lickBadge : ''}
+                        {(i === 0 || isBoundary) ? sectionBadge : ''}
                       </td>
                     )}
                     <td className="py-[2px] pr-2" style={{
@@ -169,7 +175,7 @@ export function PhraseAnalysisPanel({ phrase, mode }: PhraseAnalysisPanelProps) 
             )}
           </div>
 
-          {/* Lick info */}
+          {/* Lick info (lick engine) */}
           {phrase.lickId && (
             <div className="mt-1 pt-1" style={{ borderTop: '1px solid #333', color: '#666' }}>
               <span>リック: <b style={{ color: '#DDD' }}>{
@@ -186,6 +192,26 @@ export function PhraseAnalysisPanel({ phrase, mode }: PhraseAnalysisPanelProps) 
                     (①{lick1Count}音 → ②{lick2Count}音{connCount > 0 ? ` + 接続${connCount}音` : ''})
                   </span>
                 );
+              })()}
+            </div>
+          )}
+
+          {/* Template info (rule engine) */}
+          {phrase.templateId && (
+            <div className="mt-1 pt-1" style={{ borderTop: '1px solid #333', color: '#666' }}>
+              <span>テンプレート: <b style={{ color: '#DDD' }}>{phrase.templateId}</b></span>
+              {(() => {
+                const segCounts = new Map<number, number>();
+                for (const n of phrase.notes) {
+                  if (n.segmentIdx != null) segCounts.set(n.segmentIdx, (segCounts.get(n.segmentIdx) ?? 0) + 1);
+                }
+                if (segCounts.size > 1) {
+                  const parts = Array.from(segCounts.entries())
+                    .sort(([a], [b]) => a - b)
+                    .map(([idx, count]) => `Seg${idx + 1}: ${count}音`);
+                  return <span style={{ color: '#888', marginLeft: 6 }}>({parts.join(' → ')})</span>;
+                }
+                return null;
               })()}
             </div>
           )}

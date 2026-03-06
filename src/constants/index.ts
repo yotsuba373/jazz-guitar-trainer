@@ -3,3 +3,5 @@ export { FC, FW, SG, TP, LP, DOTS, SVG_WIDTH, SVG_HEIGHT } from './svg';
 export { PARKER_PROFILES, toParkerQuality } from './parkerProfiles';
 export type { ParkerQuality, QualityProfile } from './parkerProfiles';
 export { loadLickLibrary, getLicksForQuality, isLickLibraryLoaded, toLickQuality } from './lickLibrary';
+export { BEBOP_SCALES, MODE_TO_BEBOP, getBebopScale, getBebopPassingTone } from './bebopScales';
+export type { BebopScaleDef } from './bebopScales';
