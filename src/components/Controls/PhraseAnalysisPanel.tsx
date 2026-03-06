@@ -158,7 +158,14 @@ export function PhraseAnalysisPanel({ phrase, mode }: PhraseAnalysisPanelProps) 
           {/* Lick info */}
           {phrase.lickId && (
             <div className="mt-1 pt-1" style={{ borderTop: '1px solid #333', color: '#666' }}>
-              <span>リック: <b style={{ color: '#DDD' }}>{phrase.lickId}</b></span>
+              <span>リック: <b style={{ color: '#DDD' }}>{
+                Array.isArray(phrase.lickId)
+                  ? phrase.lickId.join(' → ')
+                  : phrase.lickId
+              }</b></span>
+              {Array.isArray(phrase.lickId) && (
+                <span style={{ color: '#888', marginLeft: 6 }}>(連結)</span>
+              )}
             </div>
           )}
 

@@ -306,7 +306,9 @@ const RHYTHM_BEATS: Record<RhythmType, number> = {
   'q': 1.0, 't': 2/3, 'e': 0.5, 's': 0.25,
 };
 
-/** Select a lick from the library based on quality, beat budget, and context */
+/** Select a lick from the library based on quality, beat budget, and context.
+ *  When `chainFromStep` is provided (2nd lick in a chain), only licks whose
+ *  startStep is 1-5 semitones from chainFromStep are eligible. */
 export function selectLick(
   quality: string,
   maxBeats: number,
@@ -316,6 +318,7 @@ export function selectLick(
   rootSemitone = 0,
   modeSemi: number[] = [],
   charTones: number[] = [],
+  chainFromStep?: number,
 ): Lick | null {
   const licks = getLicksForQuality(quality);
   if (licks.length === 0) return null;
@@ -328,6 +331,12 @@ export function selectLick(
     if (semiSet) {
       const uniqueOut = new Set(l.steps.filter(s => !semiSet.has(s))).size;
       if (uniqueOut >= 2) return false;
+    }
+    // Chain filter: startStep must be 1-5 semitones from previous lick's endStep
+    if (chainFromStep !== undefined) {
+      let pcDist = Math.abs(l.startStep - chainFromStep);
+      if (pcDist > 6) pcDist = 12 - pcDist;
+      if (pcDist === 0 || pcDist > 5) return false;
     }
     return true;
   });
@@ -503,6 +512,14 @@ export function resolveLick(
 
 const ALL_CONTOURS: PhraseContour[] = ['arch', 'reverse-arch', 'descending', 'wave'];
 
+/** Complement contour for the 2nd lick in a chain */
+const COMPLEMENT_CONTOUR: Record<PhraseContour, PhraseContour> = {
+  'arch': 'descending',
+  'reverse-arch': 'wave',
+  'descending': 'arch',
+  'wave': 'reverse-arch',
+};
+
 export function generatePhrase(
   position: Position,
   mode: Mode,
@@ -559,7 +576,7 @@ export function generatePhrase(
   const goalSemiRel = ((goalNote.semitone - rootSemitone) + 12) % 12;
   const charTones = CHARACTERISTIC_TONES[mode.key] ?? [];
 
-  // --- Lick selection + resolution loop (5 retries) ---
+  // --- Lick selection + resolution loop (5 retries, with chaining) ---
   for (let attempt = 0; attempt < 5; attempt++) {
     const lick = selectLick(
       mode.chordQuality, maxLickBeats, goalSemiRel,
@@ -568,22 +585,57 @@ export function generatePhrase(
     if (!lick) continue;
 
     const startRef = config.startHint ?? activeCtPool[0];
-    const resolved = resolveLick(lick, activePool, mode, startRef, 0);
-    if (!resolved || resolved.length < 3) continue;
+    const resolved1 = resolveLick(lick, activePool, mode, startRef, 0);
+    if (!resolved1 || resolved1.length < 3) continue;
 
     // Assign default duration
-    for (let i = 0; i < resolved.length; i++) {
-      if (!resolved[i].duration) resolved[i].duration = 'e';
+    for (let i = 0; i < resolved1.length; i++) {
+      if (!resolved1[i].duration) resolved1[i].duration = 'e';
     }
 
-    // If lick doesn't end on goal, append connector note
-    const lastLickNote = resolved[resolved.length - 1];
-    const lastBeatStart = lastLickNote.beatStart ?? 0;
-    const remainingBeats = maxLickBeats - lastBeatStart - RHYTHM_BEATS[lastLickNote.duration ?? 'e'];
-    if (remainingBeats >= 0.4 && lastLickNote.noteName !== goalNote.noteName) {
-      const goalResolved = nearestInstance(goalNote.noteName, lastLickNote, activeCtPool);
+    // --- Lick chaining: try to append a 2nd lick if enough beats remain ---
+    const lastNote1 = resolved1[resolved1.length - 1];
+    const usedBeats1 = (lastNote1.beatStart ?? 0) + RHYTHM_BEATS[lastNote1.duration ?? 'e'];
+    const remainAfter1 = maxLickBeats - usedBeats1;
+    let resolved: PhraseNote[] = resolved1;
+    let lickId: string | string[] = lick.id;
+
+    if (remainAfter1 >= 1.0) {
+      const endStepRel = ((lastNote1.semitone - rootSemitone) + 12) % 12;
+      const hint2 = {
+        noteName: lastNote1.noteName,
+        stringIdx: lastNote1.stringIdx,
+        fret: lastNote1.fret,
+        semitone: lastNote1.semitone,
+      };
+      const contour2 = COMPLEMENT_CONTOUR[contour];
+
+      const lick2 = selectLick(
+        mode.chordQuality, remainAfter1, goalSemiRel,
+        hint2, contour2, rootSemitone, mode.semi, charTones,
+        endStepRel, // chainFromStep
+      );
+      if (lick2) {
+        const resolved2 = resolveLick(lick2, activePool, mode, lastNote1, usedBeats1);
+        if (resolved2 && resolved2.length >= 3) {
+          for (let i = 0; i < resolved2.length; i++) {
+            if (!resolved2[i].duration) resolved2[i].duration = 'e';
+          }
+          resolved = [...resolved1, ...resolved2];
+          lickId = [lick.id, lick2.id];
+        }
+      }
+      // If chaining failed, fall through with resolved1 + connector below
+    }
+
+    // If lick(s) don't end on goal, append connector note
+    const lastResNote = resolved[resolved.length - 1];
+    const lastBeatStart = lastResNote.beatStart ?? 0;
+    const remainingBeats = maxLickBeats - lastBeatStart - RHYTHM_BEATS[lastResNote.duration ?? 'e'];
+    if (remainingBeats >= 0.4 && lastResNote.noteName !== goalNote.noteName) {
+      const goalResolved = nearestInstance(goalNote.noteName, lastResNote, activeCtPool);
       if (goalResolved) {
-        const connBeatStart = lastBeatStart + RHYTHM_BEATS[lastLickNote.duration ?? 'e'];
+        const connBeatStart = lastBeatStart + RHYTHM_BEATS[lastResNote.duration ?? 'e'];
         const connPN: PhraseNote = {
           noteName: goalResolved.noteName,
           stringIdx: goalResolved.stringIdx,
@@ -600,7 +652,7 @@ export function generatePhrase(
       }
     }
 
-    // Extract motif from lick
+    // Extract motif from resolved notes
     const lickMotif: number[] = [];
     for (let i = 1; i < Math.min(3, resolved.length); i++) {
       lickMotif.push(absolutePitch(resolved[i]) - absolutePitch(resolved[i - 1]));
@@ -614,7 +666,7 @@ export function generatePhrase(
       config: { ...config, contour },
       motif: lickMotif,
       goalReason: goalResult.reason,
-      lickId: lick.id,
+      lickId,
       totalBeats: maxLickBeats,
     };
   }

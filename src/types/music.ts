@@ -250,8 +250,8 @@ export interface GeneratedPhrase {
   skeleton?: SkeletonMeta;
   /** Reason for goal note selection */
   goalReason?: string;
-  /** ID of the lick used for generation (if lick-driven) */
-  lickId?: string;
+  /** ID of the lick(s) used for generation — single or chained */
+  lickId?: string | string[];
   /** Total number of beats in the phrase */
   totalBeats: number;
 }
