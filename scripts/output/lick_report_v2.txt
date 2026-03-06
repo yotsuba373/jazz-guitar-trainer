@@ -1,0 +1,51 @@
+Lick Library v2 — LBDM + MLA + DTL Extraction Report
+==================================================
+
+Algorithms:
+  LBDM (Cambouropoulos 2001): pitch/IOI/rest boundary detection
+    Weights: pitch=0.25, IOI=0.5, rest=0.25
+    Threshold ratio: 0.5
+  MLA (Frieler/Pfleiderer 2016): lick vs line classification
+  DTL: Levenshtein-based pattern frequency scoring
+
+WJD: 186 solos, 76427 notes
+  Phrases detected: 1836
+  Phrases accepted: 10714
+  Rejections: {'length': 3037, 'duration': 98, 'mla_line': 87}
+
+Omnibook: 50 solos, 27163 notes
+  Phrases detected: 1055
+  Phrases accepted: 548
+  Rejections: {'length': 444, 'duration': 47, 'mla_line': 16}
+
+--- Per Quality ---
+
+  dim7      :    159 licks (WJD: 159, Omnibook: 0)
+    lengths: 3n:27, 4n:46, 5n:21, 6n:17, 7n:14, 8n:11, 9n:7, 10n:6, 11n:5, 12n:5
+    durations: 1.5-2.5:74, 2.5-4:43, >4:23, ≤1.5:19
+    directions: asc:18, desc:24, mixed:117
+
+  dom7      :   5597 licks (WJD: 5440, Omnibook: 157)
+    lengths: 3n:864, 4n:1248, 5n:699, 6n:581, 7n:523, 8n:574, 9n:309, 10n:188, 11n:140, 12n:127, 13n:102, 14n:86, 15n:64, 16n:58, 17n:7, 18n:18, 19n:6, 20n:3
+    durations: 1.5-2.5:2120, 2.5-4:1722, >4:1194, ≤1.5:561
+    directions: asc:657, desc:873, mixed:4067
+
+  maj7      :   1874 licks (WJD: 1658, Omnibook: 216)
+    lengths: 3n:276, 4n:374, 5n:206, 6n:221, 7n:191, 8n:226, 9n:103, 10n:65, 11n:45, 12n:37, 13n:44, 14n:23, 15n:28, 16n:23, 17n:4, 18n:5, 19n:3
+    durations: 1.5-2.5:629, 2.5-4:625, >4:477, ≤1.5:143
+    directions: asc:264, desc:221, mixed:1389
+
+  min7      :   3038 licks (WJD: 2918, Omnibook: 120)
+    lengths: 3n:560, 4n:713, 5n:426, 6n:308, 7n:278, 8n:300, 9n:126, 10n:92, 11n:44, 12n:47, 13n:46, 14n:33, 15n:31, 16n:26, 17n:5, 18n:2, 19n:1
+    durations: 1.5-2.5:1250, 2.5-4:911, >4:513, ≤1.5:364
+    directions: asc:473, desc:467, mixed:2098
+
+  min7b5    :    410 licks (WJD: 410, Omnibook: 0)
+    lengths: 3n:96, 4n:117, 5n:61, 6n:43, 7n:26, 8n:33, 9n:14, 10n:5, 11n:4, 12n:3, 13n:1, 14n:1, 15n:5, 16n:1
+    durations: 1.5-2.5:213, 2.5-4:97, >4:45, ≤1.5:55
+    directions: asc:77, desc:68, mixed:265
+
+Total before dedup: 11262
+Total after dedup:  11078
+
+v1 library had: 16063 licks

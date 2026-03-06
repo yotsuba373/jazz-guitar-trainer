@@ -466,14 +466,14 @@ export default function App() {
         prevMotif,
       };
 
-      try {
-        const phrase = generatePhrase(pos, chordMode, chordFretMap, config, targetThirdNote);
+      const phrase = generatePhrase(pos, chordMode, chordFretMap, config, targetThirdNote);
+      if (phrase) {
         map.set(i, phrase);
         prevLastNote = phrase.notes[phrase.notes.length - 1];
         prevContour = phrase.config.contour;
         prevMotif = phrase.motif;
-      } catch {
-        prevLastNote = undefined; // reset chain on failure
+      } else {
+        prevLastNote = undefined;
         prevContour = undefined;
         prevMotif = undefined;
       }
@@ -755,6 +755,7 @@ export default function App() {
       ...(selectedGoalNote && { goalNoteOverride: selectedGoalNote }),
     };
     const phrase = generatePhrase(pos, mode, fretMap, config, targetThirdNote);
+    if (!phrase) return;
 
     setPhraseHistory(prev => {
       const next = [...prev, phrase];
