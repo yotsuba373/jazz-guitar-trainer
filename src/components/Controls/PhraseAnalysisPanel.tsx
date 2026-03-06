@@ -119,7 +119,7 @@ export function PhraseAnalysisPanel({ phrase, mode }: PhraseAnalysisPanelProps) 
                 const lickBadge = curLickIdx === 0 ? '①' : curLickIdx === 1 ? '②' : '∙';
 
                 return (
-                  <tr key={i} style={{ color: rowColor, borderLeft, ...(isBoundary ? { borderTop: '2px solid #FF6B9D80' } : {}) }}>
+                  <tr key={i} style={{ color: rowColor, borderLeft, ...(isBoundary ? { borderTop: '2px dashed #FF6B9D80' } : {}) }}>
                     {isChained && (
                       <td className="py-[2px] pr-1" style={{ color: '#666', fontSize: 8 }}>
                         {(i === 0 || isBoundary) ? lickBadge : ''}

@@ -23,6 +23,33 @@ interface GlobalAudioControlsProps {
 
 const btnBase = 'rounded cursor-pointer text-[10px] font-mono px-2 h-[24px] inline-flex items-center';
 
+function MuteBtn({ muted, onToggle, color }: { muted: boolean; onToggle: () => void; color: string }) {
+  return (
+    <button
+      onClick={onToggle}
+      title={muted ? 'ミュート解除' : 'ミュート'}
+      className="rounded cursor-pointer w-[22px] h-[18px] inline-flex items-center justify-center"
+      style={{
+        border: `1px solid ${muted ? '#555' : color}40`,
+        background: muted ? '#1a1a1a' : `${color}10`,
+        color: muted ? '#555' : color,
+      }}
+    >
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor" />
+        {muted ? (
+          <>
+            <line x1="18" y1="9" x2="22" y2="15" />
+            <line x1="22" y1="9" x2="18" y2="15" />
+          </>
+        ) : (
+          <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+        )}
+      </svg>
+    </button>
+  );
+}
+
 export function GlobalAudioControls({
   bpm, onBpmChange,
   isMetronomeOn, onToggleMetronome,
@@ -40,6 +67,50 @@ export function GlobalAudioControls({
     const clamped = isNaN(v) ? bpm : Math.max(40, Math.min(240, v));
     onBpmChange(clamped);
     setBpmStr(String(clamped));
+  }
+
+  // Tap tempo state
+  const tapTimesRef = useRef<number[]>([]);
+  const TAP_RESET_MS = 2000;
+
+  function handleTapTempo() {
+    const now = performance.now();
+    const taps = tapTimesRef.current;
+    if (taps.length > 0 && now - taps[taps.length - 1] > TAP_RESET_MS) {
+      taps.length = 0;
+    }
+    taps.push(now);
+    if (taps.length >= 2) {
+      const recent = taps.slice(-8);
+      const intervals: number[] = [];
+      for (let i = 1; i < recent.length; i++) intervals.push(recent[i] - recent[i - 1]);
+      const avgMs = intervals.reduce((a, b) => a + b, 0) / intervals.length;
+      const clamped = Math.max(40, Math.min(240, Math.round(60000 / avgMs)));
+      onBpmChange(clamped);
+    }
+  }
+
+  // Mute: store pre-mute volume to restore
+  const prevMetVol = useRef(metVolume || 0.5);
+  const prevNoteVol = useRef(noteVolume || 0.4);
+  const metMuted = metVolume === 0;
+  const noteMuted = noteVolume === 0;
+
+  function toggleMetMute() {
+    if (metMuted) {
+      onMetVolumeChange(prevMetVol.current || 0.5);
+    } else {
+      prevMetVol.current = metVolume;
+      onMetVolumeChange(0);
+    }
+  }
+  function toggleNoteMute() {
+    if (noteMuted) {
+      onNoteVolumeChange(prevNoteVol.current || 0.4);
+    } else {
+      prevNoteVol.current = noteVolume;
+      onNoteVolumeChange(0);
+    }
   }
 
   const [volOpen, setVolOpen] = useState(false);
@@ -76,37 +147,6 @@ export function GlobalAudioControls({
           )}
         </button>
       )}
-      <button
-        onClick={onToggleMetronome}
-        title="メトロノーム"
-        className={btnBase}
-        style={{
-          border: `1px solid ${isMetronomeOn ? '#F1C40F' : '#444'}`,
-          background: isMetronomeOn ? '#2a2a1a' : '#1a1a1a',
-          color: isMetronomeOn ? '#F1C40F' : '#888',
-        }}
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-          <path d="M14.153 8.188l-.72 -3.236a2.493 2.493 0 0 0 -4.867 0l-3.025 13.614a2 2 0 0 0 1.952 2.434h7.014a2 2 0 0 0 1.952 -2.434l-.524 -2.357m-4.935 1.791l9 -13" />
-          <path d="M19 5a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />
-        </svg>
-      </button>
-      <button
-        onClick={onToggleChordAudio}
-        title="コード音"
-        className={btnBase}
-        style={{
-          border: `1px solid ${chordAudioOn ? '#27AE60' : '#444'}`,
-          background: chordAudioOn ? '#102a10' : '#1a1a1a',
-          color: chordAudioOn ? '#27AE60' : '#888',
-        }}
-      >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M9 18V5l12-2v13"/>
-          <circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
-        </svg>
-      </button>
       {/* Volume mixer dropdown */}
       <div className="relative inline-flex items-center" ref={volRef}>
         <button
@@ -126,53 +166,72 @@ export function GlobalAudioControls({
           </svg>
         </button>
         {volOpen && (
-          <div className="absolute left-0 top-[28px] z-50 rounded-md p-2.5 flex flex-col gap-2 min-w-[200px]"
+          <div className="absolute left-0 top-[28px] z-50 rounded-md p-2.5 flex flex-col gap-2 min-w-[220px]"
             style={{ background: '#222', border: '1px solid #555', boxShadow: '0 4px 12px rgba(0,0,0,0.5)' }}>
-            <div className="grid gap-2" style={{ gridTemplateColumns: '60px 1fr 28px auto' }}>
-              <span className="text-[10px] text-text-dim self-center">メトロノーム</span>
+            <div className="grid gap-y-1.5 gap-x-1.5 items-center" style={{ gridTemplateColumns: 'auto 60px 1fr 28px' }}>
+              <MuteBtn muted={metMuted} onToggle={toggleMetMute} color="#F1C40F" />
+              <span className="text-[10px] text-text-dim">メトロノーム</span>
               <input type="range" min={0} max={1} step={0.05}
                 value={metVolume}
                 onChange={e => onMetVolumeChange(Number(e.target.value))}
-                style={{ accentColor: '#F1C40F' }} />
-              <span className="text-[10px] text-text-dim text-right self-center">{Math.round(metVolume * 100)}%</span>
-              <span />
+                style={{ accentColor: '#F1C40F', opacity: metMuted ? 0.3 : 1 }} />
+              <span className="text-[10px] text-text-dim text-right">{Math.round(metVolume * 100)}%</span>
 
-              <span className="text-[10px] text-text-dim self-center">コード</span>
+              <MuteBtn muted={!chordAudioOn} onToggle={onToggleChordAudio} color="#27AE60" />
+              <span className="text-[10px] text-text-dim">コード</span>
               <input type="range" min={0} max={1} step={0.05}
                 value={chordVolume}
                 onChange={e => onChordVolumeChange(Number(e.target.value))}
-                style={{ accentColor: '#27AE60' }} />
-              <span className="text-[10px] text-text-dim text-right self-center">{Math.round(chordVolume * 100)}%</span>
-              <span />
+                style={{ accentColor: '#27AE60', opacity: !chordAudioOn ? 0.3 : 1 }} />
+              <span className="text-[10px] text-text-dim text-right">{Math.round(chordVolume * 100)}%</span>
 
-              <span className="text-[10px] text-text-dim self-center">単音</span>
+              <MuteBtn muted={noteMuted} onToggle={toggleNoteMute} color="#FF6B9D" />
+              <span className="text-[10px] text-text-dim">単音</span>
               <input type="range" min={0} max={1} step={0.05}
                 value={noteVolume}
                 onChange={e => onNoteVolumeChange(Number(e.target.value))}
-                style={{ accentColor: '#FF6B9D' }} />
-              <span className="text-[10px] text-text-dim text-right self-center">{Math.round(noteVolume * 100)}%</span>
-              <div className="flex gap-1">
-                {([
-                  { key: 'guitar' as InstrumentType, label: '\uD83C\uDFB8', title: 'ギター' },
-                  { key: 'saxophone' as InstrumentType, label: '\uD83C\uDFB7', title: 'サクソフォン' },
-                ]).map(({ key, label, title }) => (
-                  <button key={key}
-                    onClick={() => onInstrumentChange(key)}
-                    title={title}
-                    className="rounded cursor-pointer text-[13px] px-1.5 py-[1px]"
-                    style={{
-                      border: `1px solid ${instrument === key ? '#FF6B9D' : '#555'}`,
-                      background: instrument === key ? '#2a1020' : '#1a1a1a',
-                      color: instrument === key ? '#FF6B9D' : '#888',
-                    }}>
-                    {label}
-                  </button>
-                ))}
-              </div>
+                style={{ accentColor: '#FF6B9D', opacity: noteMuted ? 0.3 : 1 }} />
+              <span className="text-[10px] text-text-dim text-right">{Math.round(noteVolume * 100)}%</span>
+            </div>
+            <div className="flex gap-1 mt-1">
+              {([
+                { key: 'guitar' as InstrumentType, label: '\uD83C\uDFB8', title: 'ギター' },
+                { key: 'saxophone' as InstrumentType, label: '\uD83C\uDFB7', title: 'サクソフォン' },
+              ]).map(({ key, label, title }) => (
+                <button key={key}
+                  onClick={() => onInstrumentChange(key)}
+                  title={title}
+                  className="rounded cursor-pointer text-[13px] px-1.5 py-[1px]"
+                  style={{
+                    border: `1px solid ${instrument === key ? '#FF6B9D' : '#555'}`,
+                    background: instrument === key ? '#2a1020' : '#1a1a1a',
+                    color: instrument === key ? '#FF6B9D' : '#888',
+                  }}>
+                  {label}
+                </button>
+              ))}
             </div>
           </div>
         )}
       </div>
+      <button
+        onClick={onToggleMetronome}
+        title={metMuted ? 'メトロノーム（ミュート中）' : 'メトロノーム'}
+        className={btnBase}
+        style={{
+          border: `1px solid ${metMuted ? '#333' : isMetronomeOn ? '#F1C40F' : '#444'}`,
+          background: metMuted ? '#151515' : isMetronomeOn ? '#2a2a1a' : '#1a1a1a',
+          color: metMuted ? '#444' : isMetronomeOn ? '#F1C40F' : '#888',
+          opacity: metMuted ? 0.5 : 1,
+          pointerEvents: metMuted ? 'none' : undefined,
+        }}
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+          <path d="M14.153 8.188l-.72 -3.236a2.493 2.493 0 0 0 -4.867 0l-3.025 13.614a2 2 0 0 0 1.952 2.434h7.014a2 2 0 0 0 1.952 -2.434l-.524 -2.357m-4.935 1.791l9 -13" />
+          <path d="M19 5a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />
+        </svg>
+      </button>
       <button
         onClick={() => onBpmChange(Math.max(40, bpm - 1))}
         className={btnBase}
@@ -193,6 +252,12 @@ export function GlobalAudioControls({
         className={btnBase}
         style={{ border: '1px solid #444', background: '#1a1a1a', color: '#AAA' }}
       >+</button>
+      <button
+        onClick={handleTapTempo}
+        title="タップテンポ（連続タップでBPM設定）"
+        className={btnBase}
+        style={{ border: '1px solid #444', background: '#1a1a1a', color: '#AAA', fontSize: 9, letterSpacing: 1 }}
+      >TAP</button>
     </div>
   );
 }
