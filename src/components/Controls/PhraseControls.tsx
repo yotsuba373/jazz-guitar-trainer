@@ -41,20 +41,18 @@ const APPROACH_LABELS: { type: ApproachType; label: string }[] = [
   { type: 'b9-arpeggio', label: 'b9 Arp' },
 ];
 
-const DOM7_QUALITIES = new Set(['7', '7b9', '7#11', '7b13']);
 
 export function PhraseControls({
   approachTypes, onApproachTypesChange,
   onGenerate, phraseCount, phraseIdx, onPhraseNav,
   animSpeed, onAnimSpeedChange,
-  chordQuality,
+  chordQuality: _chordQuality,
   onPlayPhrase, isPhraseAudioPlaying, hasPhrase,
   progMode, phraseAutoPlay, onTogglePhraseAutoPlay, onRegeneratePhraseMap: _onRegeneratePhraseMap,
   isPlaying,
   beatCount, onBeatCountChange,
   goalSelectMode, onGoalSelectModeChange, selectedGoalNote,
 }: PhraseControlsProps) {
-  const isDom7 = chordQuality ? DOM7_QUALITIES.has(chordQuality) : false;
   const autoPlaying = phraseAutoPlay && isPlaying;
 
   function toggleApproach(type: ApproachType) {
@@ -72,29 +70,26 @@ export function PhraseControls({
     <div className="mb-3 rounded-md px-3 py-2 flex flex-wrap gap-3 items-center"
       style={{ background: '#1a1a1a', border: `1px solid ${PHRASE_COLOR}40` }}>
 
-      {/* Approach type checkboxes */}
+      {/* Approach type checkboxes — disabled (lick-only mode, future connector feature) */}
       <div className="flex gap-2 items-center flex-wrap">
         <span className="text-[10px] text-text-muted mr-0.5">Approach:</span>
-        {APPROACH_LABELS.map(({ type, label }) => {
-          const disabled = type === 'b9-arpeggio' && !isDom7;
-          return (
-            <label key={type}
-              className="text-[10px] flex items-center gap-0.5"
-              style={{
-                color: disabled ? '#555' : undefined,
-                cursor: disabled ? 'not-allowed' : 'pointer',
-              }}
-              title={disabled ? 'Dom7 コードでのみ使用可能' : undefined}
-            >
-              <input type="checkbox"
-                checked={approachTypes.includes(type)}
-                onChange={() => toggleApproach(type)}
-                disabled={disabled}
-              />
-              {label}
-            </label>
-          );
-        })}
+        {APPROACH_LABELS.map(({ type, label }) => (
+          <label key={type}
+            className="text-[10px] flex items-center gap-0.5"
+            style={{
+              color: '#555',
+              cursor: 'not-allowed',
+            }}
+            title="将来のコネクタ機能で使用予定"
+          >
+            <input type="checkbox"
+              checked={approachTypes.includes(type)}
+              onChange={() => toggleApproach(type)}
+              disabled
+            />
+            {label}
+          </label>
+        ))}
       </div>
 
       {/* Beat count selector (normal mode only) */}
