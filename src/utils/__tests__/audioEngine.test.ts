@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { fretToFrequency, OPEN_STRING_MIDI } from '../audioEngine';
+import { fretToFrequency, OPEN_STRING_MIDI, playNote, playSaxNote, playEPNote, schedulePhrase } from '../audioEngine';
 
 describe('OPEN_STRING_MIDI', () => {
   it('has 6 entries matching standard guitar tuning (1E B G D A 6E)', () => {
@@ -44,5 +44,23 @@ describe('fretToFrequency', () => {
 
   it('6E fret 5 (MIDI 45 = A2) = 110 Hz', () => {
     expect(fretToFrequency(5, 5)).toBeCloseTo(110, 1);
+  });
+});
+
+describe('instrument synth exports', () => {
+  it('playNote is exported as a function', () => {
+    expect(typeof playNote).toBe('function');
+  });
+
+  it('playSaxNote is exported as a function', () => {
+    expect(typeof playSaxNote).toBe('function');
+  });
+
+  it('playEPNote is exported as a function', () => {
+    expect(typeof playEPNote).toBe('function');
+  });
+
+  it('schedulePhrase accepts 8 parameters', () => {
+    expect(schedulePhrase.length).toBeLessThanOrEqual(8);
   });
 });

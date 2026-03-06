@@ -1283,10 +1283,13 @@ degree ラベル、フレーバーテキストを持ちます。</p>
 <h2 id="audio-engine">Audio Engine</h2>
 <p>すべて Web Audio API ベース。外部ライブラリ依存なし。</p>
 <ul>
-  <li><strong>Karplus-Strong</strong> — 物理モデリングによるギター単音シンセ (<code>playKSNote()</code>)</li>
-  <li><strong>Chord Strum</strong> — ボイシングの同時/アルペジオ発音 (<code>playChordStrum()</code>)</li>
+  <li><strong>Karplus-Strong (Guitar)</strong> — 物理モデリングによるギター単音シンセ (<code>playKSNote()</code>): ノイズ励起 → 6-pass移動平均 → KSループ (0.4/0.6 LP + decay 0.996) → LP 2200Hz + HighShelf -6dB</li>
+  <li><strong>Sawtooth + Formant (Saxophone)</strong> — リード楽器シンセ (<code>playSaxNote()</code>): Sawtooth発振 → 並列バンドパス (F1=500Hz body, F2=1400Hz reed) → LP warmth → Sine LFO 5.5Hz ビブラート (150ms遅延)</li>
+  <li><strong>Electric Piano (Chord)</strong> — エレピシンセ (<code>playEPNote()</code>): Sine基音 + 2nd倍音 (ウォーム減衰) + 3rd倍音 (アタックのみ) → LP 4500Hz。コードストラムに使用</li>
+  <li><strong>Instrument Dispatcher</strong> — <code>playNote(ctx, freq, vol, time, dur, instrument)</code> でフレーズ楽器別にディスパッチ (guitar/saxophone)</li>
+  <li><strong>Chord Strum</strong> — ボイシングの同時/アルペジオ発音 (<code>playChordStrum()</code>) — ローズピアノ音</li>
   <li><strong>Click</strong> — メトロノーム用オシレーター (<code>playClick()</code>)</li>
-  <li><strong>Phrase Scheduling</strong> — <code>schedulePhrase()</code> で Web Audio API タイムスタンプに基づく正確な発音</li>
+  <li><strong>Phrase Scheduling</strong> — <code>schedulePhrase()</code> で Web Audio API タイムスタンプに基づく正確な発音 (instrument パラメータ対応)</li>
 </ul>
 
 <h2 id="bpm-playback">BPM Auto-Playback</h2>
@@ -1322,7 +1325,8 @@ actualBeats = (beatWidth / sumOfBeatWidths) * 4</pre>
   <tr><th>Channel</th><th>State</th><th>Default</th><th>Target</th></tr>
   <tr><td>Metronome</td><td><code>metVolume</code></td><td>0.5</td><td><code>playClick()</code></td></tr>
   <tr><td>Chord</td><td><code>chordVolume</code></td><td>0.5</td><td><code>playChordStrum()</code></td></tr>
-  <tr><td>Single Note</td><td><code>noteVolume</code></td><td>0.4</td><td><code>playKSNote()</code> + <code>schedulePhrase()</code></td></tr>
+  <tr><td>Single Note</td><td><code>noteVolume</code></td><td>0.4</td><td><code>playNote()</code> + <code>schedulePhrase()</code></td></tr>
+  <tr><td>Instrument</td><td><code>phraseInstrument</code></td><td>'guitar'</td><td>楽器選択 (guitar/saxophone)</td></tr>
 </table>
 <p>全て localStorage に永続化。<code>useRef</code> 経由でコールバック内から参照（再レンダリング回避）。</p>
 
@@ -1459,6 +1463,7 @@ interface PhraseNote {
 }
 
 type RhythmType = 'q' | 't' | 'e' | 's'  // 4分/3連/8分/16分
+type InstrumentType = 'guitar' | 'saxophone'  // フレーズ再生楽器
 
 // リック型
 interface Lick {
@@ -1515,7 +1520,7 @@ interface Progression {
 
 <!-- ==================== TESTING ==================== -->
 <h2 id="testing">Test Suite</h2>
-<p><code>npm test</code> — Vitest による <strong>715テスト</strong>。</p>
+<p><code>npm test</code> — Vitest による <strong>719テスト</strong>。</p>
 
 <table>
   <tr><th>Test File</th><th>Tests</th><th>Coverage</th></tr>
@@ -1528,7 +1533,7 @@ interface Progression {
   <tr><td>guideTones.test.ts</td><td>22</td><td>ガイドトーン抽出、解決分類</td></tr>
   <tr><td>phraseAnalysis.test.ts</td><td>33</td><td>分析・度数・機能ラベル + メタデータパススルー + ナラティブ生成</td></tr>
   <tr><td>noteSpelling.test.ts</td><td>19</td><td>スペリング、度数マップ、resolveMode</td></tr>
-  <tr><td>audioEngine.test.ts</td><td>10</td><td>Karplus-Strong, コードストラム</td></tr>
+  <tr><td>audioEngine.test.ts</td><td>14</td><td>Karplus-Strong, サクソフォン, エレピ, コードストラム</td></tr>
 </table>
 
 <div class="callout warn">

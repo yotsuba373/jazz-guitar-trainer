@@ -1,6 +1,9 @@
 /** Rhythm duration type: q=quarter(1 beat), t=triplet(2/3), e=eighth(1/2), s=sixteenth(1/4) */
 export type RhythmType = 'q' | 't' | 'e' | 's';
 
+/** Instrument type for phrase playback synthesis */
+export type InstrumentType = 'guitar' | 'saxophone';
+
 /** A single note on the fretboard: [noteName, fretNumber, semitoneValue] */
 export type FretNote = [string, number, number];
 
