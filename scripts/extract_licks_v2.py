@@ -1,10 +1,27 @@
 """Extract high-quality melodic licks using LBDM-based phrase segmentation.
 
-Faithful implementation of:
+Pipeline based on computational musicology research:
+
+Core algorithms (paper-based):
 1. LBDM (Cambouropoulos 2001) — phrase boundary detection using pitch, IOI,
-   and rest profiles with degree-of-change and proximity rules
-2. Frieler/Pfleiderer MLA (2016) — lick vs line classification
-3. DTL-inspired pattern frequency scoring via Levenshtein distance clustering
+   and rest profiles with degree-of-change and proximity rules [high fidelity]
+2. MLA (Frieler/Pfleiderer 2016) — lick vs line classification [simplified]
+3. DTL (Frieler et al. 2018–) — Levenshtein distance pattern frequency
+   scoring [concept + distance metric from DTL; clustering impl is custom]
+
+Supporting components (standard MIR techniques):
+4. Chord quality classification — regex parser mapping to 5 qualities
+   (cf. Harte et al. MIREX chord vocabulary)
+5. Chord boundary splitting — sub-phrase segmentation at chord changes
+   (cf. Jazzomat melpat, Frieler 2019 "Constructing Jazz Lines")
+6. Rhythm quantization — threshold-based 4-level discretization
+   (cf. Adams & Bartsch 2007, Cemgil et al. 2000)
+7. Normalization — chordal pitch classes (pitch - root) mod 12
+   (= Frieler 2019 definition; interval sequences per DTL standard)
+8. Deduplication — exact (steps, rhythm) match + DTL score ranking
+   (cf. Smith & Medina 2001, Jazzomat closed/cyclic pattern filtering)
+
+Full provenance documentation: docs/index.html#phrase-lick-library-provenance
 
 Sources: WJD SQLite + Omnibook MusicXML
 Output:  public/data/lick_library.json  (same format as v1)
