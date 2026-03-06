@@ -34,4 +34,5 @@ export type {
   DigitalPatternTag,
   RhythmType,
   Lick,
+  InstrumentType,
 } from './music';

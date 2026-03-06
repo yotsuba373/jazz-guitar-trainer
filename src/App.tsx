@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import type { LabelMode, RootName, Progression, ChordNotationPrefs, ChartLayout, SongKey, ChordSlot, ApproachType, GeneratedPhrase, PhraseConfig, PhraseNote, PhraseContour } from './types';
+import type { LabelMode, RootName, Progression, ChordNotationPrefs, ChartLayout, SongKey, ChordSlot, ApproachType, GeneratedPhrase, PhraseConfig, PhraseNote, PhraseContour, InstrumentType } from './types';
 import { MODE_TEMPLATES, ROOTS, MODE_COLORS, OPEN_STRINGS, loadLickLibrary } from './constants';
 import {
   buildFretMap, generatePositions, generateDimPositions, resolveMode,
@@ -9,7 +9,7 @@ import {
   getChartLayout, buildChordRows,
   getGuideTones, findNoteLocations, classifyResolution,
   findVoicingsInPosition,
-  playKSNote, playChordStrum, fretToFrequency,
+  playNote, playChordStrum, fretToFrequency,
   generatePhrase, schedulePhrase,
 } from './utils';
 import { Fretboard } from './components/Fretboard';
@@ -164,6 +164,12 @@ export default function App() {
     return isNaN(s) ? 0.4 : s;
   });
   const noteVolumeRef = useRef(noteVolume);
+  // Instrument selection for phrase/note playback
+  const [instrument, setInstrument] = useState<InstrumentType>(() => {
+    const s = localStorage.getItem('phraseInstrument');
+    return s === 'saxophone' ? s : 'guitar';
+  });
+  const instrumentRef = useRef(instrument);
   const phraseAutoPlayRef = useRef(phraseAutoPlay);
   const activePhraseStopRef = useRef<{ stop: () => void } | null>(null);
   const [phraseMap, setPhraseMap] = useState<Map<number, GeneratedPhrase>>(new Map());
@@ -387,6 +393,7 @@ export default function App() {
 
   // Note volume ref + persistence (covers fretboard clicks + phrase playback)
   useEffect(() => { noteVolumeRef.current = noteVolume; localStorage.setItem('noteVolume', String(noteVolume)); }, [noteVolume]);
+  useEffect(() => { instrumentRef.current = instrument; localStorage.setItem('phraseInstrument', instrument); }, [instrument]);
   useEffect(() => { phraseAutoPlayRef.current = phraseAutoPlay; }, [phraseAutoPlay]);
   useEffect(() => { phraseMapRef.current = phraseMap; }, [phraseMap]);
 
@@ -528,7 +535,7 @@ export default function App() {
           if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
           const ctx = audioCtxRef.current;
           const eighthDur = (60 / bpm) / 2;
-          activePhraseStopRef.current = schedulePhrase(ctx, phrase, ctx.currentTime, eighthDur, noteVolumeRef.current);
+          activePhraseStopRef.current = schedulePhrase(ctx, phrase, ctx.currentTime, eighthDur, noteVolumeRef.current, 99, instrumentRef.current);
         }
       }
     }
@@ -567,7 +574,7 @@ export default function App() {
           if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
           const ctx = audioCtxRef.current;
           const eighthDur = (60 / bpm) / 2;
-          activePhraseStopRef.current = schedulePhrase(ctx, phrase, ctx.currentTime, eighthDur, noteVolumeRef.current);
+          activePhraseStopRef.current = schedulePhrase(ctx, phrase, ctx.currentTime, eighthDur, noteVolumeRef.current, 99, instrumentRef.current);
         }
       }
 
@@ -688,7 +695,7 @@ export default function App() {
     const ctx = audioCtxRef.current;
     if (ctx.state === 'suspended') ctx.resume();
     const eighthDur = Math.max(0.1, phraseAnimSpeed / 1000);
-    const result = schedulePhrase(ctx, activePhrase, ctx.currentTime, eighthDur, noteVolumeRef.current);
+    const result = schedulePhrase(ctx, activePhrase, ctx.currentTime, eighthDur, noteVolumeRef.current, 99, instrumentRef.current);
     manualPhraseRef.current = result;
     setIsPhraseAudioPlaying(true);
     setPhraseAnimKey(k => k + 1);
@@ -721,7 +728,7 @@ export default function App() {
     if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
     const ctx = audioCtxRef.current;
     if (ctx.state === 'suspended') ctx.resume();
-    playKSNote(ctx, fretToFrequency(stringIdx, fret), noteVolumeRef.current, ctx.currentTime);
+    playNote(ctx, fretToFrequency(stringIdx, fret), noteVolumeRef.current, ctx.currentTime, 2.0, instrumentRef.current);
   }, [goalSelectMode, canShowPhrase, selPos]);
 
   const handleGeneratePhrase = useCallback(() => {
@@ -861,6 +868,8 @@ export default function App() {
                 availableVoicings={showChordForms ? deduplicatedVoicings : undefined}
                 selectedVoicingIdx={effectiveVoicingIdx}
                 onSelectVoicing={handleSelectVoicing}
+                instrument={instrument}
+                onInstrumentChange={setInstrument}
               />
             )}
 
@@ -944,6 +953,8 @@ export default function App() {
             goalSelectMode={goalSelectMode}
             onGoalSelectModeChange={setGoalSelectMode}
             selectedGoalNote={selectedGoalNote}
+            instrument={instrument}
+            onInstrumentChange={setInstrument}
           />
         )}
 

@@ -14,7 +14,7 @@ npm install
 npm run dev       # 開発サーバー起動 → http://localhost:5173
 npm run build     # tsc + vite build
 npm run lint      # ESLint
-npm test          # vitest run (715 テスト)
+npm test          # vitest run (719 テスト)
 ```
 
 Node.js が未インストールの場合は fnm を使用:
@@ -79,7 +79,7 @@ src/
 │       ├── phraseGenerator.test.ts  — 43 tests (buildNotePool、getApproachNotes、構造不変条件、メタデータ、startHint連結、スケール互換フィルタ、chainFromStepフィルタ、リック連結、lickIdxタグ検証、resolveLick品質ゲート、ゴールラベル事後検証)
 │       ├── phraseQualityAudit.test.ts — 1 test (プレースホルダー、リック品質監査は今後再構築予定)
 │       ├── phraseAnalysis.test.ts   — 33 tests (分析・度数・機能ラベル・メタデータパススルー・ナラティブ)
-│       └── audioEngine.test.ts      — 10 tests (Karplus-Strong, コードストラム)
+│       └── audioEngine.test.ts      — 14 tests (Karplus-Strong, サクソフォン, エレピ, コードストラム)
 └── components/
     ├── Fretboard/                   — SVG指板描画 (Fretboard, FretboardNote, GhostNote, PhrasePath)
     ├── Controls/                    — RootSelector, ModeSelector, PositionSelector, OptionBar, VoicingGrid, PhraseControls, PhraseAnalysisPanel, PianoRoll
@@ -347,7 +347,8 @@ function playClick(accent: boolean, ctx: AudioContext, volume: number) {
 |------|-------|-------------|-----------|------|
 | メトロノーム | `metVolume` | `metVolume` | 0.5 | `playClick()` |
 | コード | `chordVolume` | `chordVolume` | 0.5 | `playChordStrum()` |
-| 単音 | `noteVolume` | `noteVolume` | 0.4 | `playKSNote()` (指板クリック) + `schedulePhrase()` (フレーズ再生) |
+| 単音 | `noteVolume` | `noteVolume` | 0.4 | `playNote()` (指板クリック) + `schedulePhrase()` (フレーズ再生) |
+| 楽器 | `instrument` | `phraseInstrument` | 'guitar' | 楽器選択 (guitar/saxophone) |
 
 - 全 state は `useRef` 経由でコールバック内から参照 (再レンダリング不要)
 - パネル外クリックで自動閉じ (`mousedown` リスナー)
@@ -412,6 +413,8 @@ Footer
 - コードフォーム表示: Drop 2 / Drop 3 ボイシング (20テンプレート)、指板ハイライト、◀/▶ 切替
 - フレーズジェネレーター: リック検索型アーキテクチャ (selectLick→resolveLick、5リトライ)、**リック連結** (残り拍数≥1.0で2つ目を自動連結、接合部1-5半音フィルタ、補完コンター)、リックライブラリ (~11,000リック、LBDM+MLA+DTL抽出)、可変リズム (4分/3連/8分/16分)、拍数選択 (2/3/4拍)、ゴールノート選択 (指板クリック)、コード間VL+モチーフ記憶、SVG曲線表示、単体再生 (▶ Play)
 - フレーズ分析: analyzePhrase(), PhraseAnalysisPanel (折りたたみUI、度数/インターバル/機能ラベル、生成メタデータ可視化、ナラティブ、ピアノロールSVG、リック境界表示)
+- 楽器選択 (ギター/サックス): Web Audio API リアルタイム合成、フレーズ再生+指板クリック共通、localStorage 永続化
+- コードストラム: エレピ音 (Sine加算合成, 2nd/3rd倍音)
 
 ---
 

@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
-import type { Progression, Position, ChordNotationPrefs, FoundVoicing } from '../../types';
+import type { Progression, Position, ChordNotationPrefs, FoundVoicing, InstrumentType } from '../../types';
 import { MODE_TEMPLATES, POS_COLORS, MODE_COLORS } from '../../constants';
 import {
   QUALITY_TO_MODES, rankPositionsByProximity, computeEffectiveSelections,
@@ -35,6 +35,8 @@ interface ProgressionPlayerProps {
   availableVoicings?: FoundVoicing[];
   selectedVoicingIdx?: number;
   onSelectVoicing?: (idx: number) => void;
+  instrument?: InstrumentType;
+  onInstrumentChange?: (inst: InstrumentType) => void;
 }
 
 const btnBase = 'rounded cursor-pointer text-[10px] font-mono px-2 h-[24px] inline-flex items-center';
@@ -47,6 +49,7 @@ export function ProgressionPlayer({
   chordAudioOn, onToggleChordAudio, chordVolume, onChordVolumeChange,
   noteVolume, onNoteVolumeChange,
   selPosIds, availableVoicings, selectedVoicingIdx, onSelectVoicing,
+  instrument, onInstrumentChange,
 }: ProgressionPlayerProps) {
   const chords = progression.chords;
   const activeChord = chords[activeChordIdx];
@@ -207,6 +210,29 @@ export function ProgressionPlayer({
                   className="flex-1" style={{ accentColor: '#FF6B9D' }} />
                 <span className="text-[10px] text-text-dim w-[28px] text-right">{Math.round(noteVolume * 100)}%</span>
               </div>
+              {onInstrumentChange && (
+                <div className="flex items-center gap-2 pt-1 mt-1" style={{ borderTop: '1px solid #444' }}>
+                  <span className="text-[10px] text-text-dim w-[60px] shrink-0">音色</span>
+                  <div className="flex gap-1 flex-1">
+                    {([
+                      { key: 'guitar' as InstrumentType, label: '\uD83C\uDFB8', title: 'ギター' },
+                      { key: 'saxophone' as InstrumentType, label: '\uD83C\uDFB7', title: 'サクソフォン' },
+                    ]).map(({ key, label, title }) => (
+                      <button key={key}
+                        onClick={() => onInstrumentChange(key)}
+                        title={title}
+                        className="rounded cursor-pointer text-[13px] px-1.5 py-[1px]"
+                        style={{
+                          border: `1px solid ${instrument === key ? '#FF6B9D' : '#555'}`,
+                          background: instrument === key ? '#2a1020' : '#1a1a1a',
+                          color: instrument === key ? '#FF6B9D' : '#888',
+                        }}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
