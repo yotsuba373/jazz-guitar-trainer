@@ -19,9 +19,11 @@ const BEBOP_COLOR = '#FF7744';
 
 function noteColor(n: PhraseNote): string {
   if (n.isBebopPassing) return BEBOP_COLOR;
+  if (n.isDim7Tone) return EXTENSION_COLOR;
   if (n.isExtension) return EXTENSION_COLOR;
+  if (n.approachGroup?.role === 'target') return CT_COLOR;
   if (n.isChordTone) return CT_COLOR;
-  if (n.isApproach) return APPROACH_COLOR;
+  if (n.isApproach || n.approachGroup?.role === 'approach') return APPROACH_COLOR;
   return SCALE_COLOR;
 }
 
