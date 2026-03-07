@@ -24,6 +24,7 @@ export interface SegmentSpec {
 export interface PhraseTemplate {
   id: string;
   label: string;
+  description: string;         // flavour text explaining the musical idea
   segments: SegmentSpec[];
   contour: PhraseContour;
   weight: number;
@@ -33,7 +34,8 @@ export interface PhraseTemplate {
 export const PHRASE_TEMPLATES: PhraseTemplate[] = [
   {
     id: 'arp-up-scale-down',
-    label: 'Arp↑+Scale↓',
+    label: 'アルペジオ上行+スケール下降',
+    description: 'コードトーンを駆け上がり、スケールで滑らかに下降。ビバップの王道アーチ型フレーズ',
     segments: [
       { type: 'arpeggio', direction: 'asc', beats: 2 },
       { type: 'scaleRun', direction: 'desc', beats: 0 },
@@ -43,7 +45,8 @@ export const PHRASE_TEMPLATES: PhraseTemplate[] = [
   },
   {
     id: 'scale-down',
-    label: 'Scale↓',
+    label: 'スケール下降',
+    description: 'ビバップスケールによる一気の下降ライン。8分音符の流れで強拍にCTが自然に着地する',
     segments: [
       { type: 'scaleRun', direction: 'desc', beats: 0 },
     ],
@@ -52,7 +55,8 @@ export const PHRASE_TEMPLATES: PhraseTemplate[] = [
   },
   {
     id: 'encl-arp',
-    label: 'Encl.+Arp↑',
+    label: 'エンクロージャー+アルペジオ上行',
+    description: 'エンクロージャーでターゲット音を挟んでから、アルペジオで上昇。緊張→解放の流れ',
     segments: [
       { type: 'enclosure', direction: 'desc', beats: 1 },
       { type: 'arpeggio', direction: 'asc', beats: 0 },
@@ -62,7 +66,8 @@ export const PHRASE_TEMPLATES: PhraseTemplate[] = [
   },
   {
     id: '1235-scale-down',
-    label: '1235+Scale↓',
+    label: '1-2-3-5+スケール下降',
+    description: 'R-2-3-5 デジタルパターンで調性を提示し、スケール下降で着地。明快なビバップ語法',
     segments: [
       { type: '1235', direction: 'asc', beats: 1 },
       { type: 'scaleRun', direction: 'desc', beats: 0 },
@@ -72,7 +77,8 @@ export const PHRASE_TEMPLATES: PhraseTemplate[] = [
   },
   {
     id: 'scale-up-arp-down',
-    label: 'Scale↑+Arp↓',
+    label: 'スケール上昇+アルペジオ下行',
+    description: 'スケール上行で頂点まで登り、アルペジオで一気に降りる。逆アーチの推進力あるライン',
     segments: [
       { type: 'scaleRun', direction: 'asc', beats: 2 },
       { type: 'arpeggio', direction: 'desc', beats: 0 },
@@ -82,7 +88,8 @@ export const PHRASE_TEMPLATES: PhraseTemplate[] = [
   },
   {
     id: 'approach-ct-chain',
-    label: 'Approach→CT',
+    label: 'アプローチ→CT連鎖',
+    description: 'アプローチノート→コードトーンの連鎖。半音やエンクロージャーで各CTに解決し続ける波形ライン',
     segments: [
       { type: 'approachCT', direction: 'desc', beats: 0 },
     ],
@@ -91,7 +98,8 @@ export const PHRASE_TEMPLATES: PhraseTemplate[] = [
   },
   {
     id: 'dim7-from-3rd',
-    label: 'dim7 from 3rd',
+    label: '3rdからdim7',
+    description: 'Dom7の3rdからdim7アルペジオ (=7♭9のアッパーストラクチャー) を上行。ドミナント上の定番テンション手法',
     segments: [
       { type: 'dim7From3rd', direction: 'asc', beats: 2 },
       { type: 'scaleRun', direction: 'desc', beats: 0 },
@@ -102,7 +110,8 @@ export const PHRASE_TEMPLATES: PhraseTemplate[] = [
   },
   {
     id: 'upper-structure',
-    label: 'Upper Structure',
+    label: 'アッパーストラクチャー',
+    description: '3rdからアッパーストラクチャーのアルペジオ (m7→5th上のmaj7等) で9th/13thのカラーを引き出す',
     segments: [
       { type: 'upperStructure', direction: 'asc', beats: 2 },
       { type: 'scaleRun', direction: 'desc', beats: 0 },
@@ -113,7 +122,8 @@ export const PHRASE_TEMPLATES: PhraseTemplate[] = [
   },
   {
     id: 'encl-scale-down',
-    label: 'Encl.+Scale↓',
+    label: 'エンクロージャー+スケール下降',
+    description: 'エンクロージャーで引っかけてからスケール下降。装飾的な出だしから流れるような下行ライン',
     segments: [
       { type: 'enclosure', direction: 'desc', beats: 1 },
       { type: 'scaleRun', direction: 'desc', beats: 0 },
@@ -123,7 +133,8 @@ export const PHRASE_TEMPLATES: PhraseTemplate[] = [
   },
   {
     id: 'chromatic-arp-scale',
-    label: 'Chr.+Arp↑+Scale↓',
+    label: 'クロマチック+アルペジオ上行+スケール下降',
+    description: 'クロマチック経過→アルペジオ上行→スケール下降の3段構成。複合的で変化に富むライン',
     segments: [
       { type: 'chromatic', direction: 'asc', beats: 1 },
       { type: 'arpeggio', direction: 'asc', beats: 1 },
@@ -135,6 +146,7 @@ export const PHRASE_TEMPLATES: PhraseTemplate[] = [
   {
     id: 'honeysuckle',
     label: 'Honeysuckle',
+    description: 'Root→1oct下の3rd→上行 (Honeysuckle Rose冒頭の音型)。オクターブ跳躍が印象的なイディオム',
     segments: [
       { type: 'octaveDisp', direction: 'asc', beats: 1 },
       { type: 'scaleRun', direction: 'asc', beats: 0 },
