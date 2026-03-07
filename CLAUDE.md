@@ -278,23 +278,26 @@ generatePhrase呼出時にディスパッチ:
 
 **ビバップスケール** (`bebopScales.ts`): 4種 (Dominant/Major/Dorian/HarmonicMinor) + モードマッピング (9モード対応)
 
-**セグメント関数** (`bebopSegments.ts`): 8種
+**セグメント関数** (`bebopSegments.ts`): 8種 (全て `SegmentOpts.beatParity` 対応)
 - `segArpeggio`: CTアルペジオ上行/下行
-- `segScaleRun`: ビバップスケールラン
-- `segEnclosure`: Mixed enclosure (diatonic above + chromatic below → CT)
+- `segScaleRun`: ビバップスケールラン (parity対応パッシングトーン表拍チェック)
+- `segEnclosure`: Mixed enclosure (diatonic above + chromatic below → CT, parity対応パディング)
 - `seg1235`: 1-2-3-5 パターン
 - `segDim7From3rd`: 3rdからdim7アルペジオ (dom7のみ)
 - `segUpperStructure`: 3rdからm7/maj7アルペジオ
-- `segApproachCT`: chromatic approach → CT の連鎖
+- `segApproachCT`: 6タイプ多様アプローチ → CT (WJD統計ベース重み: chrom↓/↑, dbl-chrom↓/↑, diatonic↑/↓)
 - `segChromatic`: クロマチック経過
 
 **テンプレート** (`bebopTemplates.ts`): 10種 (Arp↑+Scale↓ w=30, Scale↓ w=20, Encl+Arp w=15 等)
 品質フィルタ (dim7-from-3rd→dom7 only, upper-structure→m7/maj7)、コンター親和重み
 
 **スケジューラー** (`bebopScheduler.ts`): テンプレート実行 + 品質チェック
-- CT表拍配置率 ≥ 40%, 音域 3-18半音, 跳躍 ≤ 9半音
+- parity対応CT表拍配置率 ≥ 40%, 音域 3-18半音, 跳躍 ≤ 9半音
+- CT終止試行: 最終音が非CTなら ±4半音・±1弦以内の最近接CTにスワップ (失敗時そのまま通過)
 
-**生成フロー**: buildNotePool → インスタンススコープ → コンター選択 → ゴール音 → テンプレート選択 → スケジューラー → 3リトライ → フォールバック (ScaleRun↓)
+**生成フロー**: buildNotePool → インスタンススコープ → コンター選択 → ゴール音 → beatOffset選択 (単体50%裏拍) → GT優先開始音 (3rd/7th 2倍重み) → テンプレート選択 → スケジューラー → 3リトライ → フォールバック (ScaleRun↓)
+
+**音声再生** (`audioEngine.ts`): `schedulePhrase()` は各ノートの `beatStart` を使用してタイミング計算 → アニメーション・メトロノームと同期
 
 ---
 

@@ -1,6 +1,6 @@
 import type { Position, Mode, FretMap, PhraseConfig, GeneratedPhrase, PhraseContour } from '../types';
 import {
-  buildNotePool, chooseGoalNote, absolutePitch, pickRandom,
+  buildNotePool, chooseGoalNote, absolutePitch, pickRandom, pickWeighted,
   ALL_CONTOURS, type PoolNote,
 } from './phraseGenerator';
 import { selectTemplate } from './bebopTemplates';
@@ -37,9 +37,8 @@ export function generatePhraseRule(
   // 3. Contour selection
   const contour: PhraseContour = config.contour ?? pickRandom(ALL_CONTOURS);
 
-  // 4. Compute total eighths
+  // 4. Compute total eighths (adjusted later for beatOffset)
   const totalBeats = config.beatCount ? config.beatCount : (config.phraseLength ? config.phraseLength / 2 : 4);
-  const totalEighths = totalBeats * 2;
 
   // 5. Goal note
   let goalNote: PoolNote;
@@ -65,7 +64,15 @@ export function generatePhraseRule(
     goalReason = result.reason;
   }
 
-  // 6. Start note
+  // 6. Beat offset: upbeat start for standalone phrases (50% chance)
+  const beatOffset = config.startHint ? 0 : (Math.random() < 0.5 ? 0.5 : 0);
+  const totalEighths = Math.floor((totalBeats - beatOffset) * 2);
+
+  // 7. Start note with GT priority (3rd/7th get 2x weight)
+  const gtNames = new Set<string>();
+  if (mode.chordTones.length >= 2) gtNames.add(mode.chordTones[1]); // 3rd
+  if (mode.chordTones.length >= 4) gtNames.add(mode.chordTones[3]); // 7th
+
   const startNote: PoolNote = config.startHint
     ? (activeCtPool.find(n =>
         n.stringIdx === config.startHint!.stringIdx && n.fret === config.startHint!.fret
@@ -74,15 +81,15 @@ export function generatePhraseRule(
         Math.abs(absolutePitch(n) - absolutePitch(config.startHint as any)) <
         Math.abs(absolutePitch(best) - absolutePitch(config.startHint as any)) ? n : best
       ))
-    : pickRandom(activeCtPool);
+    : pickWeighted(activeCtPool, activeCtPool.map(n => gtNames.has(n.noteName) ? 2 : 1));
 
-  // 7. Template selection + execution with 3 retries
+  // 8. Template selection + execution with 3 retries
   for (let attempt = 0; attempt < 3; attempt++) {
     const template = selectTemplate(mode.chordQuality, totalBeats, contour);
 
     const phraseNotes = buildPhrase(
       template, activePool, mode,
-      startNote, goalNote, totalEighths,
+      startNote, goalNote, totalEighths, beatOffset,
     );
 
     if (phraseNotes && phraseNotes.length >= 3) {
@@ -117,11 +124,11 @@ export function generatePhraseRule(
     }
   }
 
-  // 8. Final fallback: simple descending scale run
+  // 9. Final fallback: simple descending scale run
   const fallbackNotes = SEGMENT_FNS.scaleRun(activePool, mode, startNote, 'desc', totalEighths);
   if (fallbackNotes && fallbackNotes.length >= 3) {
     const ctSetLocal = new Set(mode.chordTones);
-    let accBeat = 0;
+    let accBeat = beatOffset;
     const pNotes = fallbackNotes.slice(0, totalEighths).map((n): import('../types').PhraseNote => {
       const beatPos = Math.min(Math.floor(accBeat * 2) + 1, 8);
       const isStrong = Math.abs(accBeat - Math.round(accBeat)) < 0.05;

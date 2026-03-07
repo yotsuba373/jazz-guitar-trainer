@@ -1,5 +1,5 @@
 import type { Mode, PhraseNote, RhythmType } from '../types';
-import { absolutePitch, isStrongBeat, isExtensionTone, type PoolNote } from './phraseGenerator';
+import { absolutePitch, isExtensionTone, type PoolNote } from './phraseGenerator';
 import { SEGMENT_FNS } from './bebopSegments';
 import { getBebopPassingTone } from '../constants/bebopScales';
 import type { PhraseTemplate } from './bebopTemplates';
@@ -30,6 +30,7 @@ export function buildPhrase(
   const ctSet = new Set(mode.chordTones);
   const bebopPassing = getBebopPassingTone(mode);
   const quality = mode.chordQuality;
+  const initialParity = beatOffset > 0 ? 1 : 0;
 
   const allNotes: { note: PoolNote; segIdx: number }[] = [];
   let current = startNote;
@@ -45,7 +46,8 @@ export function buildPhrase(
 
     const segNotes = segFn(
       pool, mode, current, spec.direction, segEighths,
-      { goalNote: isLast ? goalNote : undefined, quality },
+      { goalNote: isLast ? goalNote : undefined, quality,
+        beatParity: (allNotes.length + initialParity) % 2 },
     );
 
     if (!segNotes || segNotes.length === 0) {
@@ -92,19 +94,16 @@ export function buildPhrase(
   const trimmed = allNotes.slice(0, totalEighths);
 
   // Try to append goal connector if not reached
-  const lastEntry = trimmed[trimmed.length - 1];
-  if (lastEntry.note.noteName !== goalNote.noteName && trimmed.length < totalEighths) {
+  if (trimmed[trimmed.length - 1].note.noteName !== goalNote.noteName && trimmed.length < totalEighths) {
     trimmed.push({ note: goalNote, segIdx: trimmed[trimmed.length - 1].segIdx });
   }
 
   // --- Quality checks ---
-  // CT on strong beats check
+  // CT on strong beats check (parity-aware: strong when (i + initialParity) is even)
   let strongCount = 0;
   let strongCTCount = 0;
   for (let i = 0; i < trimmed.length; i++) {
-    const beatPos = i + 1;
-    const goalBeat = trimmed.length;
-    if (isStrongBeat(beatPos, goalBeat)) {
+    if ((i + initialParity) % 2 === 0) {
       strongCount++;
       if (ctSet.has(trimmed[i].note.noteName) || isExtensionTone(trimmed[i].note.noteName, mode)) {
         strongCTCount++;
@@ -112,6 +111,27 @@ export function buildPhrase(
     }
   }
   if (strongCount > 0 && strongCTCount / strongCount < 0.4) return null;
+
+  // CT ending trial: swap last note to nearest CT if possible (~65% CT ending rate)
+  const lastEntry = trimmed[trimmed.length - 1];
+  if (!ctSet.has(lastEntry.note.noteName)) {
+    const lastPitch = absolutePitch(lastEntry.note);
+    let bestCt: PoolNote | null = null;
+    let bestDist = Infinity;
+    for (const n of pool) {
+      if (!ctSet.has(n.noteName)) continue;
+      const pd = Math.abs(absolutePitch(n) - lastPitch);
+      const sd = Math.abs(n.stringIdx - lastEntry.note.stringIdx);
+      if (pd <= 4 && sd <= 1 && pd < bestDist) {
+        bestDist = pd;
+        bestCt = n;
+      }
+    }
+    if (bestCt) {
+      trimmed[trimmed.length - 1] = { note: bestCt, segIdx: lastEntry.segIdx };
+    }
+    // If no CT found nearby, pass through (don't reject)
+  }
 
   // Range check
   const pitches = trimmed.map(e => absolutePitch(e.note));

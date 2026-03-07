@@ -341,22 +341,27 @@ export function schedulePhrase(
   const handles: { stop: () => void }[] = [];
   const beatDurSec = eighthNoteDur * 2; // one beat = two eighth notes
 
-  let accTime = 0;
   for (let i = 0; i < notes.length; i++) {
     const n = notes[i];
     const freq = fretToFrequency(n.stringIdx, n.fret);
     const rhythmDur = RHYTHM_BEATS[n.duration ?? 'e'] * beatDurSec;
-    const noteStart = startTime + accTime;
+    // Use beatStart for timing so audio syncs with animation & metronome
+    const noteStart = startTime + (n.beatStart ?? 0) * beatDurSec;
     // Last note sustains longer; others get slight overlap for legato
     const dur = i < notes.length - 1 ? rhythmDur * 1.2 : rhythmDur * 2;
     handles.push(playNote(ctx, freq, volume, noteStart, dur, instrument));
-    accTime += rhythmDur;
   }
+
+  // Total duration: from first note to end of last note
+  const lastNote = notes[notes.length - 1];
+  const lastStart = (lastNote?.beatStart ?? 0) * beatDurSec;
+  const lastDur = RHYTHM_BEATS[lastNote?.duration ?? 'e'] * beatDurSec;
+  const totalDuration = lastStart + lastDur;
 
   return {
     stop() {
       handles.forEach(h => h.stop());
     },
-    totalDuration: accTime,
+    totalDuration,
   };
 }

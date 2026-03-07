@@ -1,6 +1,6 @@
 import type { Mode } from '../types';
 import { getBebopScale, getBebopPassingTone } from '../constants/bebopScales';
-import { absolutePitch, type PoolNote } from './phraseGenerator';
+import { absolutePitch, pickWeighted, type PoolNote } from './phraseGenerator';
 
 // ---------------------------------------------------------------------------
 // Segment generation functions for rule-based bebop phrase construction.
@@ -13,6 +13,8 @@ export interface SegmentOpts {
   goalNote?: PoolNote;
   /** Chord quality for quality-specific logic */
   quality?: string;
+  /** Beat parity: 0 = first note on downbeat, 1 = first note on upbeat */
+  beatParity?: number;
 }
 
 export type SegmentFn = (
@@ -135,11 +137,12 @@ export const segArpeggio: SegmentFn = (pool, mode, startNote, direction, eighths
 // segScaleRun — bebop scale run (8-note scale, passing tone on off-beats)
 // ---------------------------------------------------------------------------
 
-export const segScaleRun: SegmentFn = (pool, mode, startNote, direction, eighths) => {
+export const segScaleRun: SegmentFn = (pool, mode, startNote, direction, eighths, opts) => {
   const bebopSemis = getBebopScale(mode);
   const scaleSemis = new Set(bebopSemis ?? mode.semi);
   const allSemis = new Set([...scaleSemis]);
   const bebopPassing = getBebopPassingTone(mode);
+  const parity = opts?.beatParity ?? 0;
 
   const result: PoolNote[] = [startNote];
   let current = startNote;
@@ -148,8 +151,9 @@ export const segScaleRun: SegmentFn = (pool, mode, startNote, direction, eighths
     const next = nextScaleTone(pool, current, direction, allSemis, false);
     if (!next) break;
     if (Math.abs(absolutePitch(next) - absolutePitch(current)) > 4) break; // max a major 3rd step
-    // §2: Bebop passing tone must fall on off-beats (odd index = off-beat in 0-based)
-    if (bebopPassing !== null && next.semitone === bebopPassing && i % 2 === 0) {
+    // §2: Bebop passing tone must fall on off-beats
+    // Strong beat when (i + parity) is even (0-based index)
+    if (bebopPassing !== null && next.semitone === bebopPassing && (i + parity) % 2 === 0) {
       // Passing tone would land on a strong beat — skip it and try the next scale tone
       const skip = nextScaleTone(pool, next, direction, allSemis, false);
       if (skip && Math.abs(absolutePitch(skip) - absolutePitch(current)) <= 4) {
@@ -175,6 +179,7 @@ export const segEnclosure: SegmentFn = (pool, mode, startNote, _direction, eight
   if (eighths < 3) return null;
   const ctSet = new Set(mode.chordTones);
   const scaleSemis = new Set(mode.semi);
+  const parity = opts?.beatParity ?? 0;
 
   // Find target CT (goal or nearest CT from start)
   let target: PoolNote | null = opts?.goalNote ?? null;
@@ -197,9 +202,10 @@ export const segEnclosure: SegmentFn = (pool, mode, startNote, _direction, eight
 
   let result = [above, below, target];
 
-  // §4: CT target must land on a downbeat (even index in 0-based = beat 1,3,5,7)
-  // Core pattern is 3 notes [above, below, target]. Target is at index 2 (downbeat). Good.
-  // If we need more eighths, prepend scale tones so target stays on an even index.
+  // §4: CT target must land on a downbeat
+  // Core pattern is 3 notes [above, below, target]. Target is at index 2.
+  // With parity, target lands on strong beat when (2 + parity) is even.
+  // If we need more eighths, prepend scale tones so target stays on a strong beat.
   if (eighths > 3 && result.length < eighths) {
     const extras: PoolNote[] = [];
     let ref = above;
@@ -212,10 +218,11 @@ export const segEnclosure: SegmentFn = (pool, mode, startNote, _direction, eight
     result = [...extras, ...result];
   }
 
-  // Ensure target (last element) lands on an even index (downbeat)
-  // If odd length → target is at even index (0-based). If even length → target at odd index, pad.
-  if (result.length > 1 && result.length % 2 === 0) {
-    // Target is at odd index — prepend one more note to shift to even
+  // Ensure target (last element) lands on a strong beat considering parity
+  // Target index = result.length - 1. Strong when (targetIdx + parity) % 2 === 0.
+  const targetIdx = result.length - 1;
+  if ((targetIdx + parity) % 2 !== 0) {
+    // Pad one note to shift parity
     const padRef = result[0];
     const pad = nextScaleTone(pool, padRef, 'asc', scaleSemis);
     if (pad) result.unshift(pad);
@@ -328,8 +335,55 @@ export const segUpperStructure: SegmentFn = (pool, mode, startNote, direction, e
 };
 
 // ---------------------------------------------------------------------------
-// segApproachCT — single chromatic approach → CT
+// segApproachCT — diverse approach types → CT (WJD statistics-based weights)
 // ---------------------------------------------------------------------------
+
+/** Approach type definitions with WJD-derived weights */
+interface ApproachDef {
+  type: string;
+  weight: number;
+  /** Semitone offsets from target (applied in order, last note resolves to target) */
+  offsets: number[];
+}
+
+const APPROACH_DEFS: ApproachDef[] = [
+  { type: 'chrom-below',     weight: 18, offsets: [11] },       // half step below → target
+  { type: 'dbl-chrom-below', weight: 7,  offsets: [10, 11] },   // whole+half below → target
+  { type: 'chrom-above',     weight: 18, offsets: [1] },        // half step above → target
+  { type: 'dbl-chrom-above', weight: 6,  offsets: [2, 1] },     // whole+half above → target
+  { type: 'diatonic-above',  weight: 28, offsets: [0] },        // diatonic above → target (special)
+  { type: 'diatonic-below',  weight: 15, offsets: [0] },        // diatonic below → target (special)
+];
+
+/** Build approach notes for a given target CT */
+function buildApproachNotes(
+  pool: PoolNote[],
+  mode: Mode,
+  target: PoolNote,
+  def: ApproachDef,
+): PoolNote[] | null {
+  const scaleSemis = new Set(mode.semi);
+
+  if (def.type === 'diatonic-above') {
+    const above = nextScaleTone(pool, target, 'asc', scaleSemis);
+    return above ? [above] : null;
+  }
+  if (def.type === 'diatonic-below') {
+    const below = nextScaleTone(pool, target, 'desc', scaleSemis);
+    return below ? [below] : null;
+  }
+
+  // Chromatic approach(es)
+  const notes: PoolNote[] = [];
+  for (const offset of def.offsets) {
+    const semi = (target.semitone + offset) % 12;
+    const found = findNearest(pool, semi, target, offset > 6 ? 'desc' : 'asc') ??
+      pool.find(n => n.semitone === semi && Math.abs(n.stringIdx - target.stringIdx) <= 1);
+    if (!found) return null;
+    notes.push(found);
+  }
+  return notes;
+}
 
 export const segApproachCT: SegmentFn = (pool, mode, startNote, _direction, eighths) => {
   const ctSet = new Set(mode.chordTones);
@@ -338,26 +392,34 @@ export const segApproachCT: SegmentFn = (pool, mode, startNote, _direction, eigh
 
   const result: PoolNote[] = [];
   let ref = startNote;
-  const usedSemitones = new Set<number>(); // Track used CT semitones to avoid repetition
+  const usedSemitones = new Set<number>();
+  let budget = eighths;
 
-  for (let pair = 0; pair < Math.floor(eighths / 2); pair++) {
+  while (budget >= 2) {
     // Find nearest CT that hasn't been targeted yet
     const availableCTs = ctPool.filter(n => !usedSemitones.has(n.semitone));
-    // If all CTs used, reset (allow cycling through again)
     const candidates = availableCTs.length > 0 ? availableCTs : ctPool;
     const target = bestCandidate(candidates, ref, null);
     if (!target) break;
 
     usedSemitones.add(target.semitone);
 
-    // Chromatic approach from below (half step)
-    const approachSemi = (target.semitone + 11) % 12;
-    const approach = findNearest(pool, approachSemi, target, 'desc') ??
-      pool.find(n => n.fret === target.fret - 1 && n.stringIdx === target.stringIdx);
-    if (approach) {
-      result.push(approach, target);
-    } else {
+    // Filter approach defs that fit in remaining budget
+    const viable = APPROACH_DEFS.filter(d => d.offsets.length + 1 <= budget);
+    if (viable.length === 0) break;
+
+    // Pick approach type by weight
+    const chosen = pickWeighted(viable, viable.map(d => d.weight));
+    const approachNotes = buildApproachNotes(pool, mode, target, chosen);
+
+    if (approachNotes) {
+      for (const n of approachNotes) result.push(n);
       result.push(target);
+      budget -= approachNotes.length + 1;
+    } else {
+      // Fallback: just push target
+      result.push(target);
+      budget -= 1;
     }
     ref = target;
   }
