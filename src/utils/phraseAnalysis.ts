@@ -94,6 +94,7 @@ const CONTOUR_LABELS: Record<PhraseContour, string> = {
   'reverse-arch': '逆アーチ',
   'descending': '下行',
   'wave': '波形',
+  'ascending': '上行',
 };
 
 // ---------------------------------------------------------------------------

@@ -71,8 +71,8 @@ src/
 │   ├── phraseGenerator.ts           — generatePhraseLick(), buildNotePool(), selectLick(), resolveLick()
 │   ├── bebopGenerator.ts            — generatePhraseRule() ルールベースエンジン
 │   ├── bebopScheduler.ts            — buildPhrase() テンプレート実行エンジン
-│   ├── bebopSegments.ts             — セグメント関数8種 (Arp, ScaleRun, Enclosure等)
-│   ├── bebopTemplates.ts            — テンプレート定義10種 + 選択ロジック
+│   ├── bebopSegments.ts             — セグメント関数9種 (Arp, ScaleRun, Enclosure, OctaveDisp等)
+│   ├── bebopTemplates.ts            — テンプレート定義11種 + 選択ロジック
 │   ├── phraseAnalysis.ts            — analyzePhrase(), computeSummary()
 │   └── __tests__/
 │       ├── fretboard.test.ts        — 388 tests (Pos1リファレンス、度数オフセット不変条件、構造検証)
@@ -278,24 +278,29 @@ generatePhrase呼出時にディスパッチ:
 
 **ビバップスケール** (`bebopScales.ts`): 4種 (Dominant/Major/Dorian/HarmonicMinor) + モードマッピング (9モード対応)
 
-**セグメント関数** (`bebopSegments.ts`): 8種 (全て `SegmentOpts.beatParity` 対応)
+**セグメント関数** (`bebopSegments.ts`): 9種 (全て `SegmentOpts.beatParity` 対応)
 - `segArpeggio`: CTアルペジオ上行/下行
-- `segScaleRun`: ビバップスケールラン (parity対応パッシングトーン表拍チェック)
-- `segEnclosure`: Mixed enclosure (diatonic above + chromatic below → CT, parity対応パディング)
+- `segScaleRun`: ビバップスケールラン (parity対応パッシングトーン表拍チェック、表拍GT優先)
+- `segEnclosure`: 4タイプエンクロージャー (Mixed w=40, Diatonic w=25, Chromatic w=20, 3-note w=15)、Delayed Resolution 30%
 - `seg1235`: 1-2-3-5 パターン
 - `segDim7From3rd`: 3rdからdim7アルペジオ (dom7のみ)
 - `segUpperStructure`: 3rdからm7/maj7アルペジオ
-- `segApproachCT`: 6タイプ多様アプローチ → CT (WJD統計ベース重み: chrom↓/↑, dbl-chrom↓/↑, diatonic↑/↓)
+- `segApproachCT`: 6タイプ多様アプローチ → CT (WJD統計ベース重み、Musical Forcesスコアリング)
 - `segChromatic`: クロマチック経過
+- `segOctaveDisp`: Honeysuckle Rose (Root→1oct下3rd→上行)
 
-**テンプレート** (`bebopTemplates.ts`): 10種 (Arp↑+Scale↓ w=30, Scale↓ w=20, Encl+Arp w=15 等)
-品質フィルタ (dim7-from-3rd→dom7 only, upper-structure→m7/maj7)、コンター親和重み
+**テンプレート** (`bebopTemplates.ts`): 11種 (Arp↑+Scale↓ w=30, Scale↓ w=20, Honeysuckle w=8 等)
+品質フィルタ (dim7-from-3rd→dom7 only, upper-structure→m7/maj7)、コンター親和重み (+8)
 
 **スケジューラー** (`bebopScheduler.ts`): テンプレート実行 + 品質チェック
-- parity対応CT表拍配置率 ≥ 40%, 音域 3-18半音, 跳躍 ≤ 9半音
-- CT終止試行: 最終音が非CTなら ±4半音・±1弦以内の最近接CTにスワップ (失敗時そのまま通過)
+- parity対応CT表拍配置率 ≥ 40%, 音域 4-15半音, 跳躍 ≤ 9半音
+- CT終止試行: 最終音が非CTなら ±3半音・±1弦以内の最近接CTにスワップ (失敗時そのまま通過)
+- 方向転換拍裏チェック: 表拍方向転換率 > 60% なら reject (§9 Barry Harris)
 
-**生成フロー**: buildNotePool → インスタンススコープ → コンター選択 → ゴール音 → beatOffset選択 (単体50%裏拍) → GT優先開始音 (3rd/7th 2倍重み) → テンプレート選択 → スケジューラー → 3リトライ → フォールバック (ScaleRun↓)
+**Musical Forces** (§9 Steve Larson): `bestCandidate()` に3つの力を加算
+- 重力 (高音→下行バイアス +5/-3)、磁力 (非CT→最近接CT +5)、慣性 (同方向 +3)
+
+**生成フロー**: buildNotePool → インスタンススコープ → コンター選択 (重み付き: arch33/desc28/wave18/rev-arch13/asc8) → ゴール音 → beatOffset選択 (単体70%裏拍) → GT優先開始音 (3rd/7th 2倍重み) → テンプレート選択 → スケジューラー → 3リトライ → フォールバック (ScaleRun↓)
 
 **音声再生** (`audioEngine.ts`): `schedulePhrase()` は各ノートの `beatStart` を使用してタイミング計算 → アニメーション・メトロノームと同期
 
@@ -469,7 +474,7 @@ Footer
 - グローバルオーディオ設定 (GlobalAudioControls): 音量ミキサー (各チャンネルミュートボタン付き)/メトロノーム/BPM/タップテンポ/楽器選択を両モード共通で表示
 - コードフォーム表示: Drop 2 / Drop 3 ボイシング (20テンプレート)、指板ハイライト、◀/▶ 切替
 - フレーズジェネレーター: リック検索型アーキテクチャ (selectLick→resolveLick、5リトライ)、**リック連結** (残り拍数≥1.0で2つ目を自動連結、接合部1-5半音フィルタ、補完コンター)、リックライブラリ (~11,000リック、LBDM+MLA+DTL抽出)、可変リズム (4分/3連/8分/16分)、拍数選択 (2/3/4拍)、ゴールノート選択 (指板クリック)、コード間VL+モチーフ記憶、SVG曲線表示、Generate時自動再生、進行モードではオンザフライ生成 (リピート時も毎回異なるフレーズ)
-- **ルールベースエンジン**: ビバップ構造ルールに基づくフレーズ生成 (Arp↑+Scale↓等10テンプレート、8セグメント関数、4種ビバップスケール、品質チェック)。UIの [Lick]/[Rule] ボタンでエンジン切替可能
+- **ルールベースエンジン**: ビバップ構造ルールに基づくフレーズ生成 (11テンプレート、9セグメント関数、4種ビバップスケール、Musical Forces、4タイプエンクロージャー、Delayed Resolution、方向転換拍裏チェック)。UIの [Lick]/[Rule] ボタンでエンジン切替可能
 - フレーズ分析: analyzePhrase(), PhraseAnalysisPanel (折りたたみUI、度数/インターバル/機能ラベル、生成メタデータ可視化、ナラティブ、ピアノロールSVG、リック/セグメント境界表示)
 - 楽器選択 (ギター/サックス): Web Audio API リアルタイム合成、フレーズ再生+指板クリック共通、localStorage 永続化
 - コードストラム: エレピ音 (Sine加算合成, 2nd/3rd倍音)
