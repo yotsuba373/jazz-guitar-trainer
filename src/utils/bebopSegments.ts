@@ -479,9 +479,9 @@ interface ApproachDef {
 const APPROACH_DEFS: ApproachDef[] = [
   { type: 'chrom-below',     weight: 22, offsets: [11] },       // half step below → target
   { type: 'dbl-chrom-below', weight: 8,  offsets: [10, 11] },   // whole+half below → target
-  { type: 'chrom-above',     weight: 21, offsets: [1] },        // half step above → target
+  { type: 'chrom-above',     weight: 16, offsets: [1] },        // half step above → target (§3: diatonic preferred above)
   { type: 'dbl-chrom-above', weight: 7,  offsets: [2, 1] },     // whole+half above → target
-  { type: 'diatonic-above',  weight: 21, offsets: [0] },        // diatonic above → target (special)
+  { type: 'diatonic-above',  weight: 25, offsets: [0] },        // diatonic above → target (§3: preferred for above)
   { type: 'diatonic-below',  weight: 12, offsets: [0] },        // diatonic below → target (special)
 ];
 

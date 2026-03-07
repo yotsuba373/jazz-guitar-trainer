@@ -228,6 +228,24 @@ export function buildPhrase(
   }
   if (strongCount > 0 && strongCTCount / strongCount < 0.4) return null;
 
+  // GT (3rd/7th) on strong beats — soft check (§1 supplement)
+  if (strongCount >= 3) {
+    const gtNames = new Set<string>();
+    if (mode.chordTones.length >= 2) gtNames.add(mode.chordTones[1]); // 3rd
+    if (mode.chordTones.length >= 4) gtNames.add(mode.chordTones[3]); // 7th
+    let strongGTCount = 0;
+    {
+      let bp = beatOffset;
+      for (let i = 0; i < trimmed.length; i++) {
+        if (isOnStrongBeat(bp) && gtNames.has(trimmed[i].note.noteName)) {
+          strongGTCount++;
+        }
+        bp += RHYTHM_BEATS[trimmedRhythms[i]];
+      }
+    }
+    if (strongGTCount === 0) return null;
+  }
+
   // CT ending trial: swap last note to nearest CT if possible (~65% CT ending rate)
   const lastEntry = trimmed[trimmed.length - 1];
   if (!ctSet.has(lastEntry.note.noteName)) {
