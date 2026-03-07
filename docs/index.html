@@ -418,7 +418,7 @@ Utils Layer (pure functions):
 │   ├── bebopSegments.ts          — セグメント関数9種 (Arp, ScaleRun, Enclosure, OctaveDisp等)
 │   ├── bebopTemplates.ts         — テンプレート定義11種 + 選択ロジック
 │   ├── phraseAnalysis.ts         — analyzePhrase(), computeSummary()
-│   └── __tests__/                — 760 テスト
+│   └── __tests__/                — 799 テスト
 ├── components/
 │   ├── Fretboard/                — SVG指板 (Fretboard, FretboardNote, GhostNote, PhrasePath)
 │   ├── Controls/                 — 全コントロールUI
@@ -547,7 +547,7 @@ degree ラベル、フレーバーテキストを持ちます。</p>
   <li><strong>ビバップスケール</strong> (<code>bebopScales.ts</code>): Dominant / Major / Dorian / Harmonic Minor の4種。モード→ビバップスケールマッピング。Diatonic 7 + Lydian Dom + Altered の9モード対応</li>
   <li><strong>セグメント関数</strong> (<code>bebopSegments.ts</code>): Arpeggio, ScaleRun (表拍GT優先), Enclosure (4タイプ+Delayed Resolution), 1-2-3-5, dim7From3rd, UpperStructure, ApproachCT (6タイプ+Musical Forces), Chromatic, OctaveDisp (Honeysuckle Rose) の9種。全て PoolNote[] → PoolNote[] で指板空間内動作。beatParity対応</li>
   <li><strong>テンプレート</strong> (<code>bebopTemplates.ts</code>): 11個のフレーズ構造テンプレート (Arp↑+Scale↓, Scale↓, Honeysuckle 等)。品質フィルタ・コンター親和 (+8)・重み付きランダム選択</li>
-  <li><strong>スケジューラー</strong> (<code>bebopScheduler.ts</code>): テンプレートの各セグメントを実行し、<code>assignRhythms()</code> でセグメントタイプ別に可変リズムを割当 (§10準拠: アルペジオ→3連符25%, エンクロージャー→16分35%, クロマチック→16分35%, スケールラン→8分固定, 最終CT→4分12%)、拍位置ベース品質チェック (CT表拍配置率≥40%, 音域4-15半音, 跳躍≤9半音, CT終止試行±3半音, 方向転換拍裏チェック) を適用</li>
+  <li><strong>スケジューラー</strong> (<code>bebopScheduler.ts</code>): テンプレートの各セグメントを実行し、<code>assignRhythms()</code> でセグメントタイプ別に可変リズムを割当 (§10準拠: アルペジオ→3連符25%, エンクロージャー→16分35%, クロマチック→16分35%, スケールラン→8分固定, 最終CT→4分12%)、拍位置ベース品質チェック (CT表拍配置率≥40%, GT表拍ソフトチェック (表拍3+でGTゼロ→reject), 音域4-15半音, 跳躍≤9半音, CT終止試行±3半音, 方向転換拍裏チェック) を適用</li>
   <li><strong>Musical Forces</strong> (§9 Steve Larson): bestCandidate() に重力 (+5/-3)・磁力 (+5)・慣性 (+3) のスコアリングを加算</li>
   <li><strong>エントリポイント</strong> (<code>bebopGenerator.ts</code>): generatePhraseRule() — buildNotePool → コンター選択 (重み付き: arch33/desc28/wave18/rev-arch13/asc8) → beatOffset選択 (70%裏拍) → GT優先開始音 → スケジューラー実行 → 3リトライ → フォールバック</li>
 </ul>
@@ -573,8 +573,8 @@ degree ラベル、フレーバーテキストを持ちます。</p>
 <h4>bebop-construction-rules.md 準拠改善</h4>
 <ul>
   <li><strong>アプローチノート多様化 (§3)</strong>: segApproachCT が6タイプのアプローチを WJD 統計ベースの重みで選択。
-    chrom-below (w=22), chrom-above (w=21), diatonic-above (w=21), diatonic-below (w=12),
-    dbl-chrom-below (w=8), dbl-chrom-above (w=7)。Musical Forces (重力/磁力/慣性) でCTターゲット選択を最適化。</li>
+    chrom-below (w=22), diatonic-above (w=25), chrom-above (w=16), diatonic-below (w=12),
+    dbl-chrom-below (w=8), dbl-chrom-above (w=7)。§3 (Anton Schwartz): 上方アプローチはdiatonic優先、chromatic は慎重に使用。Musical Forces (重力/磁力/慣性) でCTターゲット選択を最適化。</li>
   <li><strong>エンクロージャー4タイプ化 (§4)</strong>: Mixed (w=40), Diatonic (w=25), Chromatic (w=20), 3-note (w=15) の重み付き選択。
     Delayed Resolution (30%) でターゲットを裏拍にずらすバリエーションも生成。</li>
   <li><strong>CT終止改善 (§6)</strong>: スケジューラーの品質チェック後に最終音のCTスワップを試行。
@@ -583,7 +583,7 @@ degree ラベル、フレーバーテキストを持ちます。</p>
   <li><strong>開始拍分布 (§6)</strong>: startHint なし (単体生成) 時に 70% で裏拍 (beatOffset=0.5) 開始。
     接続フレーズ (startHint あり) ではギャップなし (beatOffset=0)。
     beatParity をセグメント関数に伝播し、ScaleRun/Enclosure のビバップパッシングトーン/CT表拍判定を正確化。</li>
-  <li><strong>表拍ガイドトーン優先 (§1)</strong>: 開始音は 3rd/7th に2倍の重み。スケールラン中も表拍でGT候補があれば優先選択。</li>
+  <li><strong>表拍ガイドトーン優先 (§1)</strong>: 開始音は 3rd/7th に2倍の重み。スケールラン中も表拍でGT候補があれば優先選択。品質チェックで表拍3つ以上ある場合にGTゼロならソフト reject。</li>
   <li><strong>方向転換拍裏チェック (§9)</strong>: 方向転換の60%超が表拍で発生するフレーズを reject。Barry Harris ルール準拠。</li>
   <li><strong>コンター選択 (§5)</strong>: 重み付き選択 — arch (33), descending (28), wave (18), reverse-arch (13), ascending (8)。均等25%から修正。</li>
 </ul>
@@ -1597,7 +1597,7 @@ interface Progression {
   <tr><td>fretboard.test.ts</td><td>388</td><td>Pos1リファレンス、度数オフセット不変条件、構造検証</td></tr>
   <tr><td>progression.test.ts</td><td>125</td><td>parseChordSymbol, QUALITY_TO_MODES, 近接ランキング</td></tr>
   <tr><td>phraseGenerator.test.ts</td><td>43</td><td>buildNotePool + getApproachNotes + 構造不変条件 + メタデータ + startHint連結 + スケール互換フィルタ + chainFromStepフィルタ + リック連結 + lickIdxタグ検証 + resolveLick品質ゲート + ゴールラベル事後検証</td></tr>
-  <tr><td>phraseQualityAudit.test.ts</td><td>1</td><td>プレースホルダー (リック品質監査は今後再構築予定)</td></tr>
+  <tr><td>phraseQualityAudit.test.ts</td><td>40</td><td>ルールベースエンジン品質監査: §1拍位置(2), §2ビバップスケール(3), §3アプローチ方向(1), §4エンクロージャー(2), §5テンプレート構造(5), §6開始終了(3), §7VL(1), §9Musical Forces(2), 全モード網羅(3), 多様性(4), 拍数適合(2), ポジション(1), 実用性(7), セグメント接合(4)</td></tr>
   <tr><td>jazzStandards.test.ts</td><td>42</td><td>パース、エンディング、リピート、ビート幅</td></tr>
   <tr><td>chordForms.test.ts</td><td>36</td><td>Drop 2/3 ボイシング検索、テンプレート構造</td></tr>
   <tr><td>guideTones.test.ts</td><td>22</td><td>ガイドトーン抽出、解決分類</td></tr>
