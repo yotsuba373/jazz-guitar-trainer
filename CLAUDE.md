@@ -14,7 +14,7 @@ npm install
 npm run dev       # 開発サーバー起動 → http://localhost:5173
 npm run build     # tsc + vite build
 npm run lint      # ESLint
-npm test          # vitest run (758 テスト)
+npm test          # vitest run (759 テスト)
 ```
 
 Node.js が未インストールの場合は fnm を使用:
@@ -78,7 +78,7 @@ src/
 │       ├── noteSpelling.test.ts     — 19 tests (スペリング、度数マップ、resolveMode、8音スケール)
 │       ├── guideTones.test.ts       — 22 tests (ガイドトーン抽出、解決分類)
 │       ├── chordForms.test.ts       — 36 tests (Drop 2/3ボイシング検索、テンプレート構造検証)
-│       ├── phraseQualityAudit.test.ts — 41 tests (品質監査: 拍位置/ビバップスケール/アプローチ/エンクロージャー/テンプレート構造/開始終了/VL/Musical Forces/全モード網羅/多様性/拍数適合/ポジション/実用性/接合部/リズム多様性)
+│       ├── phraseQualityAudit.test.ts — 42 tests (品質監査: 拍位置/ビバップスケール/アプローチ/エンクロージャー/テンプレート構造/開始終了/VL/Musical Forces/全モード網羅/多様性/拍数適合/ポジション/実用性/接合部/リズム多様性/GAPレポート)
 │       ├── phraseAnalysis.test.ts   — 33 tests (分析・度数・機能ラベル・メタデータパススルー・ナラティブ)
 │       ├── audioEngine.test.ts      — 14 tests (Karplus-Strong, サクソフォン, エレピ, コードストラム)
 │       ├── bebopSegments.test.ts    — 11 tests (セグメント関数8種の単体テスト)

@@ -155,8 +155,8 @@ describe('§1 Beat position rules', () => {
         }
       }
       const rate = strongTotal > 0 ? strongCT / strongTotal : 0;
-      const threshold = bc === 2 ? 0.30 : 0.38;
-      expect(rate).toBeGreaterThanOrEqual(threshold);
+      // §1 HIGH: CT on strong beats — WJD 52.8%, impl gate 40%
+      expect(rate).toBeGreaterThanOrEqual(0.42);
     }
   });
 
@@ -176,8 +176,8 @@ describe('§1 Beat position rules', () => {
         if (hasGT) phrasesWithGTOnStrong++;
       }
       const rate = phrasesWithGTOnStrong / subset.length;
-      // 2-beat phrases have only 1-2 strong beats; GT must be among 2 specific notes
-      const threshold = bc === 2 ? 0.25 : 0.60;
+      // §1 MEDIUM: GT on strong beats — ★★★★ rule
+      const threshold = bc === 2 ? 0.35 : 0.55;
       expect(rate).toBeGreaterThanOrEqual(threshold);
     }
   });
@@ -223,10 +223,9 @@ describe('§2 Bebop scale rules', () => {
         }
       }
     }
-    // The passing tone on strong beat violation rate should be low but not zero
-    // due to rhythm reassignment and non-scaleRun segments
+    // §2 HIGH ★★★★★: passing tone "必ず裏拍" — violation should be near-zero
     if (totalPassingInScaleRun > 0) {
-      expect(violations / totalPassingInScaleRun).toBeLessThanOrEqual(0.35);
+      expect(violations / totalPassingInScaleRun).toBeLessThanOrEqual(0.12);
     }
   });
 
@@ -520,7 +519,8 @@ describe('§6 Start / End rules', () => {
         if (last.isChordTone) ctEnd++;
       }
       const rate = ctEnd / subset.length;
-      const threshold = bc === 2 ? 0.40 : 0.50;
+      // §6 HIGH ★★★★★: CT ending — WJD 63.7%
+      const threshold = bc === 2 ? 0.45 : 0.55;
       expect(rate).toBeGreaterThanOrEqual(threshold);
     }
   });
@@ -602,8 +602,9 @@ describe('§7 Voice leading', () => {
         }
       }
     }
+    // §7 HIGH: 7th→3rd resolution — impl chooseGoalNote 70%
     if (totalCount > 0) {
-      expect(resolvedCount / totalCount).toBeGreaterThanOrEqual(0.20);
+      expect(resolvedCount / totalCount).toBeGreaterThanOrEqual(0.40);
     }
   });
 });
@@ -628,8 +629,9 @@ describe('§9 Musical Forces', () => {
         }
       }
     }
+    // §9 MEDIUM: direction changes on off-beats — majority rule
     if (totalDirChanges > 10) {
-      expect(offBeatDirChanges / totalDirChanges).toBeGreaterThanOrEqual(0.45);
+      expect(offBeatDirChanges / totalDirChanges).toBeGreaterThanOrEqual(0.50);
     }
   });
 
@@ -649,8 +651,9 @@ describe('§9 Musical Forces', () => {
         }
       }
     }
+    // §9 MEDIUM: gravity — high notes should descend > random
     if (highNoteTotal > 10) {
-      expect(highNoteDescend / highNoteTotal).toBeGreaterThan(0.45);
+      expect(highNoteDescend / highNoteTotal).toBeGreaterThanOrEqual(0.50);
     }
   });
 });
@@ -1130,5 +1133,198 @@ describe('Segment junction', () => {
     if (strongAfterJunction > 5) {
       expect(ctAfterJunction / strongAfterJunction).toBeGreaterThanOrEqual(0.35);
     }
+  });
+});
+
+// ===========================================================================
+// Quality Gap Report — actual vs target vs threshold
+// ===========================================================================
+
+interface QualityTarget {
+  id: string;
+  rule: string;
+  priority: 'HIGH' | 'MEDIUM';
+  metric: string;
+  target: number;
+  threshold: number;
+  higherIsBetter: boolean;
+}
+
+/**
+ * Central quality targets table.
+ * - target: goal value from bebop-construction-rules.md + WJD statistics
+ * - threshold: test failure guard (lower bound for higherIsBetter, upper bound otherwise)
+ */
+const QUALITY_TARGETS: QualityTarget[] = [
+  { id: '1.1', rule: '§1', priority: 'HIGH',   metric: 'CT on strong beats',        target: 0.528, threshold: 0.42, higherIsBetter: true },
+  { id: '1.2', rule: '§1', priority: 'MEDIUM', metric: 'GT on strong beats (3-4b)',  target: 0.60,  threshold: 0.55, higherIsBetter: true },
+  { id: '2.1', rule: '§2', priority: 'HIGH',   metric: 'Passing tone violation',     target: 0.0,   threshold: 0.12, higherIsBetter: false },
+  { id: '2.3', rule: '§2', priority: 'HIGH',   metric: 'Scale run desc pairs',       target: 0.75,  threshold: 0.55, higherIsBetter: true },
+  { id: '5.1', rule: '§5', priority: 'HIGH',   metric: 'arp-up-scale-down share',    target: 0.20,  threshold: 0.12, higherIsBetter: true },
+  { id: '6.1', rule: '§6', priority: 'HIGH',   metric: 'Upbeat start rate',          target: 0.70,  threshold: 0.50, higherIsBetter: true },
+  { id: '6.2', rule: '§6', priority: 'HIGH',   metric: 'CT ending rate',             target: 0.637, threshold: 0.50, higherIsBetter: true },
+  { id: '9.1', rule: '§9', priority: 'MEDIUM', metric: 'Dir change off-beat',        target: 0.65,  threshold: 0.50, higherIsBetter: true },
+  { id: '9.2', rule: '§9', priority: 'MEDIUM', metric: 'Gravity (high→desc)',        target: 0.60,  threshold: 0.50, higherIsBetter: true },
+  { id: 'D.2', rule: 'Div', priority: 'MEDIUM', metric: 'Pitch uniqueness',          target: 0.80,  threshold: 0.40, higherIsBetter: true },
+  { id: 'U.5', rule: 'Usb', priority: 'MEDIUM', metric: 'Fallback rate',             target: 0.05,  threshold: 0.20, higherIsBetter: false },
+];
+
+describe('Quality Gap Report', () => {
+  it('outputs metric table: actual vs target vs threshold', () => {
+    // Generate a representative batch
+    const batch = generateBatch(PRIMARY_CONFIGS, 10);
+    expect(batch.length).toBeGreaterThan(0);
+
+    // --- Compute all metrics ---
+
+    // 1.1: CT on strong beats
+    let strongTotal = 0, strongCT = 0;
+    for (const { phrase, mode } of batch) {
+      const ctSet = new Set(mode.chordTones);
+      for (const n of phrase.notes) {
+        if (n.isStrong) { strongTotal++; if (n.isChordTone || ctSet.has(n.noteName)) strongCT++; }
+      }
+    }
+    const ctOnStrong = strongTotal > 0 ? strongCT / strongTotal : 0;
+
+    // 1.2: GT on strong beats (3-4 beat phrases)
+    const subset34 = batch.filter(r => r.beatCount >= 3);
+    let gtPhraseCount = 0, gtPhraseTotal = 0;
+    for (const { phrase, mode } of subset34) {
+      const gtSet = new Set<string>();
+      if (mode.chordTones.length >= 2) gtSet.add(mode.chordTones[1]);
+      if (mode.chordTones.length >= 4) gtSet.add(mode.chordTones[3]);
+      gtPhraseTotal++;
+      if (phrase.notes.some(n => n.isStrong && gtSet.has(n.noteName))) gtPhraseCount++;
+    }
+    const gtOnStrong34 = gtPhraseTotal > 0 ? gtPhraseCount / gtPhraseTotal : 0;
+
+    // 2.1: Passing tone violation
+    let passTotal = 0, passViolation = 0;
+    for (const { phrase } of batch) {
+      for (const n of phrase.notes) {
+        if (n.isBebopPassing) { passTotal++; if (n.isStrong) passViolation++; }
+      }
+    }
+    const passViolRate = passTotal > 0 ? passViolation / passTotal : 0;
+
+    // 2.3: Scale run descending pairs
+    const scaleDownPhrases = batch.filter(r =>
+      r.phrase.templateId?.includes('scale-down') || r.phrase.templateId === 'scale-down');
+    let descPairs = 0, totalPairs = 0;
+    for (const { phrase } of scaleDownPhrases) {
+      for (let i = 1; i < phrase.notes.length; i++) {
+        if (phrase.notes[i].segmentIdx === phrase.notes[i - 1].segmentIdx) {
+          const prev = absolutePitch(phrase.notes[i - 1]);
+          const cur = absolutePitch(phrase.notes[i]);
+          if (prev !== cur) { totalPairs++; if (cur < prev) descPairs++; }
+        }
+      }
+    }
+    const scaleDescRate = totalPairs > 0 ? descPairs / totalPairs : 0;
+
+    // 5.1: arp-up-scale-down share
+    const arpUpCount = batch.filter(r => r.phrase.templateId === 'arp-up-scale-down').length;
+    const arpUpShare = batch.length > 0 ? arpUpCount / batch.length : 0;
+
+    // 6.1: Upbeat start
+    const upbeats = batch.filter(r => {
+      const bs = r.phrase.notes[0].beatStart;
+      return bs !== undefined && Math.abs(bs - Math.round(bs!)) > 0.05;
+    });
+    const upbeatRate = batch.length > 0 ? upbeats.length / batch.length : 0;
+
+    // 6.2: CT ending
+    let ctEnd = 0;
+    for (const { phrase } of batch) {
+      if (phrase.notes[phrase.notes.length - 1].isChordTone) ctEnd++;
+    }
+    const ctEndRate = batch.length > 0 ? ctEnd / batch.length : 0;
+
+    // 9.1: Direction changes on off-beats
+    let totalDir = 0, offBeatDir = 0;
+    for (const { phrase } of batch) {
+      for (let i = 2; i < phrase.notes.length; i++) {
+        const prev = absolutePitch(phrase.notes[i - 1]) - absolutePitch(phrase.notes[i - 2]);
+        const cur = absolutePitch(phrase.notes[i]) - absolutePitch(phrase.notes[i - 1]);
+        if (prev !== 0 && cur !== 0 && ((prev > 0 && cur < 0) || (prev < 0 && cur > 0))) {
+          totalDir++;
+          if (!phrase.notes[i].isStrong) offBeatDir++;
+        }
+      }
+    }
+    const dirOffBeat = totalDir > 0 ? offBeatDir / totalDir : 0;
+
+    // 9.2: Gravity
+    let highDesc = 0, highTotal = 0;
+    for (const { phrase } of batch) {
+      const pitches = phrase.notes.map(n => absolutePitch(n));
+      const sorted = [...pitches].sort((a, b) => a - b);
+      const p75 = sorted[Math.floor(sorted.length * 0.75)];
+      for (let i = 0; i < phrase.notes.length - 1; i++) {
+        if (pitches[i] >= p75) { highTotal++; if (pitches[i + 1] < pitches[i]) highDesc++; }
+      }
+    }
+    const gravityRate = highTotal > 0 ? highDesc / highTotal : 0;
+
+    // D.2: Pitch uniqueness (C Mixolydian, 4-beat, 100 phrases)
+    const { mode: mixMode, fretMap: mixFM, positions: mixPos } = buildFixtures('C', 'mixolydian');
+    const seqs: string[] = [];
+    for (let i = 0; i < 100; i++) {
+      const p = generatePhraseRule(mixPos[0], mixMode, mixFM, { approachTypes: [], beatCount: 4 });
+      if (p) seqs.push(p.notes.map(n => n.semitone).join(','));
+    }
+    const uniqueRate = seqs.length > 0 ? new Set(seqs).size / seqs.length : 0;
+
+    // U.5: Fallback rate
+    const fallbacks = batch.filter(r => r.phrase.templateId === 'scale-down-fallback');
+    const fallbackRate = batch.length > 0 ? fallbacks.length / batch.length : 0;
+
+    // --- Build report ---
+    const actuals: Record<string, number> = {
+      '1.1': ctOnStrong,
+      '1.2': gtOnStrong34,
+      '2.1': passViolRate,
+      '2.3': scaleDescRate,
+      '5.1': arpUpShare,
+      '6.1': upbeatRate,
+      '6.2': ctEndRate,
+      '9.1': dirOffBeat,
+      '9.2': gravityRate,
+      'D.2': uniqueRate,
+      'U.5': fallbackRate,
+    };
+
+    const pct = (v: number) => (v * 100).toFixed(1) + '%';
+    const lines: string[] = [];
+    lines.push('');
+    lines.push('┌───────┬───────┬──────┬─────────────────────────────┬─────────┬─────────┬─────────┬────────┐');
+    lines.push('│ ID    │ Rule  │ Pri  │ Metric                      │ Actual  │ Target  │ Thresh  │ Gap    │');
+    lines.push('├───────┼───────┼──────┼─────────────────────────────┼─────────┼─────────┼─────────┼────────┤');
+
+    for (const t of QUALITY_TARGETS) {
+      const actual = actuals[t.id] ?? NaN;
+      const gap = t.higherIsBetter ? t.target - actual : actual - t.target;
+      const gapStr = gap <= 0 ? 'OK' : '+' + pct(gap);
+      const status = gap <= 0 ? 'OK' : gap <= 0.05 ? 'NEAR' : 'GAP';
+      const id = t.id.padEnd(5);
+      const rule = t.rule.padEnd(5);
+      const pri = t.priority.padEnd(4);
+      const met = t.metric.padEnd(27);
+      const act = pct(actual).padStart(7);
+      const tgt = pct(t.target).padStart(7);
+      const thr = pct(t.threshold).padStart(7);
+      const gp = (status === 'OK' ? '  OK  ' : gapStr).padStart(6);
+      lines.push(`│ ${id} │ ${rule} │ ${pri} │ ${met} │ ${act} │ ${tgt} │ ${thr} │ ${gp} │`);
+    }
+    lines.push('└───────┴───────┴──────┴─────────────────────────────┴─────────┴─────────┴─────────┴────────┘');
+    lines.push(`  Batch: ${batch.length} phrases | ${PRIMARY_CONFIGS.length} configs × ${10} per config × [2,3,4] beats`);
+    lines.push('');
+
+    // Output the report
+    console.log(lines.join('\n'));
+
+    // This test always passes — it's a report, not a gate
+    expect(true).toBe(true);
   });
 });
