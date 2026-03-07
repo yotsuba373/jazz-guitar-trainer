@@ -81,6 +81,8 @@ function bestCandidate(
         if ((prevDir > 0 && curDir > 0) || (prevDir < 0 && curDir < 0)) score += 3;
       }
     }
+    // ±4 jitter for stepwise/approach selection only (not target CT selection)
+    if (preferDir || forces) score += (Math.random() - 0.5) * 8;
     if (score > bestScore) { bestScore = score; best = c; }
   }
   return best;
@@ -193,10 +195,10 @@ export const segScaleRun: SegmentFn = (pool, mode, startNote, direction, eighths
     if (!next) break;
     if (Math.abs(absolutePitch(next) - absolutePitch(current)) > 4) break; // max a major 3rd step
     // §2: Bebop passing tone must fall on off-beats
-    // Strong beat when (i + parity) is even (0-based index)
-    const isStrong = (i + parity) % 2 === 0;
-    if (bebopPassing !== null && next.semitone === bebopPassing && isStrong) {
-      // Passing tone would land on a strong beat — skip it and try the next scale tone
+    // On-beat (downbeat) when (i + parity) is even (0-based index)
+    const isOnBeat = (i + parity) % 2 === 0;
+    if (bebopPassing !== null && next.semitone === bebopPassing && isOnBeat) {
+      // Passing tone would land on a downbeat — skip it and try the next scale tone
       const skip = nextScaleTone(pool, next, direction, allSemis, false);
       if (skip && Math.abs(absolutePitch(skip) - absolutePitch(current)) <= 4) {
         result.push(skip);
@@ -206,8 +208,8 @@ export const segScaleRun: SegmentFn = (pool, mode, startNote, direction, eighths
       // Can't skip — just break to avoid violating the rule
       break;
     }
-    // §1 supplement: on strong beats, prefer GT over other scale tones
-    if (isStrong && !gtSemis.has(next.semitone) && gtSemis.size > 0) {
+    // §1 supplement: on downbeats, prefer GT over other scale tones
+    if (isOnBeat && !gtSemis.has(next.semitone) && gtSemis.size > 0) {
       // Check if there's a GT at the same stepwise distance
       const nextPitch = absolutePitch(next);
       const gtCandidates = pool.filter(n =>

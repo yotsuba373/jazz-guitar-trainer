@@ -204,12 +204,13 @@ export interface PhraseNote {
   isApproach: boolean;
   isExtension?: boolean;   // true for 9th/13th extension tones on strong beats
   beatPosition: number;    // 1-8 (eighth note position)
-  isStrong: boolean;       // true for positions 1,3,5,8
+  isStrong: boolean;       // true = 強拍 (metrically strong: beat 1, 3)
   approachGroup?: ApproachGroupInfo;
   digitalPattern?: DigitalPatternTag;   // present if this note belongs to a digital pattern
   isDim7Tone?: boolean;                 // true if part of dim7 arpeggio (e.g. ♭9 in dim7-from-3rd)
   isBebopPassing?: boolean;             // true if bebop-scale passing tone (e.g. nat7 in Mixolydian)
   isSkeletonBeat?: boolean;             // true if this note was a skeleton target (beats 1,3,5,goal)
+  isRest?: boolean;                      // true for rest (no sound, gap in phrase path)
   duration?: RhythmType;                // note duration (default 'e' = eighth note)
   beatStart?: number;                   // absolute beat position (0-based, fractional)
   segmentIdx?: number;                  // segment index within rule-based template

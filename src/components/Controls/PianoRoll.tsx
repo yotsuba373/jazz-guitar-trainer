@@ -31,8 +31,10 @@ export function PianoRoll({ phrase, noteAnalysis }: PianoRollProps) {
   const notes = phrase.notes;
   if (notes.length === 0) return null;
 
-  // Compute pitch range
-  const pitches = notes.map(absolutePitch);
+  // Compute pitch range (exclude rests)
+  const soundNotes = notes.filter(n => !n.isRest);
+  if (soundNotes.length === 0) return null;
+  const pitches = soundNotes.map(absolutePitch);
   const minPitch = Math.min(...pitches);
   const maxPitch = Math.max(...pitches);
   const pitchRange = Math.max(maxPitch - minPitch, 4);
@@ -120,6 +122,18 @@ export function PianoRoll({ phrase, noteAnalysis }: PianoRollProps) {
 
       {/* Note rectangles */}
       {notes.map((n, i) => {
+        if (n.isRest) {
+          // Rest: thin dashed line at the beat position
+          const bs = n.beatStart ?? (i * 0.5);
+          const dur = RHYTHM_BEATS[n.duration ?? 'e'];
+          const x = xScale(bs);
+          const w = Math.max(2, (dur / totalBeats) * plotW - 1);
+          const midY = margin.top + plotH / 2;
+          return (
+            <line key={i} x1={x} y1={midY - 4} x2={x + w} y2={midY - 4}
+              stroke="#666" strokeWidth={1} strokeDasharray="2,2" opacity={0.5} />
+          );
+        }
         const bs = n.beatStart ?? (i * 0.5);
         const dur = RHYTHM_BEATS[n.duration ?? 'e'];
         const pitch = absolutePitch(n);

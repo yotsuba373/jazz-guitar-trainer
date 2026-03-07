@@ -219,7 +219,7 @@ export function generatePhraseRule(
     : pickWeighted(activeCtPool, activeCtPool.map(n => gtNames.has(n.noteName) ? 2 : 1));
 
   // 8. Template selection + execution with 3 retries
-  for (let attempt = 0; attempt < 3; attempt++) {
+  for (let attempt = 0; attempt < 5; attempt++) {
     const template = selectTemplate(mode.chordQuality, totalBeats, contour);
 
     const phraseNotes = buildPhrase(
@@ -276,7 +276,7 @@ export function generatePhraseRule(
     let accBeat = beatOffset;
     const pNotes = fbSlice.map((n): import('../types').PhraseNote => {
       const beatPos = Math.min(Math.floor(accBeat * 2) + 1, 8);
-      const isStrong = Math.abs(accBeat - Math.round(accBeat)) < 0.05;
+      const isOnBeat = Math.abs(accBeat - Math.round(accBeat)) < 0.05;
       const pn: import('../types').PhraseNote = {
         noteName: n.noteName,
         stringIdx: n.stringIdx,
@@ -285,7 +285,7 @@ export function generatePhraseRule(
         isChordTone: ctSetLocal.has(n.noteName),
         isApproach: n.isApproach,
         beatPosition: beatPos,
-        isStrong,
+        isStrong: isOnBeat,
         duration: 'e',
         beatStart: accBeat,
         segmentIdx: 0,

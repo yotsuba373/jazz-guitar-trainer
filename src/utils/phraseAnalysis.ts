@@ -116,7 +116,24 @@ const CONTOUR_LABELS: Record<PhraseContour, string> = {
 
 export function analyzePhrase(phrase: GeneratedPhrase, mode: Mode): PhraseAnalysis {
   const notes: NoteAnalysis[] = phrase.notes.map((note, i) => {
-    const prev = i > 0 ? phrase.notes[i - 1] : null;
+    // Rest notes get minimal analysis
+    if (note.isRest) {
+      return {
+        beatPosition: note.beatPosition,
+        noteName: '—',
+        scaleDegree: '—',
+        intervalFromPrev: null,
+        intervalDirection: null,
+        intervalLabel: '—',
+        functionLabel: '休符',
+      } as NoteAnalysis;
+    }
+
+    // Find previous non-rest note for interval computation
+    let prev: PhraseNote | null = null;
+    for (let j = i - 1; j >= 0; j--) {
+      if (!phrase.notes[j].isRest) { prev = phrase.notes[j]; break; }
+    }
     const absPitch = absolutePitch(note);
     const prevPitch = prev ? absolutePitch(prev) : null;
     const interval = prevPitch !== null ? Math.abs(absPitch - prevPitch) : null;
@@ -209,15 +226,16 @@ function computeSummary(phrase: GeneratedPhrase, notes: NoteAnalysis[]): PhraseA
   const total = stepwise + thirds + fourths + leaps;
   const pct = (v: number) => total > 0 ? Math.round((v / total) * 100) : 0;
 
-  // Range
-  const pitches = phrase.notes.map(absolutePitch);
-  const rangeSemitones = Math.max(...pitches) - Math.min(...pitches);
+  // Range (exclude rests)
+  const soundPhraseNotes = phrase.notes.filter(n => !n.isRest);
+  const pitches = soundPhraseNotes.map(absolutePitch);
+  const rangeSemitones = pitches.length > 0 ? Math.max(...pitches) - Math.min(...pitches) : 0;
 
-  // Direction changes
+  // Direction changes (exclude rests)
   let directionChanges = 0;
-  for (let i = 2; i < phrase.notes.length; i++) {
-    const prevDir = absolutePitch(phrase.notes[i - 1]) - absolutePitch(phrase.notes[i - 2]);
-    const curDir = absolutePitch(phrase.notes[i]) - absolutePitch(phrase.notes[i - 1]);
+  for (let i = 2; i < soundPhraseNotes.length; i++) {
+    const prevDir = absolutePitch(soundPhraseNotes[i - 1]) - absolutePitch(soundPhraseNotes[i - 2]);
+    const curDir = absolutePitch(soundPhraseNotes[i]) - absolutePitch(soundPhraseNotes[i - 1]);
     if ((prevDir > 0 && curDir < 0) || (prevDir < 0 && curDir > 0)) directionChanges++;
   }
 
@@ -273,9 +291,9 @@ function computeSummary(phrase: GeneratedPhrase, notes: NoteAnalysis[]): PhraseA
     contourLabel: CONTOUR_LABELS[phrase.config.contour!] ?? '',
     approachPatternsUsed: Array.from(patternCounts.entries()).map(([type, count]) => ({ type, count })),
     directionChanges,
-    chordToneCount: phrase.notes.filter(n => n.isChordTone && !n.isApproach).length,
-    approachNoteCount: phrase.notes.filter(n => n.isApproach).length,
-    scaleNoteCount: phrase.notes.filter(n => !n.isChordTone && !n.isApproach).length,
+    chordToneCount: soundPhraseNotes.filter(n => n.isChordTone && !n.isApproach).length,
+    approachNoteCount: soundPhraseNotes.filter(n => n.isApproach).length,
+    scaleNoteCount: soundPhraseNotes.filter(n => !n.isChordTone && !n.isApproach).length,
     skeletonLabel,
     digitalPatternUsed,
     digitalPatternBeats,

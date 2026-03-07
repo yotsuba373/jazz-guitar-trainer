@@ -365,7 +365,7 @@
 <pre>npm install       # 依存インストール
 npm run dev       # 開発サーバー → http://localhost:5173
 npm run build     # tsc + vite build
-npm test          # vitest run (758 tests)
+npm test          # vitest run (762 tests)
 npm run lint      # ESLint</pre>
 
 <h2 id="architecture">Architecture</h2>
@@ -536,9 +536,9 @@ degree ラベル、フレーバーテキストを持ちます。</p>
   <li><strong>ビバップスケール</strong> (<code>bebopScales.ts</code>): Dominant / Major / Dorian / Harmonic Minor の4種。モード→ビバップスケールマッピング。Diatonic 7 + Lydian Dom + Altered の9モード対応</li>
   <li><strong>セグメント関数</strong> (<code>bebopSegments.ts</code>): Arpeggio, ScaleRun (表拍GT優先), Enclosure (4タイプ+Delayed Resolution), 1-2-3-5, dim7From3rd, UpperStructure, ApproachCT (6タイプ+Musical Forces), Chromatic, OctaveDisp (Honeysuckle Rose) の9種。全て PoolNote[] → PoolNote[] で指板空間内動作。beatParity対応</li>
   <li><strong>テンプレート</strong> (<code>bebopTemplates.ts</code>): 11個のフレーズ構造テンプレート (Arp↑+Scale↓, Scale↓, Honeysuckle 等)。品質フィルタ・コンター親和 (+8)・重み付きランダム選択</li>
-  <li><strong>スケジューラー</strong> (<code>bebopScheduler.ts</code>): テンプレートの各セグメントを実行し、セグメント接合部の同ピッチ重複を自動除去。<code>assignRhythms()</code> でセグメントタイプ別に可変リズムを割当 (§10準拠: アルペジオ→3連符25% (第1セグメント裏拍開始も許可), エンクロージャー→16分35% (≥3音), クロマチック→16分40% (≥2音), スケールラン→8分固定, 最終CT→4分18%)、拍位置ベース品質チェック (CT表拍配置率≥40%, GT表拍ソフトチェック (表拍3+でGTゼロ→reject), 音域4-15半音, 跳躍≤9半音, CT終止試行±3半音, 方向転換拍裏チェック) を適用</li>
-  <li><strong>Musical Forces</strong> (§9 Steve Larson): bestCandidate() に重力 (+5/-3)・磁力 (+5)・慣性 (+3) のスコアリングを加算</li>
-  <li><strong>エントリポイント</strong> (<code>bebopGenerator.ts</code>): generatePhraseRule() — buildNotePool → コンター選択 (重み付き: arch33/desc28/wave18/rev-arch13/asc8) → beatOffset選択 (70%裏拍) → GT優先開始音 → スケジューラー実行 → 3リトライ → フォールバック</li>
+  <li><strong>スケジューラー</strong> (<code>bebopScheduler.ts</code>): テンプレートの各セグメントを実行し、セグメント接合部の同ピッチ重複を自動除去。多セグメントテンプレートの接合部で15%確率で休符/ブレスを挿入 (70%裏拍開始)。<code>assignRhythms()</code> でセグメントタイプ別に可変リズムを割当 (§10準拠: アルペジオ→3連符25% (第1セグメント裏拍開始も許可), エンクロージャー→16分35% (≥3音), クロマチック→16分40% (≥2音), スケールラン→8分固定, 最終CT→4分18%)。CT表拍プロモーション (非CTスケール音を±2半音・±1弦以内のCTにスワップ)。テンション終止 (CT終止の26%を隣接非CTスケール音にスワップ→CT終止率~70%)。拍位置ベース品質チェック (CT表拍配置率≥40%, GT強拍ソフトチェック, 音域4-15半音, 跳躍≤9半音, 方向転換弱拍チェック) を適用</li>
+  <li><strong>Musical Forces</strong> (§9 Steve Larson): bestCandidate() に重力 (+5/-3)・磁力 (+5)・慣性 (+3) のスコアリングを加算。±4スコアジッター (stepwise/approach選択時のみ) でピッチ列多様性を確保</li>
+  <li><strong>エントリポイント</strong> (<code>bebopGenerator.ts</code>): generatePhraseRule() — buildNotePool → コンター選択 (重み付き: arch33/desc28/wave18/rev-arch13/asc8) → beatOffset選択 (70%裏拍) → GT優先開始音 → スケジューラー実行 → 5リトライ → フォールバック</li>
 </ul>
 
 <h4>テンプレート一覧</h4>
@@ -568,12 +568,15 @@ degree ラベル、フレーバーテキストを持ちます。</p>
     Delayed Resolution (30%) でターゲットを裏拍にずらすバリエーションも生成。</li>
   <li><strong>CT終止改善 (§6)</strong>: スケジューラーの品質チェック後に最終音のCTスワップを試行。
     ±3半音・±1弦以内の最近接CTが見つかればスワップ、見つからなければそのまま通過 (reject しない)。
-    WJD CT終止率 63.7% に近い自然な比率を実現。</li>
+    さらにCT終止の26%を隣接非CTスケール音にスワップ (テンション終止) し、CT終止率~70%を実現 (WJD 63.7%に近接)。</li>
+  <li><strong>休符/ブレス挿入 (§10)</strong>: 多セグメントテンプレートのセグメント接合部で15%確率で8分/4分休符を挿入。
+    休符後の次セグメント開始は70%裏拍/30%表拍 (フレーズ開始と同じ確率)。全フレーズの約11%に休符が出現。
+    オーディオ・SVG・ピアノロール・フレーズ分析すべてで休符に対応。</li>
   <li><strong>開始拍分布 (§6)</strong>: startHint なし (単体生成) 時に 70% で裏拍 (beatOffset=0.5) 開始。
     接続フレーズ (startHint あり) ではギャップなし (beatOffset=0)。
-    beatParity をセグメント関数に伝播し、ScaleRun/Enclosure のビバップパッシングトーン/CT表拍判定を正確化。</li>
-  <li><strong>表拍ガイドトーン優先 (§1)</strong>: 開始音は 3rd/7th に2倍の重み。スケールラン中も表拍でGT候補があれば優先選択。品質チェックで表拍3つ以上ある場合にGTゼロならソフト reject。</li>
-  <li><strong>方向転換拍裏チェック (§9)</strong>: 方向転換の60%超が表拍で発生するフレーズを reject。Barry Harris ルール準拠。</li>
+    beatParity をセグメント関数に伝播し、ScaleRun/Enclosure のビバップパッシングトーン/CT 表拍判定を正確化。</li>
+  <li><strong>強拍ガイドトーン優先 (§1)</strong>: 開始音は 3rd/7th に2倍の重み。スケールラン中も表拍でGT候補があれば優先選択。品質チェックで強拍 (beat 1, 3) が2つ以上ある場合にGTゼロならソフト reject。</li>
+  <li><strong>方向転換弱拍チェック (§9)</strong>: 方向転換の60%超が強拍 (beat 1, 3) で発生するフレーズを reject。Barry Harris ルール準拠。</li>
   <li><strong>コンター選択 (§5)</strong>: 重み付き選択 — arch (33), descending (28), wave (18), reverse-arch (13), ascending (8)。均等25%から修正。</li>
 </ul>
 
@@ -627,16 +630,19 @@ degree ラベル、フレーバーテキストを持ちます。</p>
 ├─ Step 8: Scheduler (buildPhrase)
 │   ├─ テンプレートの各セグメント関数を実行
 │   ├─ セグメント接合部の同ピッチ重複を自動除去
+│   ├─ セグメント接合部で15%確率で休符/ブレス挿入
 │   ├─ assignRhythms(): セグメントタイプ別に可変リズムを割当
-│   └─ CT終止試行: 最終音が非CTなら ±3半音・±1弦以内の最近接CTにスワップ
+│   ├─ CT表拍プロモーション: 非CTスケール音→近接CTにスワップ
+│   ├─ CT終止試行: 最終音が非CTなら ±3半音・±1弦以内の最近接CTにスワップ
+│   └─ テンション終止: CT終止の26%を隣接非CTスケール音にスワップ
 │
 └─ Step 9: Quality Check
     ├─ CT表拍配置率 ≥ 40%
-    ├─ GT表拍ソフトチェック (表拍3+でGTゼロ→reject)
+    ├─ GT強拍ソフトチェック (強拍2+でGTゼロ→reject)
     ├─ 音域 4-15半音, 跳躍 ≤ 9半音
-    └─ 方向転換拍裏チェック (&gt;60% 表拍→reject)
+    └─ 方向転換弱拍チェック (&gt;60%強拍→reject)
 │
-3リトライ失敗 → フォールバック (ScaleRun↓)</div>
+5リトライ失敗 → フォールバック (ScaleRun↓)</div>
 
 <h2 id="phrase-notepool">Note Pool &amp; Instance Scope</h2>
 
@@ -1012,12 +1018,13 @@ interface PhraseNote {
   isApproach: boolean
   isExtension?: boolean
   beatPosition: number     // 1-8
-  isStrong: boolean        // beats 1,3,5,8
+  isStrong: boolean        // true = 強拍 (metrically strong: beat 1, 3)
   approachGroup?: ApproachGroupInfo
   digitalPattern?: DigitalPatternTag   // デジタルパターンのタグ
   isDim7Tone?: boolean                 // dim7アルペジオ構成音 (♭9等)
   isBebopPassing?: boolean             // ビバップ経過音
   isSkeletonBeat?: boolean             // スケルトン拍
+  isRest?: boolean                     // 休符 (セグメント接合部ブレス)
   duration?: RhythmType                // 音価 (q/t/e/s)
   beatStart?: number                   // 絶対拍位置 (0起点)
 }
