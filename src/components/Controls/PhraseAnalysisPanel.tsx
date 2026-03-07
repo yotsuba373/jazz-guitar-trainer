@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import type { GeneratedPhrase, Mode } from '../../types';
 import { analyzePhrase } from '../../utils';
+import { PHRASE_TEMPLATES } from '../../utils/bebopTemplates';
 import { PianoRoll } from './PianoRoll';
 
 interface PhraseAnalysisPanelProps {
@@ -22,6 +23,112 @@ const APPROACH_TYPE_SHORT: Record<string, string> = {
   'parker-enclosure': 'Parker',
   'b9-arpeggio': '♭9 Arp',
 };
+
+const SEG_TYPE_LABEL: Record<string, [string, string]> = {
+  //                        asc              desc
+  arpeggio:              ['アルペジオ上行', 'アルペジオ下行'],
+  scaleRun:              ['スケール上昇',   'スケール下降'],
+  enclosure:             ['エンクロージャー上', 'エンクロージャー下'],
+  '1235':                ['1-2-3-5 上行',   '1-2-3-5 下行'],
+  approachCT:            ['アプローチ→CT上', 'アプローチ→CT下'],
+  dim7From3rd:           ['dim7アルペジオ上行', 'dim7アルペジオ下行'],
+  upperStructure:        ['アッパーストラクチャー上行', 'アッパーストラクチャー下行'],
+  chromatic:             ['クロマチック上昇', 'クロマチック下降'],
+  octaveDisp:            ['オクターブ跳躍上', 'オクターブ跳躍下'],
+};
+
+const FALLBACK_TEMPLATE_LABELS: Record<string, string> = {
+  'scale-down-fallback': 'スケール下降 (フォールバック)',
+};
+
+function buildDebugJson(phrase: GeneratedPhrase): string {
+  const obj: Record<string, unknown> = {
+    root: phrase.rootName,
+    mode: phrase.modeKey,
+    posId: phrase.posId,
+    templateId: phrase.templateId ?? null,
+    contour: phrase.config.contour ?? null,
+    goalReason: phrase.goalReason ?? null,
+    beatCount: phrase.config.beatCount ?? 4,
+    totalBeats: phrase.totalBeats,
+  };
+  if (phrase.config.nextChordContext) {
+    const c = phrase.config.nextChordContext;
+    obj.nextChord = { third: c.thirdNote, seventh: c.seventhNote, root: c.rootNote, quality: c.quality };
+  }
+  if (phrase.config.goalNoteOverride) {
+    obj.goalOverride = phrase.config.goalNoteOverride.noteName;
+  }
+  obj.notes = phrase.notes.map(n => {
+    const r: Record<string, unknown> = {
+      n: n.noteName, s: n.stringIdx, f: n.fret, ct: n.isChordTone,
+    };
+    if (n.isApproach) r.ap = true;
+    if (n.segmentIdx != null) r.seg = n.segmentIdx;
+    if (n.beatStart != null) r.beat = n.beatStart;
+    if (n.duration) r.dur = n.duration;
+    return r;
+  });
+  return JSON.stringify(obj, null, 2);
+}
+
+function TemplateInfo({ phrase }: { phrase: GeneratedPhrase }) {
+  const [copied, setCopied] = useState(false);
+  const tmpl = PHRASE_TEMPLATES.find(t => t.id === phrase.templateId);
+
+  // Count notes per segment
+  const segCounts = new Map<number, number>();
+  for (const n of phrase.notes) {
+    if (n.segmentIdx != null) segCounts.set(n.segmentIdx, (segCounts.get(n.segmentIdx) ?? 0) + 1);
+  }
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(buildDebugJson(phrase)).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  };
+
+  const circled = ['①', '②', '③', '④', '⑤'];
+  const segLabel = (type: string, dir: string) => {
+    const pair = SEG_TYPE_LABEL[type];
+    if (pair) return dir === 'asc' ? pair[0] : pair[1];
+    return type;
+  };
+
+  return (
+    <div className="mt-1 pt-1" style={{ borderTop: '1px solid #333', color: '#666' }}>
+      <div className="flex items-center gap-2">
+        <span title={tmpl?.description}>テンプレート: <b style={{ color: '#DDD' }}>{tmpl?.label ?? FALLBACK_TEMPLATE_LABELS[phrase.templateId!] ?? phrase.templateId}</b></span>
+        <button
+          onClick={handleCopy}
+          style={{
+            marginLeft: 'auto', background: copied ? '#2a4a2a' : '#2a2a2a',
+            border: '1px solid #555', borderRadius: 3, color: copied ? '#80FF80' : '#AAA',
+            fontSize: 9, padding: '1px 6px', cursor: 'pointer',
+          }}
+        >
+          {copied ? '✓ Copied' : '📋 Debug'}
+        </button>
+      </div>
+      {tmpl && tmpl.segments.length > 1 && (
+        <div style={{ marginTop: 2, color: '#888' }}>
+          {tmpl.segments.map((seg, i) => {
+            const name = segLabel(seg.type, seg.direction);
+            const beats = seg.beats > 0 ? `${seg.beats}拍` : '残り';
+            const count = segCounts.get(i);
+            return (
+              <span key={i}>
+                {i > 0 && <span style={{ margin: '0 4px' }}>→</span>}
+                {circled[i] ?? `${i + 1}`} {name} ({beats}){count != null && <span style={{ color: '#AAA' }}> {count}音</span>}
+              </span>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function PhraseAnalysisPanel({ phrase, mode }: PhraseAnalysisPanelProps) {
   const [open, setOpen] = useState(false);
@@ -54,6 +161,9 @@ export function PhraseAnalysisPanel({ phrase, mode }: PhraseAnalysisPanelProps) 
         </div>
         {/* Row 2: generation metadata */}
         <div className="flex gap-3 items-center w-full" style={{ fontSize: 9, marginTop: 1 }}>
+          {summary.templateLabel && (
+            <span title={PHRASE_TEMPLATES.find(t => t.id === phrase.templateId)?.description ?? ''}>テンプレ: <b style={{ color: PHRASE_COLOR }}>{summary.templateLabel}</b></span>
+          )}
           {summary.skeletonLabel && (
             <span title="ハーモニック・スケルトン: 強拍(1,3,5,8拍)に配置するコードトーンのアルペジオパターンと方向（↑上行/↓下行/↕混合）">骨格: <b style={{ color: SKELETON_COLOR }}>{summary.skeletonLabel}</b></span>
           )}
@@ -173,22 +283,7 @@ export function PhraseAnalysisPanel({ phrase, mode }: PhraseAnalysisPanelProps) 
 
           {/* Template info */}
           {phrase.templateId && (
-            <div className="mt-1 pt-1" style={{ borderTop: '1px solid #333', color: '#666' }}>
-              <span>テンプレート: <b style={{ color: '#DDD' }}>{phrase.templateId}</b></span>
-              {(() => {
-                const segCounts = new Map<number, number>();
-                for (const n of phrase.notes) {
-                  if (n.segmentIdx != null) segCounts.set(n.segmentIdx, (segCounts.get(n.segmentIdx) ?? 0) + 1);
-                }
-                if (segCounts.size > 1) {
-                  const parts = Array.from(segCounts.entries())
-                    .sort(([a], [b]) => a - b)
-                    .map(([idx, count]) => `Seg${idx + 1}: ${count}音`);
-                  return <span style={{ color: '#888', marginLeft: 6 }}>({parts.join(' → ')})</span>;
-                }
-                return null;
-              })()}
-            </div>
+            <TemplateInfo phrase={phrase} />
           )}
 
           {/* Piano Roll visualization */}

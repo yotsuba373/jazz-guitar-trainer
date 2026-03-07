@@ -1,5 +1,10 @@
 import type { GeneratedPhrase, Mode, PhraseNote, NoteAnalysis, PhraseAnalysis, PhraseAnalysisSummary, ApproachType, PhraseContour } from '../types';
 import { absolutePitch } from './bebopScheduler';
+import { PHRASE_TEMPLATES } from './bebopTemplates';
+
+const FALLBACK_LABELS: Record<string, string> = {
+  'scale-down-fallback': 'スケール下降 (フォールバック)',
+};
 
 // ---------------------------------------------------------------------------
 // Interval naming
@@ -240,8 +245,12 @@ function computeSummary(phrase: GeneratedPhrase, notes: NoteAnalysis[]): PhraseA
   const bebopPassingCount = phrase.notes.filter(n => n.isBebopPassing).length;
   const extensionCount = phrase.notes.filter(n => n.isExtension).length;
 
-  // Template label (rule-based engine)
-  const templateLabel = phrase.templateId ?? undefined;
+  // Template label (rule-based engine): resolve ID to human-readable label
+  const templateLabel = phrase.templateId
+    ? (PHRASE_TEMPLATES.find(t => t.id === phrase.templateId)?.label
+      ?? FALLBACK_LABELS[phrase.templateId]
+      ?? phrase.templateId)
+    : undefined;
 
   return {
     stepwisePct: pct(stepwise),

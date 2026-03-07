@@ -721,7 +721,20 @@ degree ラベル、フレーバーテキストを持ちます。</p>
   <tr><td>directionChanges</td><td>方向転換の回数</td></tr>
   <tr><td>goalReason</td><td>ゴール音の選択理由（事後検証済み: 実際の最終音がゴールと異なる場合は「CT到達」または「テンプレート終端」に更新）</td></tr>
   <tr><td>motifLabel</td><td>モチーフパターン (例: "+3, -2")</td></tr>
+  <tr><td>templateLabel</td><td>テンプレート名 (例: "Arp↑+Scale↓")。サマリー行に表示</td></tr>
 </table>
+
+<h4>Template Detail Display</h4>
+<p>分析パネル展開時、テンプレート情報を各セグメントの種類・方向・拍配分で表示:</p>
+<pre><code>テンプレート: Arp↑+Scale↓
+  ① Arp ↑ (2拍) 4音 → ② Scale ↓ (残) 6音</code></pre>
+<p>セグメントタイプは短縮名で表示: Arp, Scale, Encl, 1235, App→CT, dim7, Upper, Chr, OctDisp。
+テンプレート名ホバーで日本語フレーバーテキスト (description) をツールチップ表示。各テンプレートの音楽的意図を簡潔に説明。</p>
+
+<h4>Debug Copy</h4>
+<p>テンプレート情報の右端の <strong>[📋 Debug]</strong> ボタンで、フレーズ再現に必要な全情報をクリップボードにコピー。
+コピーされるJSONには root, mode, posId, templateId, contour, goalReason, beatCount, nextChord (進行モード時),
+goalOverride, notes (コンパクト形式: n=音名, s=弦, f=フレット, ct=CT, ap=アプローチ, seg=セグメント, beat=拍位置, dur=音価) が含まれます。</p>
 
 <!-- ==================== HARMONY ==================== -->
 <h2 id="guide-tones">Guide Tones &amp; Voice Leading</h2>
