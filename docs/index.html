@@ -536,7 +536,7 @@ degree ラベル、フレーバーテキストを持ちます。</p>
   <li><strong>ビバップスケール</strong> (<code>bebopScales.ts</code>): Dominant / Major / Dorian / Harmonic Minor の4種。モード→ビバップスケールマッピング。Diatonic 7 + Lydian Dom + Altered の9モード対応</li>
   <li><strong>セグメント関数</strong> (<code>bebopSegments.ts</code>): Arpeggio, ScaleRun (表拍GT優先), Enclosure (4タイプ+Delayed Resolution), 1-2-3-5, dim7From3rd, UpperStructure, ApproachCT (6タイプ+Musical Forces), Chromatic, OctaveDisp (Honeysuckle Rose) の9種。全て PoolNote[] → PoolNote[] で指板空間内動作。beatParity対応</li>
   <li><strong>テンプレート</strong> (<code>bebopTemplates.ts</code>): 11個のフレーズ構造テンプレート (Arp↑+Scale↓, Scale↓, Honeysuckle 等)。品質フィルタ・コンター親和 (+8)・重み付きランダム選択</li>
-  <li><strong>スケジューラー</strong> (<code>bebopScheduler.ts</code>): テンプレートの各セグメントを実行し、セグメント接合部の同ピッチ重複を自動除去。多セグメントテンプレートの接合部で15%確率で休符/ブレスを挿入 (70%裏拍開始)。<code>assignRhythms()</code> でセグメントタイプ別に可変リズムを割当 (§10準拠: アルペジオ→3連符25% (第1セグメント裏拍開始も許可), エンクロージャー→16分35% (≥3音), クロマチック→16分40% (≥2音), スケールラン→8分固定, 最終CT→4分18%)。CT表拍プロモーション (非CTスケール音を±2半音・±1弦以内のCTにスワップ)。テンション終止 (CT終止の26%を隣接非CTスケール音にスワップ→CT終止率~70%)。拍位置ベース品質チェック (CT表拍配置率≥40%, GT強拍ソフトチェック, 音域4-15半音, 跳躍≤9半音, 方向転換弱拍チェック) を適用</li>
+  <li><strong>スケジューラー</strong> (<code>bebopScheduler.ts</code>): テンプレートの各セグメントを実行し、セグメント接合部の同ピッチ重複を自動除去。多セグメントテンプレートの接合部で15%確率で休符/ブレスを挿入 (70%裏拍開始)。<code>assignRhythms()</code> でセグメントタイプ別に可変リズムを割当 (§10準拠: アルペジオ→3連符25% (第1セグメント裏拍開始も許可), エンクロージャー→16分35% (≥3音), クロマチック→16分40% (≥2音), スケールラン→8分固定, 最終CT→4分18%)。CT表拍プロモーション (非CTスケール音を±2半音・±1弦以内のCTにスワップ)。テンション終止 (CT終止の26%を隣接非CTスケール音にスワップ→CT終止率~70%)。拍位置ベース品質チェック (CT表拍配置率≥40%, GT強拍ソフトチェック, 音域4-15半音, 跳躍≤9半音, 方向転換裏拍チェック) を適用</li>
   <li><strong>Musical Forces</strong> (§9 Steve Larson): bestCandidate() に重力 (+5/-3)・磁力 (+5)・慣性 (+3) のスコアリングを加算。±4スコアジッター (stepwise/approach選択時のみ) でピッチ列多様性を確保</li>
   <li><strong>エントリポイント</strong> (<code>bebopGenerator.ts</code>): generatePhraseRule() — buildNotePool → コンター選択 (重み付き: arch33/desc28/wave18/rev-arch13/asc8) → beatOffset選択 (70%裏拍) → GT優先開始音 → スケジューラー実行 → 5リトライ → フォールバック</li>
 </ul>
@@ -576,7 +576,7 @@ degree ラベル、フレーバーテキストを持ちます。</p>
     接続フレーズ (startHint あり) ではギャップなし (beatOffset=0)。
     beatParity をセグメント関数に伝播し、ScaleRun/Enclosure のビバップパッシングトーン/CT 表拍判定を正確化。</li>
   <li><strong>強拍ガイドトーン優先 (§1)</strong>: 開始音は 3rd/7th に2倍の重み。スケールラン中も表拍でGT候補があれば優先選択。品質チェックで強拍 (beat 1, 3) が2つ以上ある場合にGTゼロならソフト reject。</li>
-  <li><strong>方向転換弱拍チェック (§9)</strong>: 方向転換の60%超が強拍 (beat 1, 3) で発生するフレーズを reject。Barry Harris ルール準拠。</li>
+  <li><strong>方向転換裏拍チェック (§9)</strong>: 方向転換の60%超が表拍 (各拍頭) で発生するフレーズを reject。Barry Harris ルール準拠。</li>
   <li><strong>コンター選択 (§5)</strong>: 重み付き選択 — arch (33), descending (28), wave (18), reverse-arch (13), ascending (8)。均等25%から修正。</li>
 </ul>
 
@@ -640,7 +640,7 @@ degree ラベル、フレーバーテキストを持ちます。</p>
     ├─ CT表拍配置率 ≥ 40%
     ├─ GT強拍ソフトチェック (強拍2+でGTゼロ→reject)
     ├─ 音域 4-15半音, 跳躍 ≤ 9半音
-    └─ 方向転換弱拍チェック (&gt;60%強拍→reject)
+    └─ 方向転換裏拍チェック (&gt;60%表拍→reject)
 │
 5リトライ失敗 → フォールバック (ScaleRun↓)</div>
 

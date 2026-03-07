@@ -1223,7 +1223,7 @@ const QUALITY_TARGETS: QualityTarget[] = [
   { id: '5.1', rule: '§5', priority: 'HIGH',   metric: 'arp-up-scale-down share',    target: 0.20,  threshold: 0.12, higherIsBetter: true },
   { id: '6.1', rule: '§6', priority: 'HIGH',   metric: 'Upbeat start rate',          target: 0.70,  threshold: 0.50, higherIsBetter: true },
   { id: '6.2', rule: '§6', priority: 'HIGH',   metric: 'CT ending rate',             target: 0.70,  threshold: 0.50, higherIsBetter: true },
-  { id: '9.1', rule: '§9', priority: 'MEDIUM', metric: 'Dir change on weak beats',   target: 0.65,  threshold: 0.50, higherIsBetter: true },
+  { id: '9.1', rule: '§9', priority: 'MEDIUM', metric: 'Dir change off-beat',         target: 0.65,  threshold: 0.50, higherIsBetter: true },
   { id: '9.2', rule: '§9', priority: 'MEDIUM', metric: 'Gravity (high→desc)',        target: 0.60,  threshold: 0.50, higherIsBetter: true },
   { id: 'D.2', rule: 'Div', priority: 'MEDIUM', metric: 'Pitch uniqueness',          target: 0.80,  threshold: 0.40, higherIsBetter: true },
   { id: 'U.5', rule: 'Usb', priority: 'MEDIUM', metric: 'Fallback rate',             target: 0.05,  threshold: 0.20, higherIsBetter: false },
