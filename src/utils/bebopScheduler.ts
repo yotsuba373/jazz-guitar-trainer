@@ -485,11 +485,11 @@ export function buildPhrase(
     if (leap > 9) return null;
   }
 
-  // §9: Direction changes should occur on off-beats (Barry Harris)
+  // §9: Direction changes should avoid strong beats (beats 1, 3) (Barry Harris / Jens Larsen)
   // Use soundNotes (rests excluded) with their beat positions
   if (soundNotes.length >= 4) {
     let dirChanges = 0;
-    let dirChangesOnDownbeat = 0;
+    let dirChangesOnStrong = 0;
     // Build beat positions for sound notes only
     const soundBeatPos: number[] = [];
     {
@@ -506,11 +506,11 @@ export function buildPhrase(
       const cur = absolutePitch(soundNotes[i].note) - absolutePitch(soundNotes[i - 1].note);
       if (prev !== 0 && cur !== 0 && ((prev > 0 && cur < 0) || (prev < 0 && cur > 0))) {
         dirChanges++;
-        if (isOnBeat(soundBeatPos[i])) dirChangesOnDownbeat++;
+        if (isOnStrongBeat(soundBeatPos[i])) dirChangesOnStrong++;
       }
     }
-    // Reject if >60% of direction changes land on downbeats (any beat head)
-    if (dirChanges >= 2 && dirChangesOnDownbeat / dirChanges > 0.6) return null;
+    // Reject if >60% of direction changes land on strong beats (beats 1, 3)
+    if (dirChanges >= 2 && dirChangesOnStrong / dirChanges > 0.6) return null;
   }
 
   // --- Annotate approach groups for approachCT / enclosure segments ---

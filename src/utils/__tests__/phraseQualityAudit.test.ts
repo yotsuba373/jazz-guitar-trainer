@@ -13,6 +13,7 @@ import { absolutePitch } from '../bebopScheduler';
 import type { PoolNote } from '../../types';
 import { RHYTHM_BEATS } from '../bebopScheduler';
 import { MODE_TO_BEBOP, getBebopScale, getBebopPassingTone } from '../../constants/bebopScales';
+import { PHRASE_TEMPLATES } from '../bebopTemplates';
 import type { PhraseConfig, RootName, GeneratedPhrase, Mode, FretMap, Position } from '../../types';
 
 // ===========================================================================
@@ -226,7 +227,7 @@ describe('§2 Bebop scale rules', () => {
     }
     // §2 HIGH ★★★★★: passing tone "必ず裏拍" — violation should be near-zero
     if (totalPassingInScaleRun > 0) {
-      expect(violations / totalPassingInScaleRun).toBeLessThanOrEqual(0.12);
+      expect(violations / totalPassingInScaleRun).toBeLessThanOrEqual(0.05);
     }
   });
 
@@ -246,25 +247,26 @@ describe('§2 Bebop scale rules', () => {
 
   it('2.3 HIGH: scale runs are predominantly descending', () => {
     const batch = generateBatch(PRIMARY_CONFIGS, 10);
-    // Filter for templates containing scale-down
-    const scaleDownPhrases = batch.filter(r =>
-      r.phrase.templateId?.includes('scale-down') || r.phrase.templateId === 'scale-down'
-    );
-    if (scaleDownPhrases.length < 5) return; // guard
-
+    // Only count pairs within scaleRun segments (not arpeggio/enclosure segments in same template)
     let descPairs = 0;
     let totalPairs = 0;
-    for (const { phrase } of scaleDownPhrases) {
-      // Find notes in scaleRun segments (segmentIdx where direction is desc)
+    for (const { phrase } of batch) {
+      const tmpl = PHRASE_TEMPLATES.find(t => t.id === phrase.templateId);
+      if (!tmpl) continue;
+      // Identify which segmentIdx values are scaleRun
+      const scaleRunIdxs = new Set(
+        tmpl.segments.map((s, i) => s.type === 'scaleRun' ? i : -1).filter(i => i >= 0)
+      );
       for (let i = 1; i < phrase.notes.length; i++) {
         if (phrase.notes[i].isRest || phrase.notes[i - 1].isRest) continue;
-        if (phrase.notes[i].segmentIdx === phrase.notes[i - 1].segmentIdx) {
-          const prev = absolutePitch(phrase.notes[i - 1]);
-          const cur = absolutePitch(phrase.notes[i]);
-          if (prev !== cur) {
-            totalPairs++;
-            if (cur < prev) descPairs++;
-          }
+        const si = phrase.notes[i].segmentIdx;
+        if (si === undefined || !scaleRunIdxs.has(si)) continue;
+        if (si !== phrase.notes[i - 1].segmentIdx) continue;
+        const prev = absolutePitch(phrase.notes[i - 1]);
+        const cur = absolutePitch(phrase.notes[i]);
+        if (prev !== cur) {
+          totalPairs++;
+          if (cur < prev) descPairs++;
         }
       }
     }
@@ -1216,14 +1218,14 @@ interface QualityTarget {
  * - threshold: test failure guard (lower bound for higherIsBetter, upper bound otherwise)
  */
 const QUALITY_TARGETS: QualityTarget[] = [
-  { id: '1.1', rule: '§1', priority: 'HIGH',   metric: 'CT on downbeats',           target: 0.528, threshold: 0.42, higherIsBetter: true },
+  { id: '1.1', rule: '§1', priority: 'HIGH',   metric: 'CT on downbeats',           target: 0.65,  threshold: 0.42, higherIsBetter: true },
   { id: '1.2', rule: '§1', priority: 'MEDIUM', metric: 'GT on strong beats (3-4b)', target: 0.60,  threshold: 0.55, higherIsBetter: true },
-  { id: '2.1', rule: '§2', priority: 'HIGH',   metric: 'Passing tone violation',     target: 0.0,   threshold: 0.12, higherIsBetter: false },
-  { id: '2.3', rule: '§2', priority: 'HIGH',   metric: 'Scale run desc pairs',       target: 0.75,  threshold: 0.55, higherIsBetter: true },
+  { id: '2.1', rule: '§2', priority: 'HIGH',   metric: 'Passing tone violation',     target: 0.0,   threshold: 0.05, higherIsBetter: false },
+  { id: '2.3', rule: '§2', priority: 'HIGH',   metric: 'Scale run desc pairs',       target: 0.70,  threshold: 0.55, higherIsBetter: true },
   { id: '5.1', rule: '§5', priority: 'HIGH',   metric: 'arp-up-scale-down share',    target: 0.20,  threshold: 0.12, higherIsBetter: true },
   { id: '6.1', rule: '§6', priority: 'HIGH',   metric: 'Upbeat start rate',          target: 0.70,  threshold: 0.50, higherIsBetter: true },
-  { id: '6.2', rule: '§6', priority: 'HIGH',   metric: 'CT ending rate',             target: 0.70,  threshold: 0.50, higherIsBetter: true },
-  { id: '9.1', rule: '§9', priority: 'MEDIUM', metric: 'Dir change off-beat',         target: 0.65,  threshold: 0.50, higherIsBetter: true },
+  { id: '6.2', rule: '§6', priority: 'HIGH',   metric: 'CT ending rate',             target: 0.65,  threshold: 0.50, higherIsBetter: true },
+  { id: '9.1', rule: '§9', priority: 'MEDIUM', metric: 'Dir change non-strong-beat',   target: 0.70,  threshold: 0.50, higherIsBetter: true },
   { id: '9.2', rule: '§9', priority: 'MEDIUM', metric: 'Gravity (high→desc)',        target: 0.60,  threshold: 0.50, higherIsBetter: true },
   { id: 'D.2', rule: 'Div', priority: 'MEDIUM', metric: 'Pitch uniqueness',          target: 0.80,  threshold: 0.40, higherIsBetter: true },
   { id: 'U.5', rule: 'Usb', priority: 'MEDIUM', metric: 'Fallback rate',             target: 0.05,  threshold: 0.20, higherIsBetter: false },
@@ -1271,18 +1273,22 @@ describe('Quality Gap Report', () => {
     }
     const passViolRate = passTotal > 0 ? passViolation / passTotal : 0;
 
-    // 2.3: Scale run descending pairs
-    const scaleDownPhrases = batch.filter(r =>
-      r.phrase.templateId?.includes('scale-down') || r.phrase.templateId === 'scale-down');
+    // 2.3: Scale run descending pairs (scaleRun segments only, across all templates)
     let descPairs = 0, totalPairs = 0;
-    for (const { phrase } of scaleDownPhrases) {
+    for (const { phrase } of batch) {
+      const tmpl = PHRASE_TEMPLATES.find(t => t.id === phrase.templateId);
+      if (!tmpl) continue;
+      const scaleRunIdxs = new Set(
+        tmpl.segments.map((s, i) => s.type === 'scaleRun' ? i : -1).filter(i => i >= 0)
+      );
       for (let i = 1; i < phrase.notes.length; i++) {
         if (phrase.notes[i].isRest || phrase.notes[i - 1].isRest) continue;
-        if (phrase.notes[i].segmentIdx === phrase.notes[i - 1].segmentIdx) {
-          const prev = absolutePitch(phrase.notes[i - 1]);
-          const cur = absolutePitch(phrase.notes[i]);
-          if (prev !== cur) { totalPairs++; if (cur < prev) descPairs++; }
-        }
+        const si = phrase.notes[i].segmentIdx;
+        if (si === undefined || !scaleRunIdxs.has(si)) continue;
+        if (si !== phrase.notes[i - 1].segmentIdx) continue;
+        const prev = absolutePitch(phrase.notes[i - 1]);
+        const cur = absolutePitch(phrase.notes[i]);
+        if (prev !== cur) { totalPairs++; if (cur < prev) descPairs++; }
       }
     }
     const scaleDescRate = totalPairs > 0 ? descPairs / totalPairs : 0;
