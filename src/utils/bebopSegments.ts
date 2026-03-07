@@ -54,7 +54,8 @@ function bestCandidate(
     const pitchDist = Math.abs(cPitch - refPitch);
     score += 50 - pitchDist * 3;
     const strDist = Math.abs(c.stringIdx - ref.stringIdx);
-    if (strDist <= 1) score += 40;
+    if (strDist === 0) score += 50;
+    else if (strDist === 1) score += 35;
     else if (strDist === 2) score += 20;
     else score -= 20;
     if (preferDir) {
