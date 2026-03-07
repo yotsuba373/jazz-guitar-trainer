@@ -414,11 +414,11 @@ Utils Layer (pure functions):
 │   ├── chordForms.ts             — findVoicingsInPosition(), VOICING_TEMPLATES(20)
 │   ├── phraseGenerator.ts        — generatePhraseLick(), リック検索型生成 (~490行)
 │   ├── bebopGenerator.ts         — generatePhraseRule(), ルールベース生成エントリ (~150行)
-│   ├── bebopScheduler.ts         — buildPhrase(), テンプレート実行エンジン (~130行)
+│   ├── bebopScheduler.ts         — buildPhrase(), assignRhythms(), テンプレート実行エンジン (~200行)
 │   ├── bebopSegments.ts          — セグメント関数9種 (Arp, ScaleRun, Enclosure, OctaveDisp等)
 │   ├── bebopTemplates.ts         — テンプレート定義11種 + 選択ロジック
 │   ├── phraseAnalysis.ts         — analyzePhrase(), computeSummary()
-│   └── __tests__/                — 752 テスト
+│   └── __tests__/                — 760 テスト
 ├── components/
 │   ├── Fretboard/                — SVG指板 (Fretboard, FretboardNote, GhostNote, PhrasePath)
 │   ├── Controls/                 — 全コントロールUI
@@ -547,7 +547,7 @@ degree ラベル、フレーバーテキストを持ちます。</p>
   <li><strong>ビバップスケール</strong> (<code>bebopScales.ts</code>): Dominant / Major / Dorian / Harmonic Minor の4種。モード→ビバップスケールマッピング。Diatonic 7 + Lydian Dom + Altered の9モード対応</li>
   <li><strong>セグメント関数</strong> (<code>bebopSegments.ts</code>): Arpeggio, ScaleRun (表拍GT優先), Enclosure (4タイプ+Delayed Resolution), 1-2-3-5, dim7From3rd, UpperStructure, ApproachCT (6タイプ+Musical Forces), Chromatic, OctaveDisp (Honeysuckle Rose) の9種。全て PoolNote[] → PoolNote[] で指板空間内動作。beatParity対応</li>
   <li><strong>テンプレート</strong> (<code>bebopTemplates.ts</code>): 11個のフレーズ構造テンプレート (Arp↑+Scale↓, Scale↓, Honeysuckle 等)。品質フィルタ・コンター親和 (+8)・重み付きランダム選択</li>
-  <li><strong>スケジューラー</strong> (<code>bebopScheduler.ts</code>): テンプレートの各セグメントを実行し、品質チェック (parity対応CT表拍配置率≥40%, 音域4-15半音, 跳躍≤9半音, CT終止試行±3半音, 方向転換拍裏チェック) を適用</li>
+  <li><strong>スケジューラー</strong> (<code>bebopScheduler.ts</code>): テンプレートの各セグメントを実行し、<code>assignRhythms()</code> でセグメントタイプ別に可変リズムを割当 (§10準拠: アルペジオ→3連符25%, エンクロージャー→16分35%, クロマチック→16分35%, スケールラン→8分固定, 最終CT→4分12%)、拍位置ベース品質チェック (CT表拍配置率≥40%, 音域4-15半音, 跳躍≤9半音, CT終止試行±3半音, 方向転換拍裏チェック) を適用</li>
   <li><strong>Musical Forces</strong> (§9 Steve Larson): bestCandidate() に重力 (+5/-3)・磁力 (+5)・慣性 (+3) のスコアリングを加算</li>
   <li><strong>エントリポイント</strong> (<code>bebopGenerator.ts</code>): generatePhraseRule() — buildNotePool → コンター選択 (重み付き: arch33/desc28/wave18/rev-arch13/asc8) → beatOffset選択 (70%裏拍) → GT優先開始音 → スケジューラー実行 → 3リトライ → フォールバック</li>
 </ul>
