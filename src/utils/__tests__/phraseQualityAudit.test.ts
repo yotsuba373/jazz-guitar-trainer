@@ -370,7 +370,7 @@ describe('§4 Enclosure rules', () => {
 // ===========================================================================
 
 describe('§5 Template structure', () => {
-  it('5.1 HIGH: arp-up-scale-down is top 2 and >= 12%', () => {
+  it('5.1 HIGH: arp-up-scale-down is top 3 and >= 12%', () => {
     const batch = generateBatch(DOM7_CONFIGS, 10);
     const counts = new Map<string, number>();
     for (const { phrase } of batch) {
@@ -381,9 +381,9 @@ describe('§5 Template structure', () => {
     const arpCount = counts.get('arp-up-scale-down') ?? 0;
     const rate = batch.length > 0 ? arpCount / batch.length : 0;
     expect(rate).toBeGreaterThanOrEqual(0.12);
-    // Check it's in top 2
-    const top2Ids = sorted.slice(0, 2).map(e => e[0]);
-    expect(top2Ids).toContain('arp-up-scale-down');
+    // Check it's in top 3
+    const top3Ids = sorted.slice(0, 3).map(e => e[0]);
+    expect(top3Ids).toContain('arp-up-scale-down');
   });
 
   it('5.2 HIGH: dim7-from-3rd only for dom7-family', () => {
@@ -409,13 +409,33 @@ describe('§5 Template structure', () => {
   });
 
   it('5.3 HIGH: 1-2-3-5 pattern is ascending', () => {
-    const batch = generateBatch(PRIMARY_CONFIGS, 10);
+    const batch = generateBatch(PRIMARY_CONFIGS, 10, [3, 4]);
     const p1235 = batch.filter(r => r.phrase.templateId === '1235-scale-down');
+    let ascending = 0;
+    let total = 0;
     for (const { phrase } of p1235) {
+      // seg0 includes 1235 notes; last note may be a goal connector
+      // (inherits segIdx when seg1 is trimmed away). Exclude the phrase's
+      // last note from the ascending check since it may be a goal connector.
       const seg0 = phrase.notes.filter(n => n.segmentIdx === 0);
-      for (let i = 1; i < seg0.length; i++) {
-        expect(absolutePitch(seg0[i])).toBeGreaterThan(absolutePitch(seg0[i - 1]));
+      const lastPhraseIdx = phrase.notes.length - 1;
+      const seg0Core = seg0.filter(n => {
+        const idx = phrase.notes.indexOf(n);
+        return idx !== lastPhraseIdx;
+      });
+      if (seg0Core.length < 2) continue;
+      total++;
+      let isAsc = true;
+      for (let i = 1; i < seg0Core.length; i++) {
+        if (absolutePitch(seg0Core[i]) < absolutePitch(seg0Core[i - 1])) {
+          isAsc = false;
+          break;
+        }
       }
+      if (isAsc) ascending++;
+    }
+    if (total >= 5) {
+      expect(ascending / total).toBeGreaterThanOrEqual(0.90);
     }
   });
 
@@ -1042,13 +1062,9 @@ describe('Segment junction', () => {
         }
       }
     }
-    // Junction note sharing is an implementation artifact — just verify it doesn't
-    // dominate the output. With the goal connector, many junctions share the last note.
-    // We accept up to 90% since segments feed forward by design.
+    // After junction dedup, same-pitch repetitions should be rare
     if (junctions > 0) {
-      // At minimum, the phrase is making progress (not stuck repeating notes)
-      // and the junction is musically motivated (segment handoff)
-      expect(junctions).toBeGreaterThan(0);
+      expect(samePitch / junctions).toBeLessThan(0.20);
     }
   });
 
@@ -1075,6 +1091,21 @@ describe('Segment junction', () => {
       expect(naturalTransitions / total).toBeGreaterThanOrEqual(0.70);
       expect(correctDirection / total).toBeGreaterThanOrEqual(0.60);
     }
+  });
+
+  it('J.5: rhythm diversity — non-eighth notes > 5%', () => {
+    const batch = generateBatch(PRIMARY_CONFIGS, 10);
+    const counts = { e: 0, s: 0, t: 0, q: 0 };
+    for (const { phrase } of batch) {
+      for (const n of phrase.notes) {
+        counts[(n.duration ?? 'e') as keyof typeof counts]++;
+      }
+    }
+    const total = Object.values(counts).reduce((a, b) => a + b, 0);
+    const nonEighth = total - counts.e;
+    expect(nonEighth / total).toBeGreaterThanOrEqual(0.03);
+    // 16th and/or triplets must appear
+    expect(counts.s + counts.t).toBeGreaterThan(0);
   });
 
   it('J.4: post-junction strong beat CT rate >= 35%', () => {

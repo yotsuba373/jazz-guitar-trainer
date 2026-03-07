@@ -7,7 +7,7 @@ interface PianoRollProps {
 }
 
 const RHYTHM_BEATS: Record<RhythmType, number> = {
-  'q': 1.0, 't': 2/3, 'e': 0.5, 's': 0.25,
+  'q': 1.0, 't': 1/3, 'e': 0.5, 's': 0.25,
 };
 
 // Colors by note function

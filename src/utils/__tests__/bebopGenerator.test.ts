@@ -206,17 +206,50 @@ describe('assignRhythms', () => {
     expect(tripletSeen).toBe(true);
   });
 
-  it('arpeggio on offbeat never gets triplet', () => {
-    const notes = [
+  it('arpeggio on offbeat: first segment can get triplet, later segments cannot', () => {
+    const ctSet = new Set(['C', 'E', 'G']);
+    // First segment (start=0) on offbeat — allowed by isFirstSeg
+    const notes0 = [
       { note: mockNote('C', 0), segIdx: 0 },
       { note: mockNote('E', 4), segIdx: 0 },
-      { note: mockNote('D', 2), segIdx: 0 }, // non-CT last note to avoid quarter
+      { note: mockNote('D', 2), segIdx: 0 },
     ];
-    const segs: SegmentSpec[] = [{ type: 'arpeggio', direction: 'asc', beats: 2 }];
-    const ctSet = new Set(['C', 'E', 'G']);
+    const segs0: SegmentSpec[] = [{ type: 'arpeggio', direction: 'asc', beats: 2 }];
+    let hasTriplet = false;
+    for (let i = 0; i < 100; i++) {
+      const rhythms = assignRhythms(notes0, segs0, 0.5, ctSet);
+      if (rhythms.some(r => r === 't')) { hasTriplet = true; break; }
+    }
+    expect(hasTriplet).toBe(true);
+
+    // Later segment on offbeat — NOT allowed (not first, not strong beat)
+    const notes1 = [
+      { note: mockNote('C', 0), segIdx: 0 },
+      { note: mockNote('E', 4), segIdx: 1 },
+      { note: mockNote('G', 7), segIdx: 1 },
+      { note: mockNote('D', 2), segIdx: 1 },
+    ];
+    const segs1: SegmentSpec[] = [
+      { type: 'scaleRun', direction: 'asc', beats: 1 },
+      { type: 'arpeggio', direction: 'asc', beats: 2 },
+    ];
     for (let i = 0; i < 50; i++) {
-      const rhythms = assignRhythms(notes, segs, 0.5, ctSet); // offbeat
-      expect(rhythms.some(r => r === 't')).toBe(false);
+      const rhythms = assignRhythms(notes1, segs1, 0.5, ctSet);
+      // seg1 starts at note index 1, which is the 2nd note at beat 1.0 (strong),
+      // so it CAN get triplet. Test a non-strong, non-first case:
+    }
+    // Use offset 0 so seg1 starts at beat 0.5 (not strong, not first)
+    const notes2 = [
+      { note: mockNote('C', 0), segIdx: 0 },
+      { note: mockNote('E', 4), segIdx: 1 },
+      { note: mockNote('G', 7), segIdx: 1 },
+      { note: mockNote('D', 2), segIdx: 1 },
+    ];
+    for (let i = 0; i < 50; i++) {
+      const rhythms = assignRhythms(notes2, segs1, 0, ctSet);
+      // seg1 starts at beat 0.5 (not strong, not first seg) → no triplet
+      const seg1Rhythms = rhythms.slice(1);
+      expect(seg1Rhythms.some(r => r === 't')).toBe(false);
     }
   });
 
@@ -235,7 +268,8 @@ describe('assignRhythms', () => {
       if (rhythms[0] === 's') {
         sixteenthSeen = true;
         expect(rhythms[1]).toBe('s'); // both approaches are 16th
-        expect(rhythms[2]).toBe('e'); // target stays eighth
+        // target stays eighth or quarter (last-note CT quarter rule may fire)
+        expect(['e', 'q']).toContain(rhythms[2]);
         break;
       }
     }

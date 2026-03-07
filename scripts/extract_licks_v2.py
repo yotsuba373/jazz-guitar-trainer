@@ -91,7 +91,7 @@ def quantise_rhythm(quarter_length: float) -> str:
     return 's'
 
 def rhythm_beats(r: str) -> float:
-    return {'q': 1.0, 't': 2/3, 'e': 0.5, 's': 0.25}[r]
+    return {'q': 1.0, 't': 1/3, 'e': 0.5, 's': 0.25}[r]
 
 # ---------------------------------------------------------------------------
 # Chord quality classification (reused from v1)
