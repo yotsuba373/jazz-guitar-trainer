@@ -25,7 +25,9 @@
 ### 補足: Beat 1, 3 にはガイドトーン優先 (★★★★)
 
 Beat 1, 3 には 3rd / 7th (ガイドトーン) を優先配置。Root, 5th は Beat 2, 4 でも可。
-- **出典**: Hal Galper "Forward Motion", David Baker, 複数の教育者
+- **出典**: 複数の教育者のコンセンサス (David Baker, Jens Larsen 等)
+- Hal Galper は「CTを strong beats に配置」と述べているが、GT の拍位置を明示的に指定はしていない
+- Galper の "Inner Guide Tone Melodies" は voice leading の概念であり、拍配置ルールとは別
 
 ### 裏付け
 - David Baker "How to Play Bebop" — 事実上すべてのビバップ教材の基礎 (★★★★★)
@@ -38,6 +40,14 @@ Beat 1, 3 には 3rd / 7th (ガイドトーン) を優先配置。Root, 5th は 
 - CT on-beat率: 全体 26.9%, Omnibook 32.0% (+3.4pt差)
 - 微差だが一貫して CT > non-CT の傾向は存在
 - **注**: リックライブラリの統計で微差なのは、抽出リックが「設計されたフレーズ」ではなく「ソロの切り出し断片」だから。教育者のコンセンサスルールはより明確。
+
+### 用語注記: 「表拍」と「強拍」
+本ドキュメントでは以下の区別を用いる:
+- **表拍 (on-beat/downbeat)**: 各拍の頭 (beat 1, 2, 3, 4) — §1 CT配置、§2 パッシングトーンの文脈
+- **強拍 (strong beat)**: Beat 1 と 3 — §1 GT優先、§9 方向転換の文脈
+- **裏拍 (off-beat/upbeat)**: 各拍の裏 (1&, 2&, 3&, 4&) — §6 開始拍の文脈
+- David Baker / Barry Harris は「strong beats = 全ダウンビート (1,2,3,4)」の意味で使うことがある
+- Hal Galper は「strong beats = Beat 1, 3」の意味で使う
 
 ---
 
@@ -66,10 +76,14 @@ Beat 1, 3 には 3rd / 7th (ガイドトーン) を優先配置。Root, 5th は 
 - **C Major 6th Dim**: C(I6) + D(iidim7) = C D E F G G# A B
 - 表拍 = トニック (I) 機能、裏拍 = ドミナント (V) 機能
 
-**Barry Harris Half-Step Rules** (開始音別の半音挿入位置):
-- Dominant 7: R/3rd/5th 開始 → nat7 と b2 を追加。2nd/4th/6th/b7th 開始 → b2 と nat7 を追加
-- Major: R/3rd/5th/6th 開始 → b6 と b2 を追加
-- **出典**: Barry Harris ワークショップ, Fertile Minds Jazz Academy
+**Barry Harris Half-Step Rules** (下行ライン用の半音挿入):
+ビバップスケールをそのまま使わず、開始音に応じて半音を挿入し、
+CTが全てのダウンビート (1,2,3,4) に着地するよう調整するシステム。
+
+- **CT開始 (R/3rd/5th/b7)**: Choice 1 = 1つの半音追加、Choice 2 = 3つの半音追加
+- **非CT開始 (2nd/4th/6th)**: Choice 1 = 半音なし (素のスケール)、Choice 2 = 2つの半音追加
+- 半音の具体的な挿入位置はコード品質 (Dominant/Major/Minor) と開始音で決まる
+- **出典**: Barry Harris ワークショップ, Fertile Minds Jazz Academy, Notes on the Method of Barry Harris
 
 ### 裏付け
 - David Baker "How to Play Bebop" Vol.1: ビバップスケール体系化の元祖
@@ -93,8 +107,13 @@ Beat 1, 3 には 3rd / 7th (ガイドトーン) を優先配置。Root, 5th は 
 | **Diatonic (上/下)** | スケール隣接音→ターゲット | D→E or F→E | 単体では低 |
 
 ### 方向による音響差 (Anton Schwartz)
-- **下からChromatic**: 和声に溶け込む、目立たない → 安全に使える
-- **上からChromatic**: 聴衆の注意を引く、頂点音として認識される → 慎重に管理
+Schwartz のキー概念: **ピーク音 (周囲より高い音) は聴衆の注意を強く引く**。
+- **下からChromatic**: "casual and colloquial" — 目立たない、安全に使える
+- **上からChromatic**: conspicuous (目立つ) — ピーク音として追加の和声が推論される → 慎重に管理
+- **上からDiatonic**: chromatic より自然で "more useful" — 上からの場合のデフォルト選択
+- **下からDiatonic**: "stiff and less idiomatic" — ジャズ的でない響き
+- **要約**: 下からは chromatic が安全、上からは diatonic が安全 (ただし上からの chromatic も意図的に使用可)
+- **出典**: Anton Schwartz "Approaches and Enclosures" (antonjazz.com)
 
 ### コンビネーション (Parker最頻出)
 1. **Chromatic下 → Double Chromatic上**: 最頻出
@@ -206,8 +225,10 @@ Beat 1, 3 には 3rd / 7th (ガイドトーン) を優先配置。Root, 5th は 
 - **出典**: Thomas Owens (Parker分析), Hal Galper, JazzAdvice
 
 **Hal Galper "Forward Motion" の原則** (★★★★):
-- ラインはテンション拍 (beat 2裏, 4裏) で開始すべき
-- **Beat 1 はフレーズの終点** (究極の解決拍) — ここから始めると前進運動が止まる
+- ラインはテンション拍 (beat 2裏, 4裏 等) で開始すべき
+- **Beat 1 と Beat 3 は resolution points** (到着点・終点) — ここから始めると前進運動が止まる
+- Beat 1 は "the strongest beat of the bar and the ultimate resolution beat"
+- **出典**: Hal Galper "Forward Motion", halgalper.com
 
 **開始音**: CT (特にR, 3rd, 5th) またはその半音上/下
 - Parker統計: b7開始が15.3% (Omnibook)
@@ -303,10 +324,11 @@ Beat 1, 3 には 3rd / 7th (ガイドトーン) を優先配置。Root, 5th は 
 | **磁力 (Magnetism)** | 不安定音は最近接安定音 (CT) へ引かれる。近いほど強い | 非CTの次のノートはCT方向にバイアス |
 | **慣性 (Inertia)** | パターンは一度始まると方向を維持する傾向 | 同方向継続に軽いボーナス |
 
-**方向転換は裏拍で** (Barry Harris, ★★★):
-- メロディの方向転換は裏拍 (各拍のウラ = off-beat) で行う
-- 表拍 (beat 1, 2, 3, 4 の頭) での方向転換は予測可能で退屈
-- **出典**: Jens Larsen (Barry Harris アプローチとして)
+**方向転換は強拍を避ける** (Barry Harris, ★★★):
+- メロディの方向転換を beat 1, 3 (強拍) に集中させない
+- 理想的な方向転換位置は 2& や 4& (弱拍の裏)
+- 禁止ルールではなく「変化を持たせろ」というニュアンス
+- **出典**: Jens Larsen "you don't change direction on beats 1 and 3 all the time"
 
 ### インターバルバイグラム — 実データ上位10
 
@@ -413,7 +435,7 @@ Parker は元曲の声部進行構造を抽出し即興的に再実現。
 3. 音域 (5-14半音) の確認
 4. 連続音間の跳躍制限 (9半音以内)
 5. CT終止の確認
-6. 方向転換が裏拍で起きているか
+6. 方向転換が強拍 (beat 1, 3) に集中していないか
 
 ---
 
@@ -438,7 +460,7 @@ Parker は元曲の声部進行構造を抽出し即興的に再実現。
 
 | ルール | セクション | 実装方法 |
 |--------|----------|---------|
-| 方向転換は裏拍で | §9 | 方向変更のスケジューリング制約 |
+| 方向転換は強拍を避ける | §9 | 強拍 (beat 1, 3) に集中させない |
 | 下=chromatic, 上=diatonic | §3 | 方向別アプローチタイプ選択 |
 | Beat 1,3 にガイドトーン | §1 | 強拍 (Beat 1, 3) にガイドトーン優先 |
 | 上部構造アルペジオ | §5 | 3rdからのm7/maj7 arp |
