@@ -2,7 +2,9 @@ import { describe, it, expect } from 'vitest';
 import { generatePhraseRule } from '../bebopGenerator';
 import { buildFretMap, generatePositions, resolveMode } from '../../utils';
 import { MODE_TEMPLATES } from '../../constants';
-import { absolutePitch } from '../phraseGenerator';
+import { absolutePitch, type PoolNote } from '../phraseGenerator';
+import { assignRhythms, RHYTHM_BEATS } from '../bebopScheduler';
+import type { SegmentSpec } from '../bebopTemplates';
 import type { PhraseConfig, RootName } from '../../types';
 
 function generate(rootName: RootName, modeKey: string, beatCount: 2 | 3 | 4 = 4) {
@@ -121,6 +123,152 @@ describe('generatePhraseRule', () => {
         if (phrase) { success = true; break; }
       }
       expect(success).toBe(true);
+    }
+  });
+
+  it('generates phrases with variable rhythms', () => {
+    // Run many times — at least some should have non-eighth rhythms
+    // Probability per phrase is low (segment-type dependent × random chance),
+    // so we need many runs across different modes/configs
+    const durations = new Set<string>();
+    const modes = ['mixolydian', 'ionian', 'dorian'];
+    for (const modeKey of modes) {
+      for (let i = 0; i < 100; i++) {
+        const { phrase } = generate('C', modeKey);
+        if (!phrase) continue;
+        for (const n of phrase.notes) durations.add(n.duration);
+        if (durations.size > 1) break;
+      }
+      if (durations.size > 1) break;
+    }
+    // At minimum 'e' (eighth) should always appear
+    expect(durations.has('e')).toBe(true);
+    // With 300 runs across modes, should see at least one non-eighth
+    expect(durations.size).toBeGreaterThan(1);
+  });
+
+  it('beatStart accumulates correctly with variable rhythms', () => {
+    for (let i = 0; i < 20; i++) {
+      const { phrase } = generate('C', 'mixolydian');
+      if (!phrase) continue;
+      // Verify each note's beatStart matches cumulative sum of prior durations
+      let expected = phrase.notes[0].beatStart;
+      for (let j = 0; j < phrase.notes.length; j++) {
+        expect(Math.abs(phrase.notes[j].beatStart - expected)).toBeLessThan(0.01);
+        expected += RHYTHM_BEATS[phrase.notes[j].duration];
+      }
+    }
+  });
+});
+
+describe('assignRhythms', () => {
+  // Helper: create a mock pool note
+  function mockNote(name: string, semi: number, fret = 5, str = 2): PoolNote {
+    return { noteName: name, semitone: semi, fret, stringIdx: str, isApproach: false };
+  }
+
+  it('scaleRun always gets eighth notes', () => {
+    const notes = [
+      { note: mockNote('C', 0), segIdx: 0 },
+      { note: mockNote('D', 2), segIdx: 0 },
+      { note: mockNote('E', 4), segIdx: 0 },
+      { note: mockNote('F', 5), segIdx: 0 },
+    ];
+    const segs: SegmentSpec[] = [{ type: 'scaleRun', direction: 'desc', beats: 0 }];
+    const ctSet = new Set(['C', 'E', 'G']);
+    // Run many times — should always be 'e'
+    for (let i = 0; i < 20; i++) {
+      const rhythms = assignRhythms(notes, segs, 0, ctSet);
+      expect(rhythms.every(r => r === 'e')).toBe(true);
+    }
+  });
+
+  it('arpeggio on downbeat can get triplet rhythm', () => {
+    const notes = [
+      { note: mockNote('C', 0), segIdx: 0 },
+      { note: mockNote('E', 4), segIdx: 0 },
+      { note: mockNote('G', 7), segIdx: 0 },
+      { note: mockNote('B', 11), segIdx: 0 },
+    ];
+    const segs: SegmentSpec[] = [{ type: 'arpeggio', direction: 'asc', beats: 2 }];
+    const ctSet = new Set(['C', 'E', 'G', 'B']);
+    // Run enough times to hit the 25% chance
+    let tripletSeen = false;
+    for (let i = 0; i < 100; i++) {
+      const rhythms = assignRhythms(notes, segs, 0, ctSet); // beatOffset=0 → downbeat
+      if (rhythms[0] === 't') {
+        tripletSeen = true;
+        expect(rhythms[1]).toBe('t');
+        expect(rhythms[2]).toBe('t');
+        break;
+      }
+    }
+    expect(tripletSeen).toBe(true);
+  });
+
+  it('arpeggio on offbeat never gets triplet', () => {
+    const notes = [
+      { note: mockNote('C', 0), segIdx: 0 },
+      { note: mockNote('E', 4), segIdx: 0 },
+      { note: mockNote('D', 2), segIdx: 0 }, // non-CT last note to avoid quarter
+    ];
+    const segs: SegmentSpec[] = [{ type: 'arpeggio', direction: 'asc', beats: 2 }];
+    const ctSet = new Set(['C', 'E', 'G']);
+    for (let i = 0; i < 50; i++) {
+      const rhythms = assignRhythms(notes, segs, 0.5, ctSet); // offbeat
+      expect(rhythms.some(r => r === 't')).toBe(false);
+    }
+  });
+
+  it('enclosure can get 16th note approaches when target lands on strong beat', () => {
+    // 3-note enclosure at beatOffset=0.5: approach at 0.5, 0.75 → target at 1.0 (strong!)
+    const notes = [
+      { note: mockNote('D', 2, 5, 2), segIdx: 0 }, // approach
+      { note: mockNote('Db', 1, 4, 2), segIdx: 0 }, // approach
+      { note: mockNote('C', 0, 3, 2), segIdx: 0 },  // target CT
+    ];
+    const segs: SegmentSpec[] = [{ type: 'enclosure', direction: 'desc', beats: 2 }];
+    const ctSet = new Set(['C', 'E', 'G']);
+    let sixteenthSeen = false;
+    for (let i = 0; i < 200; i++) {
+      const rhythms = assignRhythms(notes, segs, 0.5, ctSet);
+      if (rhythms[0] === 's') {
+        sixteenthSeen = true;
+        expect(rhythms[1]).toBe('s'); // both approaches are 16th
+        expect(rhythms[2]).toBe('e'); // target stays eighth
+        break;
+      }
+    }
+    expect(sixteenthSeen).toBe(true);
+  });
+
+  it('last note CT can get quarter note', () => {
+    const notes = [
+      { note: mockNote('D', 2), segIdx: 0 },
+      { note: mockNote('E', 4), segIdx: 0 },
+      { note: mockNote('C', 0), segIdx: 0 }, // last, CT
+    ];
+    const segs: SegmentSpec[] = [{ type: 'scaleRun', direction: 'desc', beats: 0 }];
+    const ctSet = new Set(['C', 'E', 'G']);
+    let quarterSeen = false;
+    for (let i = 0; i < 200; i++) {
+      const rhythms = assignRhythms(notes, segs, 0, ctSet);
+      if (rhythms[2] === 'q') { quarterSeen = true; break; }
+    }
+    expect(quarterSeen).toBe(true);
+  });
+
+  it('last note non-CT never gets quarter note', () => {
+    const notes = [
+      { note: mockNote('C', 0), segIdx: 0 },
+      { note: mockNote('E', 4), segIdx: 0 },
+      { note: mockNote('D', 2), segIdx: 0 }, // last, NOT CT
+    ];
+    const segs: SegmentSpec[] = [{ type: 'scaleRun', direction: 'desc', beats: 0 }];
+    const ctSet = new Set(['C', 'E', 'G']);
+    for (let i = 0; i < 50; i++) {
+      const rhythms = assignRhythms(notes, segs, 0, ctSet);
+      expect(rhythms[2]).not.toBe('q');
     }
   });
 });
