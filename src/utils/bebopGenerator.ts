@@ -133,9 +133,19 @@ export function generatePhraseRule(
   // 9. Final fallback: simple descending scale run
   const fallbackNotes = SEGMENT_FNS.scaleRun(activePool, mode, startNote, 'desc', totalEighths);
   if (fallbackNotes && fallbackNotes.length >= 3) {
+    // Trim to range <= 15 semitones
+    let fbSlice = fallbackNotes.slice(0, totalEighths);
+    while (fbSlice.length > 3) {
+      const ps = fbSlice.map(n => absolutePitch(n));
+      if (Math.max(...ps) - Math.min(...ps) <= 15) break;
+      // Remove last note (widest end of descending run)
+      fbSlice = fbSlice.slice(0, -1);
+    }
+    if (fbSlice.length < 3) return null;
+
     const ctSetLocal = new Set(mode.chordTones);
     let accBeat = beatOffset;
-    const pNotes = fallbackNotes.slice(0, totalEighths).map((n): import('../types').PhraseNote => {
+    const pNotes = fbSlice.map((n): import('../types').PhraseNote => {
       const beatPos = Math.min(Math.floor(accBeat * 2) + 1, 8);
       const isStrong = Math.abs(accBeat - Math.round(accBeat)) < 0.05;
       const pn: import('../types').PhraseNote = {

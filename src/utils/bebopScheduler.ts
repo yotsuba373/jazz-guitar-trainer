@@ -10,7 +10,7 @@ import { allocateEighths } from './bebopTemplates';
 // ---------------------------------------------------------------------------
 
 export const RHYTHM_BEATS: Record<RhythmType, number> = {
-  'q': 1.0, 't': 2/3, 'e': 0.5, 's': 0.25,
+  'q': 1.0, 't': 1/3, 'e': 0.5, 's': 0.25,
 };
 
 // ---------------------------------------------------------------------------
@@ -65,30 +65,28 @@ export function assignRhythms(
     const segBeat = segStartBeats[g];
 
     if (type === 'arpeggio') {
-      // §10: triplet for CT arpeggio — 25% chance, only if downbeat start & ≥3 notes
-      if (count >= 3 && isOnStrongBeat(segBeat) && Math.random() < 0.25) {
+      // §10: triplet for CT arpeggio — 25% chance
+      // Allow first segment even on off-beat (pickup triplets are idiomatic in bebop)
+      const isFirstSeg = (start === 0);
+      if (count >= 3 && (isOnStrongBeat(segBeat) || isFirstSeg) && Math.random() < 0.25) {
         // Apply triplet to first 3 notes only
         for (let j = 0; j < 3 && start + j < end; j++) {
           rhythms[start + j] = 't';
         }
       }
     } else if (type === 'enclosure') {
-      // §10: 16th notes for approach notes — 35% chance
-      // §4: target CT must land on strong beat
-      if (count >= 2 && Math.random() < 0.35) {
+      // §10: 16th notes for approach notes — 35% chance, ≥3 notes
+      // segEnclosure already controls parity for CT target placement
+      if (count >= 3 && Math.random() < 0.35) {
         const numApproach = count - 1; // last note is target
-        // Calculate where target would land with 16th approaches
-        const targetBeat = segBeat + numApproach * 0.25;
-        if (isOnStrongBeat(targetBeat)) {
-          for (let j = 0; j < numApproach; j++) {
-            rhythms[start + j] = 's';
-          }
-          // Target note stays 'e'
+        for (let j = 0; j < numApproach; j++) {
+          rhythms[start + j] = 's';
         }
+        // Target note stays 'e'
       }
     } else if (type === 'chromatic') {
-      // §10: 16th notes for chromatic runs — 35% chance, ≥3 notes, max 6
-      if (count >= 3 && Math.random() < 0.35) {
+      // §10: 16th notes for chromatic runs — 40% chance, ≥2 notes, max 6
+      if (count >= 2 && Math.random() < 0.40) {
         const limit = Math.min(count, 6);
         for (let j = 0; j < limit; j++) {
           rhythms[start + j] = 's';
@@ -99,7 +97,7 @@ export function assignRhythms(
   }
 
   // Last note → quarter (12% chance, CT only) for landing feel
-  if (notes.length > 0 && ctSet.has(notes[notes.length - 1].note.noteName) && Math.random() < 0.12) {
+  if (notes.length > 0 && ctSet.has(notes[notes.length - 1].note.noteName) && Math.random() < 0.18) {
     rhythms[notes.length - 1] = 'q';
   }
 
@@ -179,7 +177,19 @@ export function buildPhrase(
       }
     }
 
-    for (const n of segNotes) allNotes.push({ note: n, segIdx: si });
+    // Deduplicate junction: skip first note if identical to previous segment's last
+    let skipFirst = false;
+    if (allNotes.length > 0 && segNotes.length > 1) {
+      const prev = allNotes[allNotes.length - 1].note;
+      const first = segNotes[0];
+      if (absolutePitch(first) === absolutePitch(prev) &&
+          first.stringIdx === prev.stringIdx) {
+        skipFirst = true;
+      }
+    }
+    for (let ni = skipFirst ? 1 : 0; ni < segNotes.length; ni++) {
+      allNotes.push({ note: segNotes[ni], segIdx: si });
+    }
     current = segNotes[segNotes.length - 1];
   }
 
@@ -211,6 +221,37 @@ export function buildPhrase(
   if (trimmed.length < 3) return null;
 
   // --- Quality checks (beat-position based) ---
+
+  // §2: Bebop passing tone must not land on strong beats — fix by swapping
+  if (bebopPassing !== null) {
+    let bp = beatOffset;
+    for (let i = 0; i < trimmed.length; i++) {
+      if (isOnStrongBeat(bp) && trimmed[i].note.semitone === bebopPassing && !ctSet.has(trimmed[i].note.noteName)) {
+        // Swap to nearest non-passing scale tone
+        const cur = trimmed[i].note;
+        const curPitch = absolutePitch(cur);
+        const scaleSemis = new Set(mode.semi);
+        let bestSwap: PoolNote | null = null;
+        let bestDist = Infinity;
+        for (const n of pool) {
+          if (n.isApproach) continue;
+          if (n.semitone === bebopPassing) continue;
+          if (!scaleSemis.has(n.semitone) && !ctSet.has(n.noteName)) continue;
+          const pd = Math.abs(absolutePitch(n) - curPitch);
+          const sd = Math.abs(n.stringIdx - cur.stringIdx);
+          if (pd <= 2 && sd <= 1 && pd < bestDist) {
+            bestDist = pd;
+            bestSwap = n;
+          }
+        }
+        if (bestSwap) {
+          trimmed[i] = { note: bestSwap, segIdx: trimmed[i].segIdx };
+        }
+      }
+      bp += RHYTHM_BEATS[trimmedRhythms[i]];
+    }
+  }
+
   // CT on strong beats check
   let strongCount = 0;
   let strongCTCount = 0;
@@ -228,19 +269,62 @@ export function buildPhrase(
   }
   if (strongCount > 0 && strongCTCount / strongCount < 0.4) return null;
 
-  // GT (3rd/7th) on strong beats — soft check (§1 supplement)
-  if (strongCount >= 3) {
-    const gtNames = new Set<string>();
-    if (mode.chordTones.length >= 2) gtNames.add(mode.chordTones[1]); // 3rd
-    if (mode.chordTones.length >= 4) gtNames.add(mode.chordTones[3]); // 7th
-    let strongGTCount = 0;
-    {
-      let bp = beatOffset;
+  // GT (3rd/7th) on strong beats — promote then gate (§1 supplement)
+  // WJD data shows GT on ~31% of strong beats.
+  const gtNames = new Set<string>();
+  if (mode.chordTones.length >= 2) gtNames.add(mode.chordTones[1]); // 3rd
+  if (mode.chordTones.length >= 4) gtNames.add(mode.chordTones[3]); // 7th
+
+  // Promotion pass: try to swap non-GT CTs on strong beats to nearby GTs
+  if (gtNames.size > 0) {
+    let bp = beatOffset;
+    let strongGTFound = false;
+    for (let i = 0; i < trimmed.length; i++) {
+      if (isOnStrongBeat(bp) && gtNames.has(trimmed[i].note.noteName)) {
+        strongGTFound = true;
+      }
+      bp += RHYTHM_BEATS[trimmedRhythms[i]];
+    }
+    if (!strongGTFound) {
+      // Try swapping one non-GT CT on a strong beat to a nearby GT
+      bp = beatOffset;
       for (let i = 0; i < trimmed.length; i++) {
-        if (isOnStrongBeat(bp) && gtNames.has(trimmed[i].note.noteName)) {
-          strongGTCount++;
+        if (isOnStrongBeat(bp) && ctSet.has(trimmed[i].note.noteName) && !gtNames.has(trimmed[i].note.noteName)) {
+          const cur = trimmed[i].note;
+          const curPitch = absolutePitch(cur);
+          let bestGT: PoolNote | null = null;
+          let bestDist = Infinity;
+          for (const n of pool) {
+            if (!gtNames.has(n.noteName)) continue;
+            // §2: never place bebop passing tone on strong beat
+            if (bebopPassing !== null && n.semitone === bebopPassing) continue;
+            const pd = Math.abs(absolutePitch(n) - curPitch);
+            const sd = Math.abs(n.stringIdx - cur.stringIdx);
+            if (pd <= 3 && sd <= 1 && pd < bestDist) {
+              bestDist = pd;
+              bestGT = n;
+            }
+          }
+          if (bestGT) {
+            trimmed[i] = { note: bestGT, segIdx: trimmed[i].segIdx };
+            break; // one swap is enough
+          }
         }
         bp += RHYTHM_BEATS[trimmedRhythms[i]];
+      }
+    }
+  }
+
+  // Gate: reject if ≥3 strong beats but no GT on any of them
+  if (strongCount >= 3) {
+    let strongGTCount = 0;
+    {
+      let bp2 = beatOffset;
+      for (let i = 0; i < trimmed.length; i++) {
+        if (isOnStrongBeat(bp2) && gtNames.has(trimmed[i].note.noteName)) {
+          strongGTCount++;
+        }
+        bp2 += RHYTHM_BEATS[trimmedRhythms[i]];
       }
     }
     if (strongGTCount === 0) return null;
@@ -250,13 +334,21 @@ export function buildPhrase(
   const lastEntry = trimmed[trimmed.length - 1];
   if (!ctSet.has(lastEntry.note.noteName)) {
     const lastPitch = absolutePitch(lastEntry.note);
+    // Compute other notes' pitch bounds (excluding last) to constrain swap
+    const otherPitches = trimmed.slice(0, -1).map(e => absolutePitch(e.note));
+    const otherMin = Math.min(...otherPitches);
+    const otherMax = Math.max(...otherPitches);
     let bestCt: PoolNote | null = null;
     let bestDist = Infinity;
     for (const n of pool) {
       if (!ctSet.has(n.noteName)) continue;
       const pd = Math.abs(absolutePitch(n) - lastPitch);
       const sd = Math.abs(n.stringIdx - lastEntry.note.stringIdx);
-      if (pd <= 3 && sd <= 1 && pd < bestDist) {
+      // Ensure swap keeps range within 4-15
+      const np = absolutePitch(n);
+      const newMin = Math.min(otherMin, np);
+      const newMax = Math.max(otherMax, np);
+      if (pd <= 3 && sd <= 1 && pd < bestDist && (newMax - newMin) <= 15 && (newMax - newMin) >= 4) {
         bestDist = pd;
         bestCt = n;
       }

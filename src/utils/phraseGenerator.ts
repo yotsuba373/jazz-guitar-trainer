@@ -303,7 +303,7 @@ export function isExtensionTone(noteName: string, mode: Mode): boolean {
 // ---------------------------------------------------------------------------
 
 const RHYTHM_BEATS: Record<RhythmType, number> = {
-  'q': 1.0, 't': 2/3, 'e': 0.5, 's': 0.25,
+  'q': 1.0, 't': 1/3, 'e': 0.5, 's': 0.25,
 };
 
 /** Select a lick from the library based on quality, beat budget, and context.

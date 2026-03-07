@@ -323,7 +323,7 @@ export function playChordStrum(
  */
 /** Rhythm type duration in beats */
 const RHYTHM_BEATS: Record<string, number> = {
-  'q': 1.0, 't': 2/3, 'e': 0.5, 's': 0.25,
+  'q': 1.0, 't': 1/3, 'e': 0.5, 's': 0.25,
 };
 
 export function schedulePhrase(
