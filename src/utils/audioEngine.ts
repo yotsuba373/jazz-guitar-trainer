@@ -343,6 +343,7 @@ export function schedulePhrase(
 
   for (let i = 0; i < notes.length; i++) {
     const n = notes[i];
+    if (n.isRest) continue;
     const freq = fretToFrequency(n.stringIdx, n.fret);
     const rhythmDur = RHYTHM_BEATS[n.duration ?? 'e'] * beatDurSec;
     // Use beatStart for timing so audio syncs with animation & metronome

@@ -85,8 +85,10 @@ interface VisitMeta {
  *  Revisited notes are offset toward their next destination. */
 function computeVisitMeta(notes: GeneratedPhrase['notes']): VisitMeta[] {
   return notes.map((n, i) => {
+    if (n.isRest) return { visitIdx: 0, sizeScale: 1, xOff: 0, yOff: 0 };
     let visitIdx = 0;
     for (let j = 0; j < i; j++) {
+      if (notes[j].isRest) continue;
       if (notes[j].stringIdx === n.stringIdx && notes[j].fret === n.fret) visitIdx++;
     }
     if (visitIdx === 0) return { visitIdx: 0, sizeScale: 1, xOff: 0, yOff: 0 };
@@ -232,6 +234,7 @@ export function PhrasePath({ phrase, animKey, animSpeed = 350 }: PhrasePathProps
 
       {/* Per-beat groups: segment + marker + number appear together */}
       {phrase.notes.map((n, i) => {
+        if (n.isRest) return null;
         const { x, y } = points[i];
         const color = getBeatColor(i, phrase.notes.length);
 
@@ -257,7 +260,7 @@ export function PhrasePath({ phrase, animKey, animSpeed = 350 }: PhrasePathProps
         return (
           <g key={`beat-${i}`} style={fadeStyle(i)}>
             {/* Curve segment leading TO this beat (from previous) — tapered */}
-            {i > 0 && (
+            {i > 0 && !phrase.notes[i - 1]?.isRest && (
               <path d={segs[i - 1].d} fill="none" stroke={color}
                 strokeWidth={2.2 - (i / phrase.notes.length) * 0.8}
                 opacity={0.6} strokeLinecap="round" />

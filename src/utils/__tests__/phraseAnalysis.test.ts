@@ -290,7 +290,8 @@ describe('Summary statistics', () => {
       if (!phrase) continue;
       const mode = getMode('F', 'lydian');
       const { summary } = analyzePhrase(phrase, mode);
-      expect(summary.chordToneCount + summary.approachNoteCount + summary.scaleNoteCount).toBe(phrase.notes.length);
+      const soundNoteCount = phrase.notes.filter(n => !n.isRest).length;
+      expect(summary.chordToneCount + summary.approachNoteCount + summary.scaleNoteCount).toBe(soundNoteCount);
       tested = true;
       break;
     }
@@ -351,6 +352,8 @@ describe('Integration', () => {
         if (analysis.notes.length > 1) {
           expect(analysis.notes[0].intervalFromPrev).toBeNull();
           for (let i = 1; i < analysis.notes.length; i++) {
+            // Rest notes have null interval
+            if (analysis.notes[i].functionLabel === '休符') continue;
             expect(analysis.notes[i].intervalFromPrev).toBeGreaterThanOrEqual(0);
           }
         }
