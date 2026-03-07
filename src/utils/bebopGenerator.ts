@@ -89,21 +89,23 @@ export function chooseGoalNote(
   targetThirdNote?: string,
   nextChordContext?: PhraseConfig['nextChordContext'],
 ): GoalResult {
-  if (targetThirdNote) {
-    if (nextChordContext) {
-      const nextThirdSemi = findSemitone(nextChordContext.thirdNote);
-      if (nextThirdSemi !== null) {
-        const seventh = mode.chordTones[3];
-        const seventhCTs = ctPool.filter(n => n.noteName === seventh);
-        if (seventhCTs.length > 0) {
-          const seventhSemi = seventhCTs[0].semitone;
-          const diff = ((nextThirdSemi - seventhSemi) + 12) % 12;
-          if (diff === 1 || diff === 11) {
-            if (Math.random() < 0.70) return { note: pickRandom(seventhCTs), reason: '7th→次3rd半音解決' };
-          }
+  // §7 HIGH: 7th→3rd half-step resolution (works with nextChordContext alone)
+  if (nextChordContext) {
+    const nextThirdSemi = findSemitone(nextChordContext.thirdNote);
+    if (nextThirdSemi !== null) {
+      const seventh = mode.chordTones[3];
+      const seventhCTs = ctPool.filter(n => n.noteName === seventh);
+      if (seventhCTs.length > 0) {
+        const seventhSemi = seventhCTs[0].semitone;
+        const diff = ((nextThirdSemi - seventhSemi) + 12) % 12;
+        if (diff === 1 || diff === 11) {
+          if (Math.random() < 0.70) return { note: pickRandom(seventhCTs), reason: '7th→次3rd半音解決' };
         }
       }
     }
+  }
+
+  if (targetThirdNote) {
     const targetSemi = findSemitone(targetThirdNote);
     if (targetSemi !== null) {
       const halfStepCTs = ctPool.filter(n => {
