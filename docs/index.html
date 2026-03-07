@@ -709,7 +709,7 @@ degree ラベル、フレーバーテキストを持ちます。</p>
   <tr><td><code>intervalFromPrev</code></td><td>前音からの半音数</td></tr>
   <tr><td><code>intervalDirection</code></td><td>"up", "down", "same"</td></tr>
   <tr><td><code>intervalLabel</code></td><td>"↑m2", "↓M3", "—" 等</td></tr>
-  <tr><td><code>functionLabel</code></td><td>"CT (3rd)", "クロマチック", "スケール音" 等（全て日本語化済み）</td></tr>
+  <tr><td><code>functionLabel</code></td><td>"CT (3rd)", "半音↑アプローチ", "全音↓アプローチ", "ダブルクロマチック", "エンクロージャー上/下", "dim7構成音 (♭2)", "ビバップ経過音", "テンション", "クロマチック", "スケール音" 等（全て日本語化済み）</td></tr>
 </table>
 
 <h4>Summary Statistics</h4>
@@ -1015,6 +1015,7 @@ interface PhraseNote {
   isStrong: boolean        // beats 1,3,5,8
   approachGroup?: ApproachGroupInfo
   digitalPattern?: DigitalPatternTag   // デジタルパターンのタグ
+  isDim7Tone?: boolean                 // dim7アルペジオ構成音 (♭9等)
   isBebopPassing?: boolean             // ビバップ経過音
   isSkeletonBeat?: boolean             // スケルトン拍
   duration?: RhythmType                // 音価 (q/t/e/s)

@@ -1,4 +1,4 @@
-import type { Mode, PhraseNote, RhythmType, PoolNote } from '../types';
+import type { Mode, PhraseNote, RhythmType, PoolNote, ApproachGroupInfo, ApproachType } from '../types';
 import { SEGMENT_FNS } from './bebopSegments';
 import { getBebopPassingTone } from '../constants/bebopScales';
 import type { PhraseTemplate, SegmentSpec } from './bebopTemplates';
@@ -424,6 +424,68 @@ export function buildPhrase(
     if (dirChanges >= 2 && dirChangesOnStrong / dirChanges > 0.6) return null;
   }
 
+  // --- Annotate approach groups for approachCT / enclosure segments ---
+  const approachGroupMap = new Map<number, ApproachGroupInfo>();
+  {
+    let groupId = 0;
+    let groupStart = 0;
+    for (let i = 0; i < trimmed.length; i++) {
+      const segType = template.segments[trimmed[i].segIdx]?.type;
+      const isApproachSeg = segType === 'approachCT' || segType === 'enclosure';
+      const nextSegDiff = i + 1 < trimmed.length && trimmed[i + 1].segIdx !== trimmed[i].segIdx;
+      const isLast = i === trimmed.length - 1;
+      const isCT = ctSet.has(trimmed[i].note.noteName);
+
+      if (!isApproachSeg) {
+        groupStart = i + 1;
+        continue;
+      }
+
+      // CT found with preceding non-CT notes in same segment = approach group
+      if (isCT && i > groupStart) {
+        const gId = groupId++;
+        const approachCount = i - groupStart;
+        const groupSize = approachCount + 1;
+
+        // Infer approach type from intervals
+        let approachType: ApproachType;
+        if (segType === 'enclosure' && approachCount >= 2) {
+          approachType = 'enclosure';
+        } else if (approachCount >= 2) {
+          approachType = 'double-chromatic';
+        } else {
+          const apPitch = absolutePitch(trimmed[groupStart].note);
+          const tgPitch = absolutePitch(trimmed[i].note);
+          const diff = tgPitch - apPitch;
+          if (diff === 1) approachType = 'single-below';
+          else if (diff === -1) approachType = 'single-above';
+          else if (diff > 0) approachType = 'diatonic-below';
+          else approachType = 'diatonic-above';
+        }
+
+        for (let j = groupStart; j < i; j++) {
+          approachGroupMap.set(j, {
+            groupId: gId, approachType, role: 'approach',
+            positionInGroup: j - groupStart, groupSize,
+          });
+        }
+        approachGroupMap.set(i, {
+          groupId: gId, approachType, role: 'target',
+          positionInGroup: approachCount, groupSize,
+        });
+        groupStart = i + 1;
+      } else if (!isCT) {
+        // non-CT: continue accumulating
+      } else {
+        // CT with no preceding approach notes
+        groupStart = i + 1;
+      }
+
+      // Reset group start on segment boundary
+      if (nextSegDiff || isLast) groupStart = i + 1;
+    }
+  }
+
   // --- Convert to PhraseNote[] ---
   let accBeat = beatOffset;
   const phraseNotes: PhraseNote[] = trimmed.map((entry, idx) => {
@@ -433,6 +495,9 @@ export function buildPhrase(
     const strong = isOnStrongBeat(accBeat);
     const isCT = ctSet.has(note.noteName);
     const isBebopPass = bebopPassing !== null && note.semitone === bebopPassing && !isCT;
+    const ag = approachGroupMap.get(idx);
+    const segType = template.segments[segIdx]?.type;
+    const isDim7 = !isCT && segType === 'dim7From3rd';
 
     const pn: PhraseNote = {
       noteName: note.noteName,
@@ -440,13 +505,15 @@ export function buildPhrase(
       fret: note.fret,
       semitone: note.semitone,
       isChordTone: isCT,
-      isApproach: note.isApproach,
+      isApproach: note.isApproach || (ag?.role === 'approach'),
       beatPosition: beatPos,
       isStrong: strong,
       duration,
       beatStart: accBeat,
       segmentIdx: segIdx,
+      isDim7Tone: isDim7 || undefined,
       isBebopPassing: isBebopPass || undefined,
+      approachGroup: ag,
     };
     accBeat += RHYTHM_BEATS[duration];
     return pn;

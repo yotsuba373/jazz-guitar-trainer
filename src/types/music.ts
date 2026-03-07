@@ -207,6 +207,7 @@ export interface PhraseNote {
   isStrong: boolean;       // true for positions 1,3,5,8
   approachGroup?: ApproachGroupInfo;
   digitalPattern?: DigitalPatternTag;   // present if this note belongs to a digital pattern
+  isDim7Tone?: boolean;                 // true if part of dim7 arpeggio (e.g. ♭9 in dim7-from-3rd)
   isBebopPassing?: boolean;             // true if bebop-scale passing tone (e.g. nat7 in Mixolydian)
   isSkeletonBeat?: boolean;             // true if this note was a skeleton target (beats 1,3,5,goal)
   duration?: RhythmType;                // note duration (default 'e' = eighth note)
@@ -216,8 +217,11 @@ export interface PhraseNote {
 
 /** Approach note types */
 export type ApproachType =
-  | 'single-below'       // [CT-1] → CT
-  | 'single-above'       // [CT+1] → CT
+  | 'single-below'       // [CT-1] → CT (chromatic half step below)
+  | 'single-above'       // [CT+1] → CT (chromatic half step above)
+  | 'diatonic-above'     // diatonic step above → CT
+  | 'diatonic-below'     // diatonic step below → CT
+  | 'double-chromatic'   // double chromatic approach → CT
   | 'enclosure'          // [diatonic above] → [chromatic below] → CT
   | 'parker-enclosure'   // [CT+1] → [CT-2] → [CT-1] → CT
   | 'b9-arpeggio';       // b9→3→5→b7 (Dom7 only)
@@ -284,6 +288,7 @@ export interface NoteAnalysis {
   functionLabel: string;        // e.g. "CT (Root)", "Encl. above", "Scale tone"
   approachGroup?: ApproachGroupInfo;
   digitalPattern?: DigitalPatternTag;
+  isDim7Tone?: boolean;
   isBebopPassing?: boolean;
   isExtension?: boolean;
   isSkeletonBeat?: boolean;

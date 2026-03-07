@@ -61,11 +61,14 @@ function chordToneLabel(noteName: string, mode: Mode): string {
 
 function getFunctionLabel(note: PhraseNote, mode: Mode): string {
   if (note.approachGroup) {
-    const { approachType, role, positionInGroup } = note.approachGroup;
+    const { approachType, role, positionInGroup, groupSize } = note.approachGroup;
     if (role === 'target') return `CT (${chordToneLabel(note.noteName, mode)})`;
     switch (approachType) {
       case 'single-below': return '半音↑アプローチ';
       case 'single-above': return '半音↓アプローチ';
+      case 'diatonic-above': return '全音↓アプローチ';
+      case 'diatonic-below': return '全音↑アプローチ';
+      case 'double-chromatic': return `ダブルクロマチック (${positionInGroup + 1}/${groupSize - 1})`;
       case 'enclosure':
         return positionInGroup === 0 ? 'エンクロージャー上' : 'エンクロージャー下';
       case 'parker-enclosure':
@@ -75,6 +78,11 @@ function getFunctionLabel(note: PhraseNote, mode: Mode): string {
     }
   }
   if (note.isChordTone) return `CT (${chordToneLabel(note.noteName, mode)})`;
+  // dim7 arpeggio tone (e.g. ♭9 in dim7-from-3rd)
+  if (note.isDim7Tone) {
+    const deg = getScaleDegree(note.noteName, mode);
+    return `dim7構成音 (${deg})`;
+  }
   // Bebop passing tone (e.g. nat7 in Mixolydian)
   if (note.isBebopPassing) {
     const deg = getScaleDegree(note.noteName, mode);
@@ -129,6 +137,7 @@ export function analyzePhrase(phrase: GeneratedPhrase, mode: Mode): PhraseAnalys
     };
     // Pass through generation metadata
     if (note.digitalPattern) na.digitalPattern = note.digitalPattern;
+    if (note.isDim7Tone) na.isDim7Tone = true;
     if (note.isBebopPassing) na.isBebopPassing = true;
     if (note.isExtension) na.isExtension = true;
     if (note.isSkeletonBeat) na.isSkeletonBeat = true;
@@ -151,6 +160,9 @@ export function analyzePhrase(phrase: GeneratedPhrase, mode: Mode): PhraseAnalys
 const APPROACH_TYPE_LABEL: Record<string, string> = {
   'single-below': '半音↑',
   'single-above': '半音↓',
+  'diatonic-above': '全音↓',
+  'diatonic-below': '全音↑',
+  'double-chromatic': 'ダブルクロマチック',
   'enclosure': 'エンクロージャー',
   'parker-enclosure': 'パーカーEncl.',
   'b9-arpeggio': '♭9アルペジオ',
