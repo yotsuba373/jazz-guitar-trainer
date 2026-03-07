@@ -53,13 +53,7 @@ export {
   playNote,
   schedulePhrase,
 } from './audioEngine';
-export {
-  generatePhrase,
-  generatePhraseLick,
-  buildNotePool,
-  getApproachNotes,
-  absolutePitch,
-} from './phraseGenerator';
-export type { PoolNote } from './phraseGenerator';
-export { generatePhraseRule } from './bebopGenerator';
+export { absolutePitch, pickRandom, isExtensionTone } from './bebopScheduler';
+export { pickWeighted } from './bebopTemplates';
+export { generatePhraseRule, buildNotePool, chooseGoalNote } from './bebopGenerator';
 export { analyzePhrase } from './phraseAnalysis';

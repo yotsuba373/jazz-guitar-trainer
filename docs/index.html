@@ -273,9 +273,6 @@
     <a href="#phrase-overview" class="nav-link">Overview &amp; Architecture</a>
     <a href="#phrase-notepool" class="nav-link">Note Pool</a>
     <a href="#phrase-goal" class="nav-link">Goal Note Selection</a>
-    <a href="#phrase-lick-library" class="nav-link">Lick Library &amp; Extraction</a>
-    <a href="#phrase-lick-library-provenance" class="nav-link sub">Algorithm Provenance</a>
-    <a href="#phrase-lick" class="nav-link">Lick Selection &amp; Resolution</a>
     <a href="#phrase-analysis" class="nav-link">Analysis</a>
   </div>
 
@@ -346,7 +343,7 @@
     <li><strong>18モード対応</strong> — Diatonic 7 + Melodic Minor 7 + Harmonic Minor 2 + Diminished 2</li>
     <li><strong>7ポジション生成</strong> — 12キー × 18モード = 216パターンの指板マッピング</li>
     <li><strong>コード進行モード</strong> — 1382曲のJazz Standards インポート、iReal Pro風譜面</li>
-    <li><strong>ビバップフレーズ自動生成</strong> — Charlie Parker スタイルの8音フレーズ</li>
+    <li><strong>ビバップフレーズ自動生成</strong> — ルールベースエンジンによるビバップフレーズ生成</li>
     <li><strong>Drop 2/3 ボイシング</strong> — 20テンプレートによるコードフォーム表示</li>
     <li><strong>ガイドトーン表示</strong> — 3rd/7th のボイスリーディング可視化</li>
     <li><strong>BPM自動再生</strong> — メトロノーム、コード音声、フレーズ再生 (両モード共通)</li>
@@ -368,7 +365,7 @@
 <pre>npm install       # 依存インストール
 npm run dev       # 開発サーバー → http://localhost:5173
 npm run build     # tsc + vite build
-npm test          # vitest run (712 tests)
+npm test          # vitest run (758 tests)
 npm run lint      # ESLint</pre>
 
 <h2 id="architecture">Architecture</h2>
@@ -395,7 +392,7 @@ npm run lint      # ESLint</pre>
 
 Utils Layer (pure functions):
 ┌──────────┬──────────┬───────────┬─────────────┐
-│fretboard │guideTones│chordForms │phraseGen    │
+│fretboard │guideTones│chordForms │bebopGen     │
 │noteSpell │progress  │chartLayout│phraseAnalyse│
 └──────────┴──────────┴───────────┴─────────────┘</div>
 
@@ -412,13 +409,12 @@ Utils Layer (pure functions):
 │   ├── jazzStandards.ts          — fetchJazzStandards(), songToProgression()
 │   ├── chartLayout.ts            — deriveChartLayout(), getChartLayout(), buildChordRows()
 │   ├── chordForms.ts             — findVoicingsInPosition(), VOICING_TEMPLATES(20)
-│   ├── phraseGenerator.ts        — generatePhraseLick(), リック検索型生成 (~490行)
 │   ├── bebopGenerator.ts         — generatePhraseRule(), ルールベース生成エントリ (~150行)
 │   ├── bebopScheduler.ts         — buildPhrase(), assignRhythms(), テンプレート実行エンジン (~200行)
 │   ├── bebopSegments.ts          — セグメント関数9種 (Arp, ScaleRun, Enclosure, OctaveDisp等)
 │   ├── bebopTemplates.ts         — テンプレート定義11種 + 選択ロジック
 │   ├── phraseAnalysis.ts         — analyzePhrase(), computeSummary()
-│   └── __tests__/                — 799 テスト
+│   └── __tests__/                — 758 テスト
 ├── components/
 │   ├── Fretboard/                — SVG指板 (Fretboard, FretboardNote, GhostNote, PhrasePath)
 │   ├── Controls/                 — 全コントロールUI
@@ -513,36 +509,29 @@ degree ラベル、フレーバーテキストを持ちます。</p>
 <!-- ==================== PHRASE GENERATOR ==================== -->
 <h2 id="phrase-overview">Phrase Generator — Overview</h2>
 <p>
-  フレーズジェネレーターは、<strong>リック検索型アーキテクチャ</strong>でビバップフレーズを生成します。
-  WJD 186ソロ + Parker Omnibook 50ソロから抽出したリックライブラリから、
-  コード品質・拍数・ゴール音・スケール互換性に基づいて最適なリックを選択し、
-  指板座標上に解決(resolve)します。生成失敗時は <code>null</code> を返却します。
+  フレーズジェネレーターは、<strong>ルールベースアーキテクチャ</strong>でビバップフレーズを生成します。
+  <code>bebop-construction-rules.md</code> のルールカタログに基づき、指板空間 (PoolNote[]) で直接フレーズを組み立てます。
+  ビバップスケール、セグメント関数、テンプレート、Musical Forces スコアリングを組み合わせ、
+  音楽理論に基づいた自然なビバップラインを生成します。生成失敗時は <code>null</code> を返却します。
 </p>
 <h4>機能</h4>
 <ul>
-  <li><strong>リック検索型生成</strong>: リックライブラリからスコアリングで最適なリックを選択・指板解決</li>
-  <li><strong>リック連結 (Lick Chaining)</strong>: 1つ目のリック解決後、残り拍数 ≥1.0 なら2つ目のリックを自動連結。接合部は1-5半音以内に制限し、リック内部の94.5%と同等の自然さを維持</li>
+  <li><strong>ルールベース生成</strong>: 11種のテンプレートと9種のセグメント関数でフレーズを構築</li>
   <li><strong>可変リズム</strong>: 4分音符(q)、3連符(t)、8分音符(e)、16分音符(s)の混合に対応</li>
   <li><strong>拍数選択</strong>: 通常モードで2/3/4拍のフレーズ長を選択可能</li>
   <li><strong>ゴールノート選択</strong>: 指板クリックでゴール音を指定し、フレーズの到達点を制御</li>
   <li><strong>ピアノロール</strong>: PhraseAnalysisPanel に時間×ピッチのSVG可視化を追加</li>
-  <li><strong>リック境界表示</strong>: 連結フレーズで各ノートのリック帰属 (①/②/接続) を分析テーブルに表示。ピアノロールにも境界の垂直破線を描画</li>
-  <li><strong>エンジン切替</strong>: PhraseControls の [Lick] / [Rule] ボタンで2つのエンジンを即座に切替可能</li>
+  <li><strong>セグメント境界表示</strong>: フレーズ内の各セグメント境界を分析テーブルに表示。ピアノロールにも境界の垂直破線を描画</li>
 </ul>
 
 <div class="callout success">
   <div class="callout-label">設計哲学</div>
-  「リックのクオリティが高ければ、必然的に音楽的なビバップラインが出現する」—
-  スコアリング自動生成を廃止し、リック検索に特化。リック連結 (Lick Chaining) により短いリックを自然に接続し、フレーズの充填率を向上。
+  ビバップ構造ルール (David Baker, Hal Galper, Anton Schwartz 等の教育的コンセンサス) に基づき、
+  テンプレートとセグメント関数の組み合わせで音楽的なフレーズを構築。
+  Musical Forces (Steve Larson) による重力・磁力・慣性のスコアリングで自然な音選択を実現。
 </div>
 
-<h3 id="rule-engine">ルールベースエンジン (Rule Engine)</h3>
-<p>
-  <code>bebop-construction-rules.md</code> のルールカタログに基づき、指板空間 (PoolNote[]) で直接フレーズを組み立てるエンジン。
-  リックベースエンジンとは独立に動作し、UIの [Rule] ボタンで切替可能。
-</p>
-
-<h4>アーキテクチャ</h4>
+<h3>アーキテクチャ</h3>
 <ul>
   <li><strong>ビバップスケール</strong> (<code>bebopScales.ts</code>): Dominant / Major / Dorian / Harmonic Minor の4種。モード→ビバップスケールマッピング。Diatonic 7 + Lydian Dom + Altered の9モード対応</li>
   <li><strong>セグメント関数</strong> (<code>bebopSegments.ts</code>): Arpeggio, ScaleRun (表拍GT優先), Enclosure (4タイプ+Delayed Resolution), 1-2-3-5, dim7From3rd, UpperStructure, ApproachCT (6タイプ+Musical Forces), Chromatic, OctaveDisp (Honeysuckle Rose) の9種。全て PoolNote[] → PoolNote[] で指板空間内動作。beatParity対応</li>
@@ -598,18 +587,18 @@ degree ラベル、フレーバーテキストを持ちます。</p>
   <span class="flow-arrow">→</span>
   <span class="flow-step highlight">4. Goal Note</span>
   <span class="flow-arrow">→</span>
-  <span class="flow-step highlight">5. selectLick()</span>
+  <span class="flow-step highlight">5. Beat Offset</span>
   <span class="flow-arrow">→</span>
-  <span class="flow-step highlight">6. resolveLick()</span>
+  <span class="flow-step highlight">6. Start Note (GT優先)</span>
   <span class="flow-arrow">→</span>
-  <span class="flow-step highlight">6b. Lick Chain</span>
+  <span class="flow-step highlight">7. Template Select</span>
   <span class="flow-arrow">→</span>
-  <span class="flow-step">7. Connector</span>
+  <span class="flow-step highlight">8. Scheduler</span>
   <span class="flow-arrow">→</span>
-  <span class="flow-step">8. Motif Extract</span>
+  <span class="flow-step">9. Quality Check</span>
 </div>
 
-<div class="diagram">generatePhrase(position, mode, fretMap, config, targetThirdNote?) → GeneratedPhrase | null
+<div class="diagram">generatePhraseRule(position, mode, fretMap, config, targetThirdNote?) → GeneratedPhrase | null
 │
 ├─ Step 1: buildNotePool()
 │   └─ スケール音 + クロマチックアプローチ音を全インスタンスから収集
@@ -617,39 +606,37 @@ degree ラベル、フレーバーテキストを持ちます。</p>
 ├─ Step 2: Instance Scope Restriction
 │   └─ 第1インスタンスの fretMin-1 ~ fretMax+1 に制限
 │
-├─ Step 3: Contour Selection (ランダム4種)
+├─ Step 3: Contour Selection (重み付き: arch33/desc28/wave18/rev-arch13/asc8)
 │
 ├─ Step 4: chooseGoalNote()
 │   ├─ goalNoteOverride → ユーザー指定ゴール (最優先)
 │   ├─ 進行モード: nextChordContext → 7th→3rd 半音解決 (70%)
 │   └─ 通常モード: STRONG_RESOLUTION_DEGREE_IDX で推定
 │
-├─ Step 5: selectLick() × 5 retries
-│   ├─ 品質フィルタ: コード品質 → リックライブラリキー
-│   ├─ 拍数フィルタ: durationBeats ≤ maxBeats, length ≥ 3
-│   ├─ スケール互換: uniqueOutOfScale ≥ 2 → 除外
-│   ├─ スコアリング: ゴール互換+startHint近接+特性音ボーナス+コンター親和+充填率
-│   └─ 選択: top10 重み付きランダム
+├─ Step 5: Beat Offset Selection
+│   └─ 単体生成時 70% で裏拍 (beatOffset=0.5) 開始
 │
-├─ Step 6: resolveLick()
-│   ├─ 各ステップで pool から targetSemitone 候補をスコア選択
-│   ├─ 品質ゲート: 強拍アプローチ音 → reject, 連続音間 &gt; 9半音 → reject
-│   └─ 失敗 → 次リトライ
+├─ Step 6: Start Note (GT優先)
+│   └─ 3rd/7th に2倍の重み付きランダム選択
 │
-├─ Step 6b: Lick Chaining (連結判定)
-│   ├─ remainingBeats ≥ 1.0 → 2つ目のリック選択を試行
-│   ├─ selectLick(chainFromStep=endStepRel): startStep が 1-5半音以内のリックのみ
-│   ├─ resolveLick(startRef=前リック最終音, beatOffset=usedBeats)
-│   ├─ 成功 → resolved = [...resolved1, ...resolved2], lickId = [id1, id2]
-│   └─ 失敗 → 単体リック + コネクタにフォールバック
+├─ Step 7: Template Selection
+│   ├─ 品質フィルタ (dim7-from-3rd→dom7, upper-structure→m7/maj7)
+│   ├─ コンター親和重み (+8)
+│   └─ 重み付きランダム選択
 │
-├─ Step 7: Connector (ゴール音追加)
-│   └─ リック末尾がゴール音でない場合、nearestInstance() で追加
+├─ Step 8: Scheduler (buildPhrase)
+│   ├─ テンプレートの各セグメント関数を実行
+│   ├─ セグメント接合部の同ピッチ重複を自動除去
+│   ├─ assignRhythms(): セグメントタイプ別に可変リズムを割当
+│   └─ CT終止試行: 最終音が非CTなら ±3半音・±1弦以内の最近接CTにスワップ
 │
-└─ Step 8: Motif Extraction
-    └─ 開始2音のインターバル列を記録
+└─ Step 9: Quality Check
+    ├─ CT表拍配置率 ≥ 40%
+    ├─ GT表拍ソフトチェック (表拍3+でGTゼロ→reject)
+    ├─ 音域 4-15半音, 跳躍 ≤ 9半音
+    └─ 方向転換拍裏チェック (&gt;60% 表拍→reject)
 │
-全5リトライ失敗 → return null</div>
+3リトライ失敗 → フォールバック (ScaleRun↓)</div>
 
 <h2 id="phrase-notepool">Note Pool &amp; Instance Scope</h2>
 
@@ -710,516 +697,6 @@ degree ラベル、フレーバーテキストを持ちます。</p>
   </table>
 </div>
 
-<!-- ==================== LICK LIBRARY & EXTRACTION ==================== -->
-<h2 id="phrase-lick-library">Lick Library — 抽出アルゴリズムと統計</h2>
-<p>
-  フレーズジェネレーターの核となるリックライブラリは、2つのビバップソロデータベースから
-  Python スクリプト (<code>scripts/extract_licks_v2.py</code>) で自動抽出されます。
-  計算音楽学の研究に基づく3段階のアルゴリズム (LBDM + MLA + DTL) で
-  音楽的に妥当なフレーズ境界を検出し、<strong>~11,000 リック</strong> を
-  <code>public/data/lick_library.json</code> (~2.1 MB) として静的配信します。
-</p>
-
-<h3 id="phrase-lick-library-provenance">参考研究とアルゴリズムの由来分類</h3>
-<p>
-  本抽出パイプラインの各コンポーネントについて、先行研究との関係を分類しました。
-  「忠実度」は論文の手法をどの程度忠実に再現しているかを示します。
-</p>
-
-<h4>研究論文ベースのコンポーネント</h4>
-<table>
-  <tr><th>手法</th><th>論文</th><th>実装箇所</th><th>忠実度</th><th>備考</th></tr>
-  <tr>
-    <td><strong>LBDM</strong></td>
-    <td>Cambouropoulos, E. (2001). "The Local Boundary Detection Model (LBDM) and its Application in the Study of Expressive Timing"</td>
-    <td><code>_lbdm_profile()</code>, <code>_lbdm_combined()</code>, <code>_pick_boundary_peaks()</code></td>
-    <td><span class="badge badge-green">高</span></td>
-    <td>論文の数式 (degree-of-change + proximity rule) をそのまま実装。重み (0.25/0.50/0.25) も論文デフォルト。閾値比率 0.5 とフレーズ最小音数 4 は独自チューニング</td>
-  </tr>
-  <tr>
-    <td><strong>MLA</strong></td>
-    <td>Frieler, K. &amp; Pfleiderer, M. (2016). "Midlevel Analysis of Monophonic Jazz Solos: A New Approach to the Study of Improvisation"</td>
-    <td><code>classify_mla()</code></td>
-    <td><span class="badge badge-orange">中</span></td>
-    <td>MLA の「lick vs line」概念を採用。ただし論文は複数の midlevel unit タイプ (lick, line, theme, void 等) と複合的分類基準を持つ。本実装はノート数とリズム均一性の2指標のみで判定する簡略版</td>
-  </tr>
-  <tr>
-    <td><strong>DTL</strong></td>
-    <td>Frieler, K. et al. (2018–). "Dig That Lick: Exploring Patterns in Jazz with Computational Methods" プロジェクト</td>
-    <td><code>compute_pattern_frequency()</code></td>
-    <td><span class="badge badge-orange">中</span></td>
-    <td>「頻出パターンをクラスタリングして重要度スコアリング」というコンセプトと、類似度指標としての Levenshtein距離は DTL 研究で使われている手法。Union-Find クラスタリングと長さバケッティングは実装上の独自最適化。パラメータ (閾値=2, ボーナス=15) は独自チューニング</td>
-  </tr>
-</table>
-
-<h4>先行研究に基づくコンポーネント</h4>
-<p>以下のコンポーネントは当初「独自」と認識していましたが、調査の結果すべてに先行研究が存在します。</p>
-<table>
-  <tr><th>コンポーネント</th><th>実装</th><th>先行研究</th><th>本実装の独自性</th></tr>
-  <tr>
-    <td><strong>コード品質分類</strong></td>
-    <td><code>classify_quality_omnibook()</code>, <code>classify_quality_wjd()</code></td>
-    <td>
-      コードシンボルの正規化は MIR の標準的手法。
-      <a href="https://archives.ismir.net/ismir2020/paper/000090.pdf">Harte et al. (MIREX chord vocabulary)</a> 等で体系化されている。
-      WJD 自体のアノテーションプロトコルにも品質分類基準が定義されている
-    </td>
-    <td>5品質 (dom7/min7/maj7/min7b5/dim7) への縮約粒度はフロントエンド要件に基づく設計判断。正規表現ベースの閾値パーサーは独自実装</td>
-  </tr>
-  <tr>
-    <td><strong>コード境界分割</strong></td>
-    <td><code>split_at_chord_boundaries()</code></td>
-    <td>
-      <a href="https://jazzomat.hfm-weimar.de/">Jazzomat プロジェクト</a> の <code>melpat</code> ツールでフレーズをコーラス/フォーム部分単位で分割する手法が確立。
-      <a href="https://jazzforschung.hfm-weimar.de/wp-content/uploads/2019/06/JazzforschungHeute2019_Frieler-Constructing-Jazz-Lines.pdf">Frieler (2019) "Constructing Jazz Lines"</a> でも「underlying chord の root を基準に pitch class を算出」=コード境界でコンテキストを切り替えることを前提としている
-    </td>
-    <td>LBDM フレーズをコードチェンジ位置でサブフレーズに分割する具体的な実装は独自だが、手法自体はジャズ分析研究の標準的アプローチ</td>
-  </tr>
-  <tr>
-    <td><strong>リズム量子化</strong></td>
-    <td><code>quantise_rhythm()</code></td>
-    <td>
-      <a href="https://www.researchgate.net/publication/3457496_Note_segmentation_and_quantization_for_music_information_retrieval">Adams &amp; Bartsch (2007) "Note segmentation and quantization for MIR"</a> で MIR における量子化手法を体系化。
-      <a href="https://www.researchgate.net/publication/262405819_Rhythm_Quantization_for_Transcription">Cemgil et al. (2000) "Rhythm Quantization for Transcription"</a> でベイズ統計に基づく確率的量子化モデルを提案。
-      DTL / Jazzomat では 1/6拍単位量子化 (duplet + triplet 対応) を使用
-    </td>
-    <td>閾値ベースの離散化は MIR で標準的だが、4段階 (q/e/t/s) と具体的な閾値 (0.875, 0.417, 0.292) は独自チューニング。研究ではベイズ確率モデルがより高精度とされるが、リック抽出用途には十分</td>
-  </tr>
-  <tr>
-    <td><strong>正規化 (リック形式変換)</strong></td>
-    <td><code>phrase_to_lick()</code></td>
-    <td>
-      <a href="https://jazzforschung.hfm-weimar.de/wp-content/uploads/2019/06/JazzforschungHeute2019_Frieler-Constructing-Jazz-Lines.pdf">Frieler (2019)</a> が "chordal pitch classes" として <code>(pitch − root) mod 12</code> (値 0–11) を定義。
-      <a href="http://dig-that-lick.eecs.qmul.ac.uk/Dig%20That%20Lick_Publications.html">DTL プロジェクト</a> でもインターバル列をパターンの主要表現として採用
-    </td>
-    <td>表現形式は Jazzomat / DTL の標準と同一。独自なのは出力 JSON フォーマット (フロントエンド互換) のみ</td>
-  </tr>
-  <tr>
-    <td><strong>重複排除</strong></td>
-    <td><code>deduplicate()</code></td>
-    <td>
-      <a href="https://ismir2001.ismir.net/posters/smith.pdf">Smith &amp; Medina (2001) "Discovering Themes by Exact Pattern Matching"</a> で完全一致パターンマッチング手法を研究。
-      <a href="https://link.springer.com/article/10.1007/s10844-010-0122-7">Lartillot (2005) "Mining transposed motifs in music"</a> で転調を考慮したパターンマイニングを提案。
-      <a href="https://jazzomat.hfm-weimar.de/commandline_tools/melpat/melpat.html">Jazzomat <code>melpat</code></a> では closed patterns / cyclic patterns の概念で冗長性をフィルタリング
-    </td>
-    <td>(steps, rhythm) の完全一致キーによる重複排除は最も単純なアプローチ。DTL スコア + ソース優先度でのランキングは独自</td>
-  </tr>
-  <tr>
-    <td><strong>構造バリデーション</strong></td>
-    <td><code>validate_phrase()</code></td>
-    <td>
-      <a href="https://journals.sagepub.com/doi/10.1177/1029864916636440">Frieler MLA (2016)</a> の統計: midlevel unit の中央値持続時間 2.25秒、lick の特性として「短くリズム的に多様」。
-      Jazzomat <code>melpat</code> では強拍開始/終了、フレーズ位置などの構造的制約でフィルタリング
-    </td>
-    <td>MLA の統計的知見と整合するが、フロントエンドの selectLick() 要件 (ノート数 3–20、拍数 0.5–8.5) に合わせた最小限の実装。Jazzomat はより多くの構造的制約を使用</td>
-  </tr>
-</table>
-
-<div class="callout design">
-  <div class="callout-label">独自性の所在</div>
-  <p>
-    本パイプラインの各コンポーネントにはすべて MIR / Jazzomat / DTL の先行研究が存在し、
-    完全に独自のアルゴリズムはありません。本実装固有の設計判断は:
-  </p>
-  <ul>
-    <li><strong>5品質への縮約粒度</strong> — フロントエンドのリック検索要件に由来</li>
-    <li><strong>各種閾値パラメータ</strong> — LBDM閾値比率、MLA分類閾値、リズム量子化閾値、DTL距離閾値はいずれも独自チューニング</li>
-    <li><strong>パイプラインの組み合わせ</strong> — LBDM→コード境界分割→MLA→DTL という組み合わせ自体が独自の構成</li>
-    <li><strong>フロントエンド互換の出力フォーマット</strong> — JSON 構造とフィールド名</li>
-  </ul>
-</div>
-
-<h4>参考文献一覧</h4>
-<table>
-  <tr><th>#</th><th>文献</th><th>関連コンポーネント</th></tr>
-  <tr><td>1</td><td>Cambouropoulos, E. (2001). "The Local Boundary Detection Model (LBDM) and its Application in the Study of Expressive Timing"</td><td>LBDM フレーズ境界検出</td></tr>
-  <tr><td>2</td><td>Frieler, K. &amp; Pfleiderer, M. (2016). <a href="https://journals.sagepub.com/doi/10.1177/1029864916636440">"Midlevel Analysis of Monophonic Jazz Solos"</a></td><td>MLA 分類, 構造バリデーション</td></tr>
-  <tr><td>3</td><td>Frieler, K. (2019). <a href="https://jazzforschung.hfm-weimar.de/wp-content/uploads/2019/06/JazzforschungHeute2019_Frieler-Constructing-Jazz-Lines.pdf">"Constructing Jazz Lines: Taxonomy, Vocabulary, Grammar"</a></td><td>正規化 (chordal pitch classes), コード境界分割</td></tr>
-  <tr><td>4</td><td>Frieler, K. et al. (2018–). <a href="http://dig-that-lick.eecs.qmul.ac.uk/Dig%20That%20Lick_Publications.html">"Dig That Lick" プロジェクト</a></td><td>DTL パターン頻度, 正規化, 重複排除</td></tr>
-  <tr><td>5</td><td>Adams, N. &amp; Bartsch, M. (2007). <a href="https://www.researchgate.net/publication/3457496_Note_segmentation_and_quantization_for_music_information_retrieval">"Note Segmentation and Quantization for MIR"</a></td><td>リズム量子化</td></tr>
-  <tr><td>6</td><td>Cemgil, A.T. et al. (2000). <a href="https://www.researchgate.net/publication/262405819_Rhythm_Quantization_for_Transcription">"Rhythm Quantization for Transcription"</a></td><td>リズム量子化 (確率的手法)</td></tr>
-  <tr><td>7</td><td>Smith, L. &amp; Medina, R. (2001). <a href="https://ismir2001.ismir.net/posters/smith.pdf">"Discovering Themes by Exact Pattern Matching"</a></td><td>重複排除</td></tr>
-  <tr><td>8</td><td>Lartillot, O. (2005). <a href="https://link.springer.com/article/10.1007/s10844-010-0122-7">"Mining Transposed Motifs in Music"</a></td><td>重複排除 (転調考慮)</td></tr>
-  <tr><td>9</td><td><a href="https://jazzomat.hfm-weimar.de/">The Jazzomat Research Project</a> / <a href="https://jazzomat.hfm-weimar.de/commandline_tools/melpat/melpat.html">melpat ツール</a></td><td>コード境界分割, 構造バリデーション, 重複排除</td></tr>
-</table>
-
-<h3>データソース</h3>
-<table>
-  <tr><th>ソース</th><th>内容</th><th>形式</th><th>ソロ数</th><th>ノート数</th></tr>
-  <tr>
-    <td><strong>Parker Omnibook</strong></td>
-    <td>チャーリー・パーカーのトランスクリプション集</td>
-    <td>MusicXML (.xml / .mxl)</td>
-    <td>50 ソロ</td>
-    <td>27,163</td>
-  </tr>
-  <tr>
-    <td><strong>Weimar Jazz Database (WJD)</strong></td>
-    <td>ビバップ/ハードバップ/クール系ジャズソロ</td>
-    <td>SQLite3</td>
-    <td>186 ソロ (BEBOP / HARDBOP / COOL)</td>
-    <td>76,427</td>
-  </tr>
-</table>
-
-<h3>抽出パイプライン全体像</h3>
-<div class="flow">
-  <span class="flow-step highlight">1. ソロ読込</span>
-  <span class="flow-arrow">→</span>
-  <span class="flow-step highlight">2. LBDM フレーズ境界検出</span>
-  <span class="flow-arrow">→</span>
-  <span class="flow-step highlight">3. コード境界分割</span>
-  <span class="flow-arrow">→</span>
-  <span class="flow-step highlight">4. リズム量子化</span>
-  <span class="flow-arrow">→</span>
-  <span class="flow-step highlight">5. 構造バリデーション</span>
-  <span class="flow-arrow">→</span>
-  <span class="flow-step highlight">6. MLA 分類</span>
-  <span class="flow-arrow">→</span>
-  <span class="flow-step highlight">7. 正規化</span>
-  <span class="flow-arrow">→</span>
-  <span class="flow-step highlight">8. DTL スコアリング + 重複除去</span>
-</div>
-
-<h3>Step 1 — ソロ読込</h3>
-<h4>WJD (SQLite)</h4>
-<p>
-  <code>solo_info</code> テーブルからスタイルが BEBOP / HARDBOP / COOL のソロを取得。
-  各ソロについて <code>melody</code> テーブル (pitch, onset, duration, bar, beat, beatdur) と
-  <code>beats</code> テーブル (onset, chord) をクエリします。
-</p>
-<h4>Omnibook (MusicXML)</h4>
-<p>
-  music21 ライブラリで MusicXML をパース。メロディパート (第1パート) から音符を、
-  <code>ChordSymbol</code> / <code>Harmony</code> 要素からコード進行を抽出します。
-  和音ノートは最高音のみ使用。テンポ情報 (<code>MetronomeMark</code>) から
-  ビート長 (秒) を算出し、LBDM の IOI/レスト計算に使用します (デフォルト: BPM 160)。
-</p>
-
-<h3>Step 2 — LBDM フレーズ境界検出 (Cambouropoulos 2001)</h3>
-<p>
-  LBDM (Local Boundary Detection Model) は、メロディの各遷移点について
-  <strong>ピッチ・IOI (音符間時間) ・レスト (休符長)</strong> の3つのパラメータから
-  境界強度を計算し、局所的な極大値をフレーズ境界として検出します。
-</p>
-
-<h4>3つのプロファイル</h4>
-<table>
-  <tr><th>プロファイル</th><th>計算対象</th><th>重み</th></tr>
-  <tr><td><strong>Pitch</strong></td><td>隣接音間の |MIDI pitch差|</td><td>0.25</td></tr>
-  <tr><td><strong>IOI</strong></td><td>隣接音間の onset 差 (秒)</td><td>0.50</td></tr>
-  <tr><td><strong>Rest</strong></td><td>前の音の終了〜次の音の開始 (秒、0以上)</td><td>0.25</td></tr>
-</table>
-<p>IOI に最大重み (0.50) が割り当てられているのは、フレーズの切れ目は時間的な間隔で最も明確に現れるためです。</p>
-
-<h4>境界強度の計算 (Cambouropoulos 2001 の公式)</h4>
-<p>各プロファイルについて、遷移 i での境界強度 S<sub>i</sub> を次の2つのルールで計算します:</p>
-<div class="card">
-  <div class="card-title">Change Rule (変化度)</div>
-  <p>隣接するインターバル間の変化比率:</p>
-<pre>r(k, k+1) = |x_k - x_{k+1}| / max(|x_k|, |x_{k+1}|)</pre>
-  <p>
-    直前のインターバルと比べてどれだけ変化したかを 0〜1 で表す。
-    例: [2半音, 7半音] の遷移 → r = |2-7|/max(2,7) = 5/7 ≈ 0.71 (大きな変化)。
-  </p>
-</div>
-<div class="card">
-  <div class="card-title">Proximity Rule (近接度) × Change Rule</div>
-<pre>S_i = |x_i| × (r(i-1, i) + r(i, i+1))</pre>
-  <p>
-    インターバルの絶対値 (大きな跳躍ほど高い) に、
-    両側の変化度を掛け合わせる。つまり「大きなインターバルが、かつ前後と大きく異なる箇所」で
-    境界強度が最大になります。
-  </p>
-</div>
-
-<h4>重み付き合成</h4>
-<pre>Combined_i = 0.25 × S_pitch_i + 0.50 × S_ioi_i + 0.25 × S_rest_i</pre>
-
-<h4>境界選択: 局所極大値のピック</h4>
-<p>
-  合成された境界強度プロファイルから、<strong>局所極大値</strong> (両隣より大きい点) を検出し、
-  <strong>最大強度の 50%</strong> 以上の点のみをフレーズ境界として採用します。
-  各境界でソロを分割し、<strong>4音以上</strong>のフレーズのみを保持します。
-</p>
-
-<div class="diagram">ソロのメロディ:    ♪ ♪ ♪ ♪ ♪ ♪ ♪  ♪ ♪ ♪ ♪ ♪  ♪ ♪ ♪ ♪ ♪ ♪
-境界強度:          ─ ─ ─ ▓ ─ ─ ─  ─ ─ ▓ ─ ─  ─ ─ ─ ─ ─ ─
-                         ↑ 極大値        ↑ 極大値
-                         │(≥50%の閾値)   │(≥50%の閾値)
-フレーズ:         [────phrase 1────] [──phrase 2──] [────phrase 3────]</div>
-
-<div class="callout design">
-  <div class="callout-label">なぜ LBDM か</div>
-  <p>
-    v1 ではスライディングウィンドウ方式 (3〜16音の全部分列を列挙) を使用していましたが、
-    41万個の候補からアドホックなフィルタ (音域/反復/跳躍) で除去する必要がありました。
-    LBDM はピッチ・時間・休符の情報から音楽的に妥当な境界を直接検出するため、
-    アドホックフィルタが不要になり、抽出されるリックの品質も向上します。
-  </p>
-</div>
-
-<h3>Step 3 — コード境界分割</h3>
-<p>
-  LBDM で検出されたフレーズを、さらにコード変更点で分割します。
-  各ノートの onset を見て、そのタイミングで有効なコードを特定し、
-  コード変更が起きた箇所でサブフレーズに分割します。
-</p>
-<div class="diagram">LBDM フレーズ:     [───────── phrase ─────────────────]
-コードタイムライン:  Dm7 (onset=0) ────── G7 (onset=4) ──────
-                    └── min7 サブフレーズ ─┘ └── dom7 サブフレーズ ─┘</div>
-<p>
-  これにより、各リックは特定のコード品質のコンテキスト内に収まり、
-  品質別に分類されたライブラリが構築されます。
-</p>
-
-<h3>Step 4 — リズム量子化</h3>
-<p>
-  音符の duration を4種類のリズムタイプに量子化します。
-  WJD では <code>duration / beatdur</code> (ビート相対値)、Omnibook では <code>quarterLength</code> を使用。
-</p>
-<table>
-  <tr><th>リズムタイプ</th><th>記号</th><th>閾値</th><th>拍数</th></tr>
-  <tr><td>4分音符</td><td><code>q</code></td><td>≥ 0.875</td><td>1.0 拍</td></tr>
-  <tr><td>8分音符</td><td><code>e</code></td><td>≥ 0.417</td><td>0.5 拍</td></tr>
-  <tr><td>3連符</td><td><code>t</code></td><td>≥ 0.292</td><td>2/3 拍</td></tr>
-  <tr><td>16分音符</td><td><code>s</code></td><td>&lt; 0.292</td><td>0.25 拍</td></tr>
-</table>
-
-<h3>Step 5 — 構造バリデーション</h3>
-<p>
-  LBDM がフレーズ境界を正確に検出するため、音楽的品質フィルタ (音域/反復/跳躍) は不要です。
-  フロントエンドの <code>selectLick()</code> が要求する最小限の構造制約のみチェックします:
-</p>
-<table>
-  <tr><th>制約</th><th>条件</th><th>リジェクト数</th></tr>
-  <tr><td>ノート数</td><td>3 ≤ length ≤ 20</td><td>WJD: 3,037 / Omnibook: 444</td></tr>
-  <tr><td>拍数</td><td>0.5 ≤ durationBeats ≤ 8.5</td><td>WJD: 98 / Omnibook: 47</td></tr>
-</table>
-
-<h3>Step 6 — MLA 分類 (Frieler/Pfleiderer 2016)</h3>
-<p>
-  Melodic Lick Analysis (MLA) の基準でフレーズを <strong>lick / line / other</strong> に分類し、
-  <code>line</code> (リズム的に均一なスケーラーラン) を除外します。
-</p>
-<table>
-  <tr><th>分類</th><th>条件</th><th>ライブラリへの採否</th></tr>
-  <tr>
-    <td><strong>line</strong></td>
-    <td>16音超 かつ 最頻リズムが全体の 70%以上</td>
-    <td>除外 (WJD: 87 / Omnibook: 16)</td>
-  </tr>
-  <tr>
-    <td><strong>lick</strong></td>
-    <td>16音以下、またはリズム種類が2種以上</td>
-    <td>採用</td>
-  </tr>
-  <tr>
-    <td><strong>other</strong></td>
-    <td>上記に該当しない</td>
-    <td>除外</td>
-  </tr>
-</table>
-<div class="callout design">
-  <div class="callout-label">lick vs line の区別</div>
-  <p>
-    ビバップソロには、コード上を駆け上がる/駆け下りるスケーラーラン (line) が頻出します。
-    これらはリズム的に均一 (ほぼ全て8分音符など) で長いパッセージであり、
-    短いフレーズ生成に再利用する「リック」としては不適切です。
-    MLA の基準で除外することで、リズム的多様性のあるリックのみをライブラリに残します。
-  </p>
-</div>
-
-<h3>Step 7 — 正規化</h3>
-<p>バリデーションと MLA を通過したフレーズを、キーに依存しない形式に正規化します。</p>
-
-<div class="card">
-  <div class="card-title">リックのデータ構造</div>
-<pre>{
-  id:            string,    // MD5ハッシュ先頭12文字 (重複除去キー)
-  steps:         number[],  // ルートからの半音オフセット (0-11)
-  intervals:     number[],  // 隣接音間のインターバル (符号付き半音)
-  rhythm:        string[],  // リズムタイプ配列 ['e','e','s','s','e']
-  direction:     string,    // 'asc' | 'desc' | 'mixed'
-  length:        number,    // ノート数
-  startStep:     number,    // 開始音の steps[0]
-  endStep:       number,    // 終了音の steps[last]
-  durationBeats: number,    // 総拍数 (リズムから計算)
-  source:        string     // 'wjd' | 'omnibook'
-}</pre>
-</div>
-
-<h4>steps (ルート相対半音) の計算</h4>
-<p>
-  各ノートの MIDI ピッチからコードのルート PC (0=C, 2=D, ..., 11=B) を引き、
-  <code>mod 12</code> で 0〜11 に正規化します。これにより:
-</p>
-<ul>
-  <li>異なるキーで演奏された同一パターンが同じ <code>steps</code> 配列になる</li>
-  <li>フレーズジェネレーターが任意のキーに移調して再利用できる</li>
-  <li><code>steps[i] = 0</code> はルート、<code>4</code> は長3度、<code>7</code> は完全5度、など</li>
-</ul>
-
-<h4>direction の判定</h4>
-<table>
-  <tr><th>値</th><th>条件</th></tr>
-  <tr><td><code>asc</code></td><td>全インターバルが ≥ 0 (上行または同音)</td></tr>
-  <tr><td><code>desc</code></td><td>全インターバルが ≤ 0 (下行または同音)</td></tr>
-  <tr><td><code>mixed</code></td><td>上行と下行が混在</td></tr>
-</table>
-
-<h3>Step 8 — DTL パターン頻度スコアリング + 重複除去</h3>
-
-<h4>DTL パターン頻度分析</h4>
-<p>
-  各品質カテゴリ内で、リックのインターバル列を <strong>Levenshtein距離</strong> でクラスタリングし、
-  複数ソロに出現するパターンにボーナスを付与します。
-</p>
-<ol>
-  <li>各リックのインターバル列 (intervals) をタプル化</li>
-  <li>同じ長さ ± 1 のインターバル列をバケット化し、バケット内で Levenshtein距離を計算</li>
-  <li>距離 ≤ 2 のペアを Union-Find でクラスタリング</li>
-  <li>クラスタサイズ ≥ 3 → 最大 +10 ボーナス</li>
-  <li>複数ソースにまたがるクラスタ → <strong>+15 ボーナス</strong> (WJD と Omnibook 両方に出現)</li>
-</ol>
-<div class="callout design">
-  <div class="callout-label">DTL の意義</div>
-  <p>
-    複数の異なるソロに共通して出現するパターンは、ビバップの「定型句」である可能性が高い。
-    Levenshtein距離を使うことで、完全一致だけでなく1〜2音の変形を含む類似パターンも
-    同一クラスタとして扱い、イディオムの検出精度を高めます。
-  </p>
-</div>
-
-<h4>重複除去</h4>
-<p>
-  <strong>(steps, rhythm)</strong> のタプルが同一のリックを重複とみなします。
-  重複がある場合は DTL スコア + ソース優先度 (Omnibook +5) が高い方を保持します。
-</p>
-
-<h4>品質ごとの上限 (max_per_quality = 8,000)</h4>
-<p>
-  重複除去後のリック数が 8,000 を超える品質カテゴリでは、
-  DTL スコア順に上位を選択します。現在どの品質も上限に達していません。
-</p>
-
-<h3>コード品質分類</h3>
-<p>各コードシンボルを <strong>5つの品質カテゴリ</strong> に分類します。</p>
-<table>
-  <tr><th>品質キー</th><th>対象コード例</th><th>分類ルール</th></tr>
-  <tr><td><code>dom7</code></td><td>C7, G7sus, F9</td><td>dominant-seventh、接尾辞なし、sus、+7 等 (デフォルト)</td></tr>
-  <tr><td><code>min7</code></td><td>Dm7, Am, Cm9</td><td>接尾辞に - / m / minor を含む</td></tr>
-  <tr><td><code>maj7</code></td><td>Cmaj7, F6, G69</td><td>接尾辞に maj7 / j7 / 6 / 69 を含む</td></tr>
-  <tr><td><code>min7b5</code></td><td>Bm7b5, Aø7</td><td>m7b5 / ø (half-diminished)</td></tr>
-  <tr><td><code>dim7</code></td><td>Bo7, Cdim7, Edim</td><td>dim / o を含む</td></tr>
-</table>
-<p>
-  WJD と Omnibook で別々の分類関数を使用しますが、出力する5品質キーは共通です。
-  スラッシュコード (例: <code>Dm7/G</code>) はスラッシュ前のコード本体 (<code>Dm7</code>) で品質・ルートを判定し、分数ベース音 (<code>G</code>) は無視します。
-  判別不能なシンボルは <code>dom7</code> にフォールバック（ジャズの慣例に従う）。
-</p>
-
-<h3>統計サマリー</h3>
-
-<div class="callout success">
-  <div class="callout-label">抽出結果</div>
-  <strong>103,590 ノート (WJD: 76,427 + Omnibook: 27,163) → LBDM で 2,891 フレーズ検出 → MLA フィルタ後 11,262 → 重複除去後 11,078 リック</strong>
-</div>
-
-<h4>フレーズ検出統計</h4>
-<table>
-  <tr><th>ソース</th><th>ソロ数</th><th>ノート数</th><th>LBDM検出</th><th>採用</th><th>リジェクト (length)</th><th>リジェクト (duration)</th><th>リジェクト (MLA line)</th></tr>
-  <tr><td>WJD</td><td>186</td><td>76,427</td><td>1,836</td><td>10,714</td><td>3,037</td><td>98</td><td>87</td></tr>
-  <tr><td>Omnibook</td><td>50</td><td>27,163</td><td>1,055</td><td>548</td><td>444</td><td>47</td><td>16</td></tr>
-</table>
-<p>
-  LBDM 検出数よりも採用数が多いのは、1つのフレーズがコード境界で複数のサブフレーズに分割されるためです。
-</p>
-
-<h4>品質別内訳</h4>
-<table>
-  <tr><th>品質</th><th>リック数</th><th>WJD由来</th><th>Omnibook由来</th><th>DTL マルチソロクラスタ</th></tr>
-  <tr><td><code>dom7</code></td><td>5,597</td><td>5,440</td><td>157</td><td>4,268</td></tr>
-  <tr><td><code>min7</code></td><td>3,038</td><td>2,918</td><td>120</td><td>2,396</td></tr>
-  <tr><td><code>maj7</code></td><td>1,874</td><td>1,658</td><td>216</td><td>1,317</td></tr>
-  <tr><td><code>min7b5</code></td><td>410</td><td>410</td><td>0</td><td>0</td></tr>
-  <tr><td><code>dim7</code></td><td>159</td><td>159</td><td>0</td><td>0</td></tr>
-</table>
-<p>
-  dom7 が最多 (50.5%) で、ジャズにおけるドミナント7thコードの頻出を反映。
-  min7b5 と dim7 は WJD のみから抽出 (Omnibook のコード分析で該当セグメントが少ない)。
-  DTL マルチソロクラスタ列は、複数ソロにまたがるパターンの数を示しています。
-</p>
-
-<h4>ノート長分布</h4>
-<table>
-  <tr><th>品質</th><th>3-4音</th><th>5-6音</th><th>7-8音</th><th>9-12音</th><th>13-20音</th></tr>
-  <tr><td>dom7</td><td>2,112</td><td>1,280</td><td>1,097</td><td>764</td><td>344</td></tr>
-  <tr><td>min7</td><td>1,273</td><td>734</td><td>578</td><td>309</td><td>144</td></tr>
-  <tr><td>maj7</td><td>650</td><td>427</td><td>417</td><td>250</td><td>130</td></tr>
-  <tr><td>min7b5</td><td>213</td><td>104</td><td>59</td><td>26</td><td>8</td></tr>
-  <tr><td>dim7</td><td>73</td><td>38</td><td>25</td><td>23</td><td>0</td></tr>
-</table>
-<p>
-  3〜4音の短いリックが最多で、フレーズ生成の2〜4拍に最も適合。
-  LBDM ベースのため 9音以上の長いリックも自然なフレーズ境界で切り出されており、
-  v1 (スライディングウィンドウ) と異なりアドホックフィルタなしで品質を確保しています。
-</p>
-
-<h4>方向分布</h4>
-<table>
-  <tr><th>品質</th><th>上行 (asc)</th><th>下行 (desc)</th><th>混合 (mixed)</th></tr>
-  <tr><td>dom7</td><td>657 (11.7%)</td><td>873 (15.6%)</td><td>4,067 (72.7%)</td></tr>
-  <tr><td>min7</td><td>473 (15.6%)</td><td>467 (15.4%)</td><td>2,098 (69.1%)</td></tr>
-  <tr><td>maj7</td><td>264 (14.1%)</td><td>221 (11.8%)</td><td>1,389 (74.1%)</td></tr>
-  <tr><td>min7b5</td><td>77 (18.8%)</td><td>68 (16.6%)</td><td>265 (64.6%)</td></tr>
-  <tr><td>dim7</td><td>18 (11.3%)</td><td>24 (15.1%)</td><td>117 (73.6%)</td></tr>
-</table>
-<p>
-  全品質で混合 (mixed) が 65〜74% と圧倒的に多く、ビバップフレーズの特徴的な
-  上下に波打つ動きを反映しています。純粋な上行・下行はそれぞれ 12〜19% 程度。
-</p>
-
-<!-- ==================== LICK SELECTION & RESOLUTION ==================== -->
-<h2 id="phrase-lick">Lick Selection &amp; Resolution</h2>
-<p>
-  フレーズ生成の中核。リックライブラリ (~11,000リック) から条件に最適なリックを検索し、
-  指板上の物理的な座標に解決します。スコアリングによる自動生成は行わず、
-  <strong>実際のビバップソロから抽出したリックの品質に依存</strong>するアーキテクチャです。
-</p>
-
-<div class="callout design">
-  <div class="callout-label">設計根拠</div>
-  リックの品質が高ければ、スコアリングで1音ずつ生成するより遥かに自然なフレーズが得られる。
-  WJD 186ソロ + Omnibook 50ソロから LBDM + MLA + DTL で抽出した ~11,000 リックは、ビバップの語彙を十分にカバーしている。
-  失敗時は null を返却し、UI は前回のフレーズを維持する。
-</div>
-
-<h3><code>selectLick()</code> — リック選択</h3>
-<p>品質・拍数・スケール互換性に基づいてリックを選択します。</p>
-<ol>
-  <li><strong>品質フィルタ</strong>: <code>toLickQuality()</code> でコード品質からリック品質キーに変換</li>
-  <li><strong>durationBeats 制約</strong>: 指定拍数に一致するリックのみ</li>
-  <li><strong>スケール互換フィルタ</strong>: <code>modeSemi</code> (現在のスケールの半音セット) と照合。uniqueOut ≥ 2 のリックは除外、outCount × -15 のペナルティ</li>
-  <li><strong>チェインフィルタ</strong> (2つ目のリック選択時): <code>chainFromStep</code> が指定されている場合、<code>startStep</code> との pitch-class 距離が 1-5半音以内のリックのみ通過。同音反復(0)と跳躍(&gt;5)を除外。リック内部インターバルの94.5%が≤5半音であることに基づく閾値</li>
-  <li><strong>特性音ボーナス</strong>: <code>CHARACTERISTIC_TONES</code> に含まれる音を持つリックに +20</li>
-  <li><strong>追加スコアリング</strong>: ゴール互換 / startHint 近接 / コンター親和 / 充填率</li>
-  <li><strong>Top-10 重み付きランダム選択</strong></li>
-</ol>
-
-<h3><code>resolveLick()</code> — 指板解決</h3>
-<p>選択されたリックの各ステップを、ノートプール内の物理的な指板位置に解決します。</p>
-<ul>
-  <li>各ステップで <code>targetSemitone</code> に一致する候補をスコアベースで選択</li>
-  <li>スコア要素: absolutePitch 近接 + 弦距離 + 方向一致</li>
-  <li><strong>品質ゲート</strong>: 強拍アプローチ音 → reject、連続音間 &gt;9半音 → reject</li>
-  <li>最大5リトライ、全失敗 → <code>null</code> 返却</li>
-</ul>
-
-<h3>コネクタ音</h3>
-<p>リック解決後、ゴール音に到達していない場合はコネクタ音を追加。
-<code>getApproachNotes()</code> で半音アプローチ / エンクロージャーを生成します。
-アプローチタイプのチェックボックスは将来のコネクタ機能拡張用に UI を保持していますが、現在は無効化されています。</p>
 
 <h2 id="phrase-analysis">Phrase Analysis</h2>
 <p><code>analyzePhrase()</code> がフレーズの各ノートを分析し、PhraseAnalysisPanel で表示します。
@@ -1242,7 +719,7 @@ degree ラベル、フレーバーテキストを持ちます。</p>
   <tr><td>thirdsPct</td><td>3-4st の割合</td></tr>
   <tr><td>rangeSemitones</td><td>フレーズ全体の音域幅</td></tr>
   <tr><td>directionChanges</td><td>方向転換の回数</td></tr>
-  <tr><td>goalReason</td><td>ゴール音の選択理由（事後検証済み: 実際の最終音がゴールと異なる場合は「CT到達」または「リック終端」に更新）</td></tr>
+  <tr><td>goalReason</td><td>ゴール音の選択理由（事後検証済み: 実際の最終音がゴールと異なる場合は「CT到達」または「テンプレート終端」に更新）</td></tr>
   <tr><td>motifLabel</td><td>モチーフパターン (例: "+3, -2")</td></tr>
 </table>
 
@@ -1529,23 +1006,10 @@ interface PhraseNote {
   isSkeletonBeat?: boolean             // スケルトン拍
   duration?: RhythmType                // 音価 (q/t/e/s)
   beatStart?: number                   // 絶対拍位置 (0起点)
-  lickIdx?: number                     // 0=1st lick, 1=2nd lick (連結時), undefined=コネクタ
 }
 
 type RhythmType = 'q' | 't' | 'e' | 's'  // 4分/3連/8分/16分
 type InstrumentType = 'guitar' | 'saxophone'  // フレーズ再生楽器
-
-// リック型
-interface Lick {
-  id: string
-  steps: number[]          // interval-from-root (0-11)
-  intervals: number[]      // signed semitone intervals
-  rhythm: RhythmType[]     // duration per note
-  direction: 'asc' | 'desc' | 'mixed'
-  length: number
-  durationBeats: number
-  source: 'omnibook' | 'wjd'
-}
 
 // 生成メタデータ型
 interface SkeletonMeta {
@@ -1590,14 +1054,13 @@ interface Progression {
 
 <!-- ==================== TESTING ==================== -->
 <h2 id="testing">Test Suite</h2>
-<p><code>npm test</code> — Vitest による <strong>752テスト</strong>。</p>
+<p><code>npm test</code> — Vitest による <strong>758テスト</strong>。</p>
 
 <table>
   <tr><th>Test File</th><th>Tests</th><th>Coverage</th></tr>
   <tr><td>fretboard.test.ts</td><td>388</td><td>Pos1リファレンス、度数オフセット不変条件、構造検証</td></tr>
   <tr><td>progression.test.ts</td><td>125</td><td>parseChordSymbol, QUALITY_TO_MODES, 近接ランキング</td></tr>
-  <tr><td>phraseGenerator.test.ts</td><td>43</td><td>buildNotePool + getApproachNotes + 構造不変条件 + メタデータ + startHint連結 + スケール互換フィルタ + chainFromStepフィルタ + リック連結 + lickIdxタグ検証 + resolveLick品質ゲート + ゴールラベル事後検証</td></tr>
-  <tr><td>phraseQualityAudit.test.ts</td><td>41</td><td>ルールベースエンジン品質監査: §1拍位置(2), §2ビバップスケール(3), §3アプローチ方向(1), §4エンクロージャー(2), §5テンプレート構造(5), §6開始終了(3), §7VL(1), §9Musical Forces(2), 全モード網羅(3), 多様性(4), 拍数適合(2), ポジション(1), 実用性(7), セグメント接合(4), リズム多様性(1)</td></tr>
+  <tr><td>phraseQualityAudit.test.ts</td><td>41</td><td>品質監査: §1拍位置(2), §2ビバップスケール(3), §3アプローチ方向(1), §4エンクロージャー(2), §5テンプレート構造(5), §6開始終了(3), §7VL(1), §9Musical Forces(2), 全モード網羅(3), 多様性(4), 拍数適合(2), ポジション(1), 実用性(7), セグメント接合(4), リズム多様性(1)</td></tr>
   <tr><td>jazzStandards.test.ts</td><td>42</td><td>パース、エンディング、リピート、ビート幅</td></tr>
   <tr><td>chordForms.test.ts</td><td>36</td><td>Drop 2/3 ボイシング検索、テンプレート構造</td></tr>
   <tr><td>guideTones.test.ts</td><td>22</td><td>ガイドトーン抽出、解決分類</td></tr>
@@ -1618,7 +1081,7 @@ interface Progression {
 <!-- Footer -->
 <hr style="border-color: var(--border); margin: 48px 0 24px;">
 <p style="color: var(--text-muted); font-size: 13px;">
-  Jazz Guitar Trainer Documentation — Generated 2026-03-04<br>
+  Jazz Guitar Trainer Documentation — Generated 2026-03-07<br>
   Vite 7 + React 19 + TypeScript 5 + Tailwind CSS v4
 </p>
 

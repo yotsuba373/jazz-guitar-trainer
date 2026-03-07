@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { generatePhraseRule } from '../bebopGenerator';
 import { buildFretMap, generatePositions, resolveMode } from '../../utils';
 import { MODE_TEMPLATES } from '../../constants';
-import { absolutePitch, type PoolNote } from '../phraseGenerator';
+import { absolutePitch } from '../bebopScheduler';
+import type { PoolNote } from '../../types';
 import { assignRhythms, RHYTHM_BEATS } from '../bebopScheduler';
 import type { SegmentSpec } from '../bebopTemplates';
 import type { PhraseConfig, RootName } from '../../types';
@@ -23,7 +24,6 @@ describe('generatePhraseRule', () => {
     expect(phrase).not.toBeNull();
     expect(phrase!.notes.length).toBeGreaterThanOrEqual(3);
     expect(phrase!.templateId).toBeTruthy();
-    expect(phrase!.lickId).toBeUndefined();
   });
 
   it('generates a phrase for C Ionian (maj7)', () => {

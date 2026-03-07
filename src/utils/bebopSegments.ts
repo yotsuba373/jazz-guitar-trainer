@@ -1,6 +1,7 @@
-import type { Mode } from '../types';
+import type { Mode, PoolNote } from '../types';
 import { getBebopScale, getBebopPassingTone } from '../constants/bebopScales';
-import { absolutePitch, pickWeighted, type PoolNote } from './phraseGenerator';
+import { absolutePitch } from './bebopScheduler';
+import { pickWeighted } from './bebopTemplates';
 
 // ---------------------------------------------------------------------------
 // Segment generation functions for rule-based bebop phrase construction.

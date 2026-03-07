@@ -1,9 +1,38 @@
-import type { Mode, PhraseNote, RhythmType } from '../types';
-import { absolutePitch, isExtensionTone, type PoolNote } from './phraseGenerator';
+import type { Mode, PhraseNote, RhythmType, PoolNote } from '../types';
 import { SEGMENT_FNS } from './bebopSegments';
 import { getBebopPassingTone } from '../constants/bebopScales';
 import type { PhraseTemplate, SegmentSpec } from './bebopTemplates';
 import { allocateEighths } from './bebopTemplates';
+
+// ---------------------------------------------------------------------------
+// Shared helpers (moved from phraseGenerator.ts)
+// ---------------------------------------------------------------------------
+
+/** Absolute pitch (semitone + octave info) for interval comparison.
+ *  Uses fret as a proxy for octave height since we're on a guitar.  */
+export function absolutePitch(note: { stringIdx: number; fret: number }): number {
+  const OPEN_MIDI = [64, 59, 55, 50, 45, 40]; // 1E=E4, B=B3, G=G3, D=D3, A=A2, 6E=E2
+  return OPEN_MIDI[note.stringIdx] + note.fret;
+}
+
+export function pickRandom<T>(arr: T[]): T {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+const EXTENSION_DEGREES: Record<string, number[]> = {
+  'maj7':  [1, 5],
+  '7':     [1, 5],
+  'm7':    [1],
+  'mMaj7': [1],
+  '7alt':  [],
+  'dim7':  [],
+};
+
+export function isExtensionTone(noteName: string, mode: Mode): boolean {
+  const indices = EXTENSION_DEGREES[mode.chordQuality];
+  if (!indices || indices.length === 0) return false;
+  return indices.some(idx => mode.notes[idx] === noteName);
+}
 
 // ---------------------------------------------------------------------------
 // Rhythm constants

@@ -11,7 +11,7 @@ import { describe, it } from 'vitest';
 import { generatePhraseRule } from '../bebopGenerator';
 import { buildFretMap, generatePositions, generateDimPositions, resolveMode } from '../../utils';
 import { MODE_TEMPLATES } from '../../constants';
-import { absolutePitch } from '../phraseGenerator';
+import { absolutePitch } from '../bebopScheduler';
 import { RHYTHM_BEATS } from '../bebopScheduler';
 import { MODE_TO_BEBOP, getBebopPassingTone } from '../../constants/bebopScales';
 import type { PhraseConfig, RootName, GeneratedPhrase, Mode } from '../../types';

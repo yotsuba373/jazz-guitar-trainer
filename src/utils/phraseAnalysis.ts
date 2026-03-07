@@ -1,5 +1,5 @@
 import type { GeneratedPhrase, Mode, PhraseNote, NoteAnalysis, PhraseAnalysis, PhraseAnalysisSummary, ApproachType, PhraseContour } from '../types';
-import { absolutePitch } from './phraseGenerator';
+import { absolutePitch } from './bebopScheduler';
 
 // ---------------------------------------------------------------------------
 // Interval naming
