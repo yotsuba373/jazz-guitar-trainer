@@ -1,11 +1,138 @@
-import type { Position, Mode, FretMap, PhraseConfig, GeneratedPhrase, PhraseContour } from '../types';
-import {
-  buildNotePool, chooseGoalNote, absolutePitch, pickWeighted,
-  type PoolNote,
-} from './phraseGenerator';
-import { selectTemplate } from './bebopTemplates';
+import type { Position, Mode, FretMap, PhraseConfig, GeneratedPhrase, PhraseContour, PoolNote } from '../types';
+import { OPEN_STRINGS } from '../constants';
+import { absolutePitch, pickRandom } from './bebopScheduler';
+import { pickWeighted, selectTemplate } from './bebopTemplates';
 import { buildPhrase } from './bebopScheduler';
 import { SEGMENT_FNS } from './bebopSegments';
+
+// ---------------------------------------------------------------------------
+// Strong-resolution mapping (normal mode: where does this mode resolve to?)
+// ---------------------------------------------------------------------------
+
+const STRONG_RESOLUTION_DEGREE_IDX: Record<string, number> = {
+  'ionian': 5, 'dorian': 6, 'phrygian': 0, 'lydian': 6,
+  'mixolydian': 2, 'aeolian': 3, 'locrian': 2,
+  'melodic-minor': 4, 'dorian-b2': 6, 'lydian-aug': 6,
+  'lydian-dom': 2, 'mixo-b6': 2, 'locrian-nat2': 2, 'altered': 2,
+  'harmonic-minor': 4, 'phrygian-dom': 2,
+};
+
+// ---------------------------------------------------------------------------
+// Note pool construction
+// ---------------------------------------------------------------------------
+
+export function buildNotePool(
+  position: Position,
+  mode: Mode,
+  _fretMap: FretMap,
+  includeChromatic: boolean,
+): PoolNote[] {
+  const ctSet = new Set(mode.chordTones);
+  const pool: PoolNote[] = [];
+  const seen = new Set<string>();
+
+  for (const inst of position.instances) {
+    for (let s = 0; s < 6; s++) {
+      const notes = inst.strings[s];
+      if (!notes) continue;
+      for (const [noteName, fret, semi] of notes) {
+        const key = `${s}:${fret}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        pool.push({ noteName, stringIdx: s, fret, semitone: semi, isChordTone: ctSet.has(noteName), isApproach: false });
+      }
+    }
+
+    if (includeChromatic) {
+      for (let s = 0; s < 6; s++) {
+        const strNotes = inst.strings[s];
+        if (!strNotes) continue;
+        const minFret = Math.max(0, inst.fretMin - 1);
+        const maxFret = inst.fretMax + 1;
+        for (let fret = minFret; fret <= maxFret; fret++) {
+          const key = `${s}:${fret}`;
+          if (seen.has(key)) continue;
+          const semi = (OPEN_STRINGS[s] + fret) % 12;
+          const allScaleSemis = new Set(mode.semi);
+          if (!allScaleSemis.has(semi)) {
+            seen.add(key);
+            const CHROMATIC_NAMES = ['C', 'D♭', 'D', 'E♭', 'E', 'F', 'G♭', 'G', 'A♭', 'A', 'B♭', 'B'];
+            pool.push({ noteName: CHROMATIC_NAMES[semi], stringIdx: s, fret, semitone: semi, isChordTone: false, isApproach: true });
+          }
+        }
+      }
+    }
+  }
+
+  return pool;
+}
+
+// ---------------------------------------------------------------------------
+// Goal note selection
+// ---------------------------------------------------------------------------
+
+export interface GoalResult { note: PoolNote; reason: string }
+
+const SEMI_MAP: Record<string, number> = {
+  'C': 0, 'D♭': 1, 'D': 2, 'E♭': 3, 'E': 4, 'F': 5,
+  'G♭': 6, 'G': 7, 'A♭': 8, 'A': 9, 'B♭': 10, 'B': 11,
+  'C#': 1, 'D#': 3, 'F#': 6, 'G#': 8, 'A#': 10,
+};
+
+function findSemitone(noteName: string): number | null {
+  return SEMI_MAP[noteName] ?? null;
+}
+
+export function chooseGoalNote(
+  ctPool: PoolNote[],
+  mode: Mode,
+  targetThirdNote?: string,
+  nextChordContext?: PhraseConfig['nextChordContext'],
+): GoalResult {
+  if (targetThirdNote) {
+    if (nextChordContext) {
+      const nextThirdSemi = findSemitone(nextChordContext.thirdNote);
+      if (nextThirdSemi !== null) {
+        const seventh = mode.chordTones[3];
+        const seventhCTs = ctPool.filter(n => n.noteName === seventh);
+        if (seventhCTs.length > 0) {
+          const seventhSemi = seventhCTs[0].semitone;
+          const diff = ((nextThirdSemi - seventhSemi) + 12) % 12;
+          if (diff === 1 || diff === 11) {
+            if (Math.random() < 0.70) return { note: pickRandom(seventhCTs), reason: '7th→次3rd半音解決' };
+          }
+        }
+      }
+    }
+    const targetSemi = findSemitone(targetThirdNote);
+    if (targetSemi !== null) {
+      const halfStepCTs = ctPool.filter(n => {
+        const diff = ((targetSemi - n.semitone) + 12) % 12;
+        return diff === 1 || diff === 11;
+      });
+      if (halfStepCTs.length > 0) return { note: pickRandom(halfStepCTs), reason: '次3rdへ半音VL' };
+    }
+    const exact = ctPool.filter(n => n.noteName === targetThirdNote);
+    if (exact.length > 0) return { note: pickRandom(exact), reason: '次3rd一致' };
+  }
+
+  const degIdx = STRONG_RESOLUTION_DEGREE_IDX[mode.key];
+  if (degIdx !== undefined && degIdx < mode.notes.length) {
+    const targetSemi = mode.semi[degIdx];
+    const halfStepCTs = ctPool.filter(n => {
+      const diff = ((targetSemi - n.semitone) + 12) % 12;
+      return diff === 1 || diff === 11;
+    });
+    if (halfStepCTs.length > 0) return { note: pickRandom(halfStepCTs), reason: '強進行→半音解決' };
+  }
+
+  const preferred = ctPool.filter(n =>
+    n.noteName === mode.chordTones[1] || n.noteName === mode.chordTones[3]
+  );
+  if (preferred.length > 0) return { note: pickRandom(preferred), reason: '3rd/7th優先' };
+
+  return { note: pickRandom(ctPool), reason: 'CT (ランダム)' };
+}
 
 // ---------------------------------------------------------------------------
 // Rule-based bebop phrase generator entry point

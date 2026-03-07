@@ -1,5 +1,15 @@
 import type { PhraseContour } from '../types';
-import { pickWeighted } from './phraseGenerator';
+
+export function pickWeighted<T>(items: T[], weights: number[]): T {
+  const total = weights.reduce((a, b) => a + b, 0);
+  if (total <= 0) return items[0];
+  let r = Math.random() * total;
+  for (let i = 0; i < items.length; i++) {
+    r -= weights[i];
+    if (r <= 0) return items[i];
+  }
+  return items[items.length - 1];
+}
 
 // ---------------------------------------------------------------------------
 // Phrase structure templates for rule-based bebop generation

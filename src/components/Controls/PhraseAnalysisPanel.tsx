@@ -32,9 +32,8 @@ export function PhraseAnalysisPanel({ phrase, mode }: PhraseAnalysisPanelProps) 
     ? summary.approachPatternsUsed.map(p => `${APPROACH_TYPE_SHORT[p.type] ?? p.type}×${p.count}`).join(' ')
     : 'なし';
 
-  const isChained = Array.isArray(phrase.lickId);
   const isSegmented = !!phrase.templateId && phrase.notes.some(n => n.segmentIdx != null);
-  const hasMultiSections = isChained || isSegmented;
+  const hasMultiSections = isSegmented;
 
   return (
     <div className="mb-2" style={{ background: '#1a1a1a', border: `1px solid ${PHRASE_COLOR}30`, borderRadius: 6, fontSize: 10, fontFamily: 'monospace' }}>
@@ -114,14 +113,11 @@ export function PhraseAnalysisPanel({ phrase, mode }: PhraseAnalysisPanelProps) 
                   : isInDp ? `2px solid ${DIGITAL_COLOR}60`
                   : '2px solid transparent';
 
-                // Boundary detection for chained licks or segmented templates
-                const curLickIdx = phrase.notes[i].lickIdx;
-                const prevLickIdx = i > 0 ? phrase.notes[i - 1].lickIdx : curLickIdx;
+                // Boundary detection for segmented templates
                 const curSegIdx = phrase.notes[i].segmentIdx;
                 const prevSegIdx = i > 0 ? phrase.notes[i - 1].segmentIdx : curSegIdx;
-                const isBoundary = (isChained && i > 0 && curLickIdx !== prevLickIdx) ||
-                  (isSegmented && i > 0 && curSegIdx !== prevSegIdx);
-                const sectionNum = isChained ? (curLickIdx ?? -1) : (curSegIdx ?? -1);
+                const isBoundary = isSegmented && i > 0 && curSegIdx !== prevSegIdx;
+                const sectionNum = curSegIdx ?? -1;
                 const sectionBadge = sectionNum === 0 ? '①' : sectionNum === 1 ? '②' : sectionNum === 2 ? '③' : '∙';
 
                 return (
@@ -175,28 +171,7 @@ export function PhraseAnalysisPanel({ phrase, mode }: PhraseAnalysisPanelProps) 
             )}
           </div>
 
-          {/* Lick info (lick engine) */}
-          {phrase.lickId && (
-            <div className="mt-1 pt-1" style={{ borderTop: '1px solid #333', color: '#666' }}>
-              <span>リック: <b style={{ color: '#DDD' }}>{
-                Array.isArray(phrase.lickId)
-                  ? phrase.lickId.join(' → ')
-                  : phrase.lickId
-              }</b></span>
-              {isChained && (() => {
-                const lick1Count = phrase.notes.filter(n => n.lickIdx === 0).length;
-                const lick2Count = phrase.notes.filter(n => n.lickIdx === 1).length;
-                const connCount = phrase.notes.filter(n => n.lickIdx == null).length;
-                return (
-                  <span style={{ color: '#888', marginLeft: 6 }}>
-                    (①{lick1Count}音 → ②{lick2Count}音{connCount > 0 ? ` + 接続${connCount}音` : ''})
-                  </span>
-                );
-              })()}
-            </div>
-          )}
-
-          {/* Template info (rule engine) */}
+          {/* Template info */}
           {phrase.templateId && (
             <div className="mt-1 pt-1" style={{ borderTop: '1px solid #333', color: '#666' }}>
               <span>テンプレート: <b style={{ color: '#DDD' }}>{phrase.templateId}</b></span>

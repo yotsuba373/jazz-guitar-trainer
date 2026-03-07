@@ -33,7 +33,6 @@ export type {
   SkeletonMeta,
   DigitalPatternTag,
   RhythmType,
-  Lick,
+  PoolNote,
   InstrumentType,
-  PhraseEngine,
 } from './music';

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { segArpeggio, segScaleRun, segEnclosure, seg1235, segDim7From3rd, segApproachCT, segChromatic, segUpperStructure } from '../bebopSegments';
-import { buildNotePool, absolutePitch } from '../phraseGenerator';
+import { buildNotePool } from '../bebopGenerator';
+import { absolutePitch } from '../bebopScheduler';
 import { buildFretMap, generatePositions, resolveMode } from '../../utils';
 import { MODE_TEMPLATES } from '../../constants';
 

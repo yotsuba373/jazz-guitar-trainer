@@ -1,5 +1,5 @@
 import type { GeneratedPhrase, NoteAnalysis, PhraseNote, RhythmType } from '../../types';
-import { absolutePitch } from '../../utils/phraseGenerator';
+import { absolutePitch } from '../../utils/bebopScheduler';
 
 interface PianoRollProps {
   phrase: GeneratedPhrase;
@@ -145,13 +145,13 @@ export function PianoRoll({ phrase, noteAnalysis }: PianoRollProps) {
         );
       })}
 
-      {/* Lick boundary lines (chained phrases) */}
-      {Array.isArray(phrase.lickId) && notes.map((n, i) => {
-        if (i === 0 || n.lickIdx === notes[i - 1].lickIdx) return null;
+      {/* Segment boundary lines */}
+      {phrase.templateId && notes.map((n, i) => {
+        if (i === 0 || n.segmentIdx === notes[i - 1].segmentIdx) return null;
         const bs = n.beatStart ?? (i * 0.5);
         const x = xScale(bs);
         return (
-          <line key={`lb-${i}`}
+          <line key={`sb-${i}`}
             x1={x} y1={margin.top} x2={x} y2={margin.top + plotH}
             stroke="#FF6B9D50" strokeWidth={1.5} strokeDasharray="4,3"
           />

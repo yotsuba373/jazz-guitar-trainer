@@ -1,4 +1,4 @@
-import type { ApproachType, PhraseEngine } from '../../types';
+import type { ApproachType } from '../../types';
 
 interface PhraseControlsProps {
   approachTypes: ApproachType[];
@@ -30,9 +30,6 @@ interface PhraseControlsProps {
   goalSelectMode?: boolean;
   onGoalSelectModeChange?: (on: boolean) => void;
   selectedGoalNote?: { noteName: string } | null;
-  /** Phrase engine selection */
-  phraseEngine?: PhraseEngine;
-  onPhraseEngineChange?: (engine: PhraseEngine) => void;
 }
 
 const PHRASE_COLOR = '#FF6B9D';
@@ -58,7 +55,6 @@ export function PhraseControls({
   isMetronomeOn,
   beatCount, onBeatCountChange,
   goalSelectMode, onGoalSelectModeChange, selectedGoalNote,
-  phraseEngine, onPhraseEngineChange,
 }: PhraseControlsProps) {
   const autoPlaying = phraseAutoPlay && isPlaying;
 
@@ -77,28 +73,7 @@ export function PhraseControls({
     <div className="mb-3 rounded-md px-3 py-2 flex flex-wrap gap-3 items-center"
       style={{ background: '#1a1a1a', border: `1px solid ${PHRASE_COLOR}40` }}>
 
-      {/* Engine toggle */}
-      {onPhraseEngineChange && (
-        <div className="flex gap-0.5 items-center">
-          <span className="text-[10px] text-text-muted mr-0.5">エンジン:</span>
-          {(['lick', 'rule'] as const).map(eng => (
-            <button key={eng}
-              onClick={() => onPhraseEngineChange(eng)}
-              className={`${btnBase} text-[10px] px-2 py-[2px]`}
-              style={{
-                border: `1px solid ${phraseEngine === eng ? PHRASE_COLOR : '#555'}`,
-                background: phraseEngine === eng ? '#2a1020' : '#1a1a1a',
-                color: phraseEngine === eng ? PHRASE_COLOR : '#888',
-                fontWeight: phraseEngine === eng ? 700 : 400,
-              }}
-              title={eng === 'lick' ? 'リックライブラリベース' : 'ルールベース (ビバップ構造)'}>
-              {eng === 'lick' ? 'Lick' : 'Rule'}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* Approach type checkboxes — disabled (lick-only mode, future connector feature) */}
+      {/* Approach type checkboxes — disabled (future connector feature) */}
       <div className="flex gap-2 items-center flex-wrap">
         <span className="text-[10px] text-text-muted mr-0.5">Approach:</span>
         {APPROACH_LABELS.map(({ type, label }) => (
