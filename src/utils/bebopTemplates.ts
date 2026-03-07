@@ -122,6 +122,16 @@ export const PHRASE_TEMPLATES: PhraseTemplate[] = [
     contour: 'arch',
     weight: 8,
   },
+  {
+    id: 'honeysuckle',
+    label: 'Honeysuckle',
+    segments: [
+      { type: 'octaveDisp', direction: 'asc', beats: 1 },
+      { type: 'scaleRun', direction: 'asc', beats: 0 },
+    ],
+    contour: 'ascending',
+    weight: 8,
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -149,7 +159,7 @@ export function selectTemplate(
   // Compute weights with contour affinity bonus
   const weights = eligible.map(t => {
     let w = t.weight;
-    if (contour && t.contour === contour) w += 15;
+    if (contour && t.contour === contour) w += 8;
     return Math.max(1, w);
   });
 

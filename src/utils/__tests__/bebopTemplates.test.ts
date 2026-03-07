@@ -12,7 +12,7 @@ describe('PHRASE_TEMPLATES', () => {
       expect(t.label).toBeTruthy();
       expect(t.segments.length).toBeGreaterThan(0);
       expect(t.weight).toBeGreaterThan(0);
-      expect(['arch', 'reverse-arch', 'descending', 'wave']).toContain(t.contour);
+      expect(['arch', 'reverse-arch', 'descending', 'wave', 'ascending']).toContain(t.contour);
     }
   });
 

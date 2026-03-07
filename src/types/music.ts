@@ -216,7 +216,7 @@ export type ApproachType =
   | 'b9-arpeggio';       // b9→3→5→b7 (Dom7 only)
 
 /** Phrase contour shape */
-export type PhraseContour = 'arch' | 'reverse-arch' | 'descending' | 'wave';
+export type PhraseContour = 'arch' | 'reverse-arch' | 'descending' | 'wave' | 'ascending';
 
 /** Generation configuration */
 export interface PhraseConfig {

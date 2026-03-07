@@ -518,6 +518,7 @@ const COMPLEMENT_CONTOUR: Record<PhraseContour, PhraseContour> = {
   'reverse-arch': 'wave',
   'descending': 'arch',
   'wave': 'reverse-arch',
+  'ascending': 'descending',
 };
 
 export function generatePhraseLick(

@@ -122,7 +122,7 @@ export function buildPhrase(
       if (!ctSet.has(n.noteName)) continue;
       const pd = Math.abs(absolutePitch(n) - lastPitch);
       const sd = Math.abs(n.stringIdx - lastEntry.note.stringIdx);
-      if (pd <= 4 && sd <= 1 && pd < bestDist) {
+      if (pd <= 3 && sd <= 1 && pd < bestDist) {
         bestDist = pd;
         bestCt = n;
       }
@@ -136,12 +136,28 @@ export function buildPhrase(
   // Range check
   const pitches = trimmed.map(e => absolutePitch(e.note));
   const range = Math.max(...pitches) - Math.min(...pitches);
-  if (range > 18 || range < 3) return null;
+  if (range > 15 || range < 4) return null;
 
   // Leap check
   for (let i = 1; i < trimmed.length; i++) {
     const leap = Math.abs(absolutePitch(trimmed[i].note) - absolutePitch(trimmed[i - 1].note));
     if (leap > 9) return null;
+  }
+
+  // §9: Direction changes should occur on off-beats (Barry Harris)
+  if (trimmed.length >= 4) {
+    let dirChanges = 0;
+    let dirChangesOnStrong = 0;
+    for (let i = 2; i < trimmed.length; i++) {
+      const prev = absolutePitch(trimmed[i - 1].note) - absolutePitch(trimmed[i - 2].note);
+      const cur = absolutePitch(trimmed[i].note) - absolutePitch(trimmed[i - 1].note);
+      if (prev !== 0 && cur !== 0 && ((prev > 0 && cur < 0) || (prev < 0 && cur > 0))) {
+        dirChanges++;
+        if ((i + initialParity) % 2 === 0) dirChangesOnStrong++;
+      }
+    }
+    // Reject if >60% of direction changes land on strong beats
+    if (dirChanges >= 2 && dirChangesOnStrong / dirChanges > 0.6) return null;
   }
 
   // --- Convert to PhraseNote[] ---

@@ -1,7 +1,7 @@
 import type { Position, Mode, FretMap, PhraseConfig, GeneratedPhrase, PhraseContour } from '../types';
 import {
-  buildNotePool, chooseGoalNote, absolutePitch, pickRandom, pickWeighted,
-  ALL_CONTOURS, type PoolNote,
+  buildNotePool, chooseGoalNote, absolutePitch, pickWeighted,
+  type PoolNote,
 } from './phraseGenerator';
 import { selectTemplate } from './bebopTemplates';
 import { buildPhrase } from './bebopScheduler';
@@ -35,7 +35,13 @@ export function generatePhraseRule(
   const activeCtPool = instCtPool.length >= 2 ? instCtPool : ctPool;
 
   // 3. Contour selection
-  const contour: PhraseContour = config.contour ?? pickRandom(ALL_CONTOURS);
+  // Contour weights: arch(35) > descending(30) > wave(20) > reverse-arch(15)
+  // §5: arch is the most important pattern; §2: descending is bebop scale default
+  const CONTOUR_WEIGHTS: [PhraseContour, number][] = [
+    ['arch', 33], ['descending', 28], ['wave', 18], ['reverse-arch', 13], ['ascending', 8],
+  ];
+  const contour: PhraseContour = config.contour
+    ?? pickWeighted(CONTOUR_WEIGHTS.map(c => c[0]), CONTOUR_WEIGHTS.map(c => c[1]));
 
   // 4. Compute total eighths (adjusted later for beatOffset)
   const totalBeats = config.beatCount ? config.beatCount : (config.phraseLength ? config.phraseLength / 2 : 4);
@@ -65,7 +71,7 @@ export function generatePhraseRule(
   }
 
   // 6. Beat offset: upbeat start for standalone phrases (50% chance)
-  const beatOffset = config.startHint ? 0 : (Math.random() < 0.5 ? 0.5 : 0);
+  const beatOffset = config.startHint ? 0 : (Math.random() < 0.7 ? 0.5 : 0);
   const totalEighths = Math.floor((totalBeats - beatOffset) * 2);
 
   // 7. Start note with GT priority (3rd/7th get 2x weight)
