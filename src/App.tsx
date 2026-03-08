@@ -171,6 +171,15 @@ export default function App() {
     return s === 'saxophone' ? s : 'guitar';
   });
   const instrumentRef = useRef(instrument);
+  // Swing state
+  const [swingEnabled, setSwingEnabled] = useState(
+    () => localStorage.getItem('swingEnabled') === 'true'
+  );
+  const [swingAmount, setSwingAmount] = useState(
+    () => Number(localStorage.getItem('swingAmount')) || 0.2
+  );
+  const swingEnabledRef = useRef(swingEnabled);
+  const swingAmountRef = useRef(swingAmount);
   const phraseAutoPlayRef = useRef(phraseAutoPlay);
   const activePhraseStopRef = useRef<{ stop: () => void } | null>(null);
   const [autoPlayPhrase, setAutoPlayPhrase] = useState<GeneratedPhrase | null>(null);
@@ -396,6 +405,8 @@ export default function App() {
   // Note volume ref + persistence (covers fretboard clicks + phrase playback)
   useEffect(() => { noteVolumeRef.current = noteVolume; localStorage.setItem('noteVolume', String(noteVolume)); }, [noteVolume]);
   useEffect(() => { instrumentRef.current = instrument; localStorage.setItem('phraseInstrument', instrument); }, [instrument]);
+  useEffect(() => { swingEnabledRef.current = swingEnabled; localStorage.setItem('swingEnabled', String(swingEnabled)); }, [swingEnabled]);
+  useEffect(() => { swingAmountRef.current = swingAmount; localStorage.setItem('swingAmount', String(swingAmount)); }, [swingAmount]);
   useEffect(() => { phraseAutoPlayRef.current = phraseAutoPlay; }, [phraseAutoPlay]);
 
   // Auto-enable showPhrase when phraseAutoPlay is turned on
@@ -548,7 +559,7 @@ export default function App() {
           if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
           const ctx = audioCtxRef.current;
           const eighthDur = (60 / bpm) / 2;
-          activePhraseStopRef.current = schedulePhrase(ctx, phrase, ctx.currentTime, eighthDur, noteVolumeRef.current, 99, instrumentRef.current);
+          activePhraseStopRef.current = schedulePhrase(ctx, phrase, ctx.currentTime, eighthDur, noteVolumeRef.current, 99, instrumentRef.current, swingEnabledRef.current ? swingAmountRef.current : 0, bpm);
         }
       }
     }
@@ -589,7 +600,7 @@ export default function App() {
           if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
           const ctx = audioCtxRef.current;
           const eighthDur = (60 / bpm) / 2;
-          activePhraseStopRef.current = schedulePhrase(ctx, phrase, ctx.currentTime, eighthDur, noteVolumeRef.current, 99, instrumentRef.current);
+          activePhraseStopRef.current = schedulePhrase(ctx, phrase, ctx.currentTime, eighthDur, noteVolumeRef.current, 99, instrumentRef.current, swingEnabledRef.current ? swingAmountRef.current : 0, bpm);
         }
       }
 
@@ -718,7 +729,7 @@ export default function App() {
     const eighthDur = isMetronomeOn
       ? (60 / bpm) / 2
       : Math.max(0.1, phraseAnimSpeed / 1000);
-    const result = schedulePhrase(ctx, phrase, ctx.currentTime, eighthDur, noteVolumeRef.current, 99, instrumentRef.current);
+    const result = schedulePhrase(ctx, phrase, ctx.currentTime, eighthDur, noteVolumeRef.current, 99, instrumentRef.current, swingEnabledRef.current ? swingAmountRef.current : 0, bpm);
     manualPhraseRef.current = result;
     setIsPhraseAudioPlaying(true);
     setPhraseAnimKey(k => k + 1);
@@ -911,6 +922,10 @@ export default function App() {
           onNoteVolumeChange={setNoteVolume}
           instrument={instrument}
           onInstrumentChange={setInstrument}
+          swingEnabled={swingEnabled}
+          onToggleSwing={() => setSwingEnabled(p => !p)}
+          swingAmount={swingAmount}
+          onSwingAmountChange={setSwingAmount}
           isPlaying={isPlaying}
           onTogglePlay={() => setIsPlaying(p => !p)}
           showPlayButton={progMode && !!activeProg && activeProg.chords.length > 0}
@@ -1047,11 +1062,13 @@ export default function App() {
           phraseAnimSpeed={(phraseAutoPlay && progMode && isPlaying) || isMetronomeOn
             ? Math.round((60000 / bpm) / 2)
             : phraseAnimSpeed}
+          swingAmount={swingEnabled ? swingAmount : 0}
+          bpm={bpm}
           selectedGoalNote={selectedGoalNote}
           goalSelectMode={goalSelectMode}
         />
 
-        {activePhrase && <PhraseAnalysisPanel phrase={activePhrase} mode={mode} />}
+        {activePhrase && <PhraseAnalysisPanel phrase={activePhrase} mode={mode} swingAmount={swingEnabled ? swingAmount : 0} bpm={bpm} />}
 
         {/* Mode description section */}
         <div className="mt-2 mb-3 rounded-md px-3 py-2" style={{ background: '#1a1a1a', borderLeft: `3px solid ${MODE_COLORS[mode.key]}` }}>

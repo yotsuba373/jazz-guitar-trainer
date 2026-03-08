@@ -10,6 +10,7 @@
  */
 
 import type { GeneratedPhrase, InstrumentType } from '../types';
+import { swingBeatStart, swingVolumeMult, swingDurMult } from './swing';
 
 /** Guitar open-string MIDI note numbers (stringIdx 0 = 1E … 5 = 6E) */
 export const OPEN_STRING_MIDI: readonly number[] = [64, 59, 55, 50, 45, 40];
@@ -334,6 +335,8 @@ export function schedulePhrase(
   volume: number,
   maxNotes = 99,
   instrument: InstrumentType = 'guitar',
+  swingAmount = 0,
+  bpm = 120,
 ): { stop: () => void; totalDuration: number } {
   if (ctx.state === 'suspended') ctx.resume();
 
@@ -345,19 +348,26 @@ export function schedulePhrase(
     const n = notes[i];
     if (n.isRest) continue;
     const freq = fretToFrequency(n.stringIdx, n.fret);
-    const rhythmDur = RHYTHM_BEATS[n.duration ?? 'e'] * beatDurSec;
-    // Use beatStart for timing so audio syncs with animation & metronome
-    const noteStart = startTime + (n.beatStart ?? 0) * beatDurSec;
+    const bs = n.beatStart ?? 0;
+    const d = n.duration ?? 'e';
+    const swungBeat = swingBeatStart(bs, d, swingAmount, bpm);
+    const volMult = swingVolumeMult(bs, d, swingAmount);
+    const durMult = swingDurMult(bs, d, swingAmount);
+    const rhythmDur = RHYTHM_BEATS[d] * beatDurSec;
+    // Use swung beatStart for timing so audio reflects swing feel
+    const noteStart = startTime + swungBeat * beatDurSec;
     // Last note sustains longer; others get slight overlap for legato
-    const dur = i < notes.length - 1 ? rhythmDur * 1.2 : rhythmDur * 2;
-    handles.push(playNote(ctx, freq, volume, noteStart, dur, instrument));
+    const baseDur = i < notes.length - 1 ? rhythmDur * 1.2 : rhythmDur * 2;
+    handles.push(playNote(ctx, freq, volume * volMult, noteStart, baseDur * durMult, instrument));
   }
 
-  // Total duration: from first note to end of last note
+  // Total duration: from first note to end of last note (with swing applied)
   const lastNote = notes[notes.length - 1];
-  const lastStart = (lastNote?.beatStart ?? 0) * beatDurSec;
-  const lastDur = RHYTHM_BEATS[lastNote?.duration ?? 'e'] * beatDurSec;
-  const totalDuration = lastStart + lastDur;
+  const lastBs = lastNote?.beatStart ?? 0;
+  const lastD = lastNote?.duration ?? 'e';
+  const lastSwung = swingBeatStart(lastBs, lastD, swingAmount, bpm);
+  const lastDur = RHYTHM_BEATS[lastD] * beatDurSec;
+  const totalDuration = lastSwung * beatDurSec + lastDur * swingDurMult(lastBs, lastD, swingAmount);
 
   return {
     stop() {

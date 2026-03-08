@@ -1,9 +1,12 @@
 import type { GeneratedPhrase, NoteAnalysis, PhraseNote, RhythmType } from '../../types';
 import { absolutePitch } from '../../utils/bebopScheduler';
+import { swingBeatStart } from '../../utils/swing';
 
 interface PianoRollProps {
   phrase: GeneratedPhrase;
   noteAnalysis: NoteAnalysis[];
+  swingAmount?: number;
+  bpm?: number;
 }
 
 const RHYTHM_BEATS: Record<RhythmType, number> = {
@@ -27,7 +30,7 @@ function noteColor(n: PhraseNote): string {
   return SCALE_COLOR;
 }
 
-export function PianoRoll({ phrase, noteAnalysis }: PianoRollProps) {
+export function PianoRoll({ phrase, noteAnalysis, swingAmount = 0, bpm = 120 }: PianoRollProps) {
   const notes = phrase.notes;
   if (notes.length === 0) return null;
 
@@ -87,9 +90,10 @@ export function PianoRoll({ phrase, noteAnalysis }: PianoRollProps) {
         );
       })}
 
-      {/* Half-beat dashed lines */}
+      {/* Half-beat dashed lines (swing-adjusted) */}
       {Array.from({ length: Math.ceil(totalBeats) }, (_, i) => {
-        const x = xScale(i + 0.5);
+        const swungHalf = swingBeatStart(i + 0.5, 'e', swingAmount, bpm);
+        const x = xScale(swungHalf);
         return (
           <line key={`half-${i}`}
             x1={x} y1={margin.top} x2={x} y2={margin.top + plotH}
@@ -125,8 +129,9 @@ export function PianoRoll({ phrase, noteAnalysis }: PianoRollProps) {
         if (n.isRest) {
           // Rest: thin dashed line at the beat position
           const bs = n.beatStart ?? (i * 0.5);
-          const dur = RHYTHM_BEATS[n.duration ?? 'e'];
-          const x = xScale(bs);
+          const d = n.duration ?? 'e';
+          const dur = RHYTHM_BEATS[d];
+          const x = xScale(swingBeatStart(bs, d, swingAmount, bpm));
           const w = Math.max(2, (dur / totalBeats) * plotW - 1);
           const midY = margin.top + plotH / 2;
           return (
@@ -135,9 +140,10 @@ export function PianoRoll({ phrase, noteAnalysis }: PianoRollProps) {
           );
         }
         const bs = n.beatStart ?? (i * 0.5);
-        const dur = RHYTHM_BEATS[n.duration ?? 'e'];
+        const d = n.duration ?? 'e';
+        const dur = RHYTHM_BEATS[d];
         const pitch = absolutePitch(n);
-        const x = xScale(bs);
+        const x = xScale(swingBeatStart(bs, d, swingAmount, bpm));
         const w = Math.max(2, (dur / totalBeats) * plotW - 1);
         const y = yScale(pitch);
         const color = noteColor(n);
@@ -165,7 +171,7 @@ export function PianoRoll({ phrase, noteAnalysis }: PianoRollProps) {
       {phrase.templateId && notes.map((n, i) => {
         if (i === 0 || n.segmentIdx === notes[i - 1].segmentIdx) return null;
         const bs = n.beatStart ?? (i * 0.5);
-        const x = xScale(bs);
+        const x = xScale(swingBeatStart(bs, n.duration ?? 'e', swingAmount, bpm));
         return (
           <line key={`sb-${i}`}
             x1={x} y1={margin.top} x2={x} y2={margin.top + plotH}
