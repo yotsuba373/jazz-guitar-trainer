@@ -188,7 +188,18 @@ export function selectTemplate(
   return pickWeighted(eligible, weights);
 }
 
-/** Allocate eighths per segment given total eighths and template specs */
+/** Allocate beats per segment given total beats and template specs (beat-based) */
+export function allocateBeats(
+  template: PhraseTemplate,
+  totalBeats: number,
+): number[] {
+  const specs = template.segments;
+  const fixed = specs.reduce((sum, s) => sum + (s.beats > 0 ? s.beats : 0), 0);
+  const remainder = Math.max(0.5, totalBeats - fixed);
+  return specs.map(s => s.beats > 0 ? s.beats : remainder);
+}
+
+/** @deprecated Use allocateBeats() instead. Kept for backward compatibility with existing tests. */
 export function allocateEighths(
   template: PhraseTemplate,
   totalEighths: number,

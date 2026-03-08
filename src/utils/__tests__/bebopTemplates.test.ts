@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { PHRASE_TEMPLATES, selectTemplate, allocateEighths } from '../bebopTemplates';
+import { PHRASE_TEMPLATES, selectTemplate, allocateEighths, allocateBeats } from '../bebopTemplates';
 
 describe('PHRASE_TEMPLATES', () => {
   it('has at least 10 templates', () => {
@@ -90,5 +90,34 @@ describe('allocateEighths', () => {
     // 2 beats (4 eighths) fixed for arp, remainder = 0 → minimum 2
     expect(result[0]).toBe(4);
     expect(result[1]).toBe(2); // minimum remainder
+  });
+});
+
+describe('allocateBeats', () => {
+  it('allocates beats correctly for arp-up-scale-down', () => {
+    const t = PHRASE_TEMPLATES.find(t => t.id === 'arp-up-scale-down')!;
+    const result = allocateBeats(t, 4);
+    expect(result).toEqual([2, 2]); // 2 beats arp + 2 beats (remainder) scale
+  });
+
+  it('allocates all beats to single segment', () => {
+    const t = PHRASE_TEMPLATES.find(t => t.id === 'scale-down')!;
+    const result = allocateBeats(t, 4);
+    expect(result).toEqual([4]); // all 4 beats to the single segment
+  });
+
+  it('handles small beat budgets', () => {
+    const t = PHRASE_TEMPLATES.find(t => t.id === 'arp-up-scale-down')!;
+    const result = allocateBeats(t, 2);
+    // 2 beats fixed for arp, remainder = max(0.5, 2-2) = 0.5
+    expect(result[0]).toBe(2);
+    expect(result[1]).toBe(0.5); // minimum remainder
+  });
+
+  it('3-segment template distributes correctly', () => {
+    const t = PHRASE_TEMPLATES.find(t => t.id === 'chromatic-arp-scale')!;
+    const result = allocateBeats(t, 4);
+    // chromatic=1, arp=1, scaleRun=remainder=2
+    expect(result).toEqual([1, 1, 2]);
   });
 });

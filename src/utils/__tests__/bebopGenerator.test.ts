@@ -4,8 +4,9 @@ import { buildFretMap, generatePositions, resolveMode } from '../../utils';
 import { MODE_TEMPLATES } from '../../constants';
 import { absolutePitch } from '../bebopScheduler';
 import type { PoolNote } from '../../types';
-import { assignRhythms, RHYTHM_BEATS } from '../bebopScheduler';
+import { assignRhythms, RHYTHM_BEATS, planSegmentRhythms } from '../bebopScheduler';
 import type { SegmentSpec } from '../bebopTemplates';
+import { PHRASE_TEMPLATES, allocateBeats } from '../bebopTemplates';
 import type { PhraseConfig, RootName } from '../../types';
 
 function generate(rootName: RootName, modeKey: string, beatCount: 2 | 3 | 4 = 4) {
@@ -304,5 +305,66 @@ describe('assignRhythms', () => {
       const rhythms = assignRhythms(notes, segs, 0, ctSet);
       expect(rhythms[2]).not.toBe('q');
     }
+  });
+});
+
+describe('planSegmentRhythms', () => {
+  it('scaleRun always gets eighth rhythm', () => {
+    const tmpl = PHRASE_TEMPLATES.find(t => t.id === 'scale-down')!;
+    const beats = allocateBeats(tmpl, 4);
+    for (let i = 0; i < 50; i++) {
+      const plan = planSegmentRhythms(tmpl, beats, 0);
+      expect(plan[0].rhythm).toBe('e');
+    }
+  });
+
+  it('arpeggio can get triplet rhythm', () => {
+    const tmpl = PHRASE_TEMPLATES.find(t => t.id === 'arp-up-scale-down')!;
+    const beats = allocateBeats(tmpl, 4);
+    let hasTriplet = false;
+    for (let i = 0; i < 100; i++) {
+      const plan = planSegmentRhythms(tmpl, beats, 0);
+      if (plan[0].rhythm === 't') { hasTriplet = true; break; }
+    }
+    expect(hasTriplet).toBe(true);
+  });
+
+  it('arpeggio scaleRun combo: scaleRun stays eighth', () => {
+    const tmpl = PHRASE_TEMPLATES.find(t => t.id === 'arp-up-scale-down')!;
+    const beats = allocateBeats(tmpl, 4);
+    for (let i = 0; i < 50; i++) {
+      const plan = planSegmentRhythms(tmpl, beats, 0);
+      // Second segment is scaleRun — always 'e'
+      expect(plan[1].rhythm).toBe('e');
+    }
+  });
+
+  it('approachCT can get sixteenth rhythm', () => {
+    const tmpl = PHRASE_TEMPLATES.find(t => t.id === 'approach-ct-chain')!;
+    const beats = allocateBeats(tmpl, 4);
+    let hasSixteenth = false;
+    for (let i = 0; i < 100; i++) {
+      const plan = planSegmentRhythms(tmpl, beats, 0);
+      if (plan[0].rhythm === 's') { hasSixteenth = true; break; }
+    }
+    expect(hasSixteenth).toBe(true);
+  });
+
+  it('noteCount is at least 2', () => {
+    for (const tmpl of PHRASE_TEMPLATES) {
+      const beats = allocateBeats(tmpl, 2);
+      const plan = planSegmentRhythms(tmpl, beats, 0);
+      for (const p of plan) {
+        expect(p.noteCount).toBeGreaterThanOrEqual(2);
+      }
+    }
+  });
+
+  it('noteCount matches beat budget / rhythm beats', () => {
+    const tmpl = PHRASE_TEMPLATES.find(t => t.id === 'scale-down')!;
+    const beats = allocateBeats(tmpl, 4);
+    const plan = planSegmentRhythms(tmpl, beats, 0);
+    // scaleRun, 4 beats, eighth → 4/0.5 = 8 notes
+    expect(plan[0].noteCount).toBe(8);
   });
 });

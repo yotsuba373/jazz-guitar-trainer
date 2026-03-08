@@ -2,7 +2,7 @@ import type { Mode, PhraseNote, RhythmType, PoolNote, ApproachGroupInfo, Approac
 import { SEGMENT_FNS } from './bebopSegments';
 import { getBebopPassingTone } from '../constants/bebopScales';
 import type { PhraseTemplate, SegmentSpec } from './bebopTemplates';
-import { allocateEighths } from './bebopTemplates';
+import { allocateBeats } from './bebopTemplates';
 
 // ---------------------------------------------------------------------------
 // Shared helpers (moved from phraseGenerator.ts)
@@ -43,7 +43,60 @@ export const RHYTHM_BEATS: Record<RhythmType, number> = {
 };
 
 // ---------------------------------------------------------------------------
+// planSegmentRhythms — pre-determine rhythm for each segment BEFORE generation
+// ---------------------------------------------------------------------------
+
+/** Rhythm eligibility per segment type: [rhythm, probability] pairs */
+const SEGMENT_RHYTHM_TABLE: Record<string, [RhythmType, number][]> = {
+  scaleRun:       [['e', 1.0]],                           // §2: always eighth
+  enclosure:      [['e', 1.0]],                           // parity-dependent, post-compress to 16th
+  arpeggio:       [['e', 0.55], ['t', 0.45]],             // Baker/Larsen: CT arpeggio triplet
+  '1235':         [['e', 0.55], ['t', 0.45]],             // 4-note pattern = triplet natural
+  dim7From3rd:    [['e', 0.55], ['t', 0.45]],             // CT arpeggio variant
+  upperStructure: [['e', 0.55], ['t', 0.45]],             // CT arpeggio variant
+  approachCT:     [['e', 0.65], ['s', 0.35]],             // approach → CT = quick passing
+  chromatic:      [['e', 0.45], ['s', 0.55]],             // chromatic run = tension
+  octaveDisp:     [['e', 0.60], ['t', 0.40]],             // octave leap + arpeggio
+};
+
+export interface SegmentRhythmPlan {
+  rhythm: RhythmType;
+  beatBudget: number;
+  noteCount: number;
+}
+
+/**
+ * Plan rhythms for each segment before generation.
+ * Returns a rhythm plan per segment with the chosen rhythm, beat budget, and note count.
+ */
+export function planSegmentRhythms(
+  template: PhraseTemplate,
+  beatsPerSeg: number[],
+  _beatOffset: number,
+): SegmentRhythmPlan[] {
+  return template.segments.map((spec, i) => {
+    const budget = beatsPerSeg[i];
+    const table = SEGMENT_RHYTHM_TABLE[spec.type] ?? [['e', 1.0]];
+
+    // Pick rhythm by weighted random
+    let rhythm: RhythmType = 'e';
+    const r = Math.random();
+    let acc = 0;
+    for (const [rType, prob] of table) {
+      acc += prob;
+      if (r < acc) { rhythm = rType; break; }
+    }
+
+    const beatsPerNote = RHYTHM_BEATS[rhythm];
+    const noteCount = Math.max(2, Math.floor(budget / beatsPerNote));
+    return { rhythm, beatBudget: budget, noteCount };
+  });
+}
+
+// ---------------------------------------------------------------------------
 // assignRhythms — post-process: assign rhythm per segment type
+// @deprecated — kept for backward compatibility with existing tests.
+// New code uses planSegmentRhythms() for pre-generation rhythm planning.
 // ---------------------------------------------------------------------------
 
 /** Check if a beat position falls on a downbeat (integer beat position: 1,2,3,4) */
@@ -152,37 +205,46 @@ export function buildPhrase(
   totalEighths: number,
   beatOffset = 0,
 ): PhraseNote[] | null {
-  const eighthsPerSeg = allocateEighths(template, totalEighths);
   const ctSet = new Set(mode.chordTones);
   const bebopPassing = getBebopPassingTone(mode);
   const quality = mode.chordQuality;
 
-  const allNotes: { note: PoolNote; segIdx: number; isRest?: boolean }[] = [];
+  // E案: Pre-plan rhythms before segment generation
+  const totalBeats = totalEighths * 0.5;
+  const beatsPerSeg = allocateBeats(template, totalBeats);
+  const rhythmPlan = planSegmentRhythms(template, beatsPerSeg, beatOffset);
+
+  const allNotes: { note: PoolNote; segIdx: number; isRest?: boolean; rhythm?: RhythmType }[] = [];
   let current = startNote;
 
-  // Execute each segment
+  // Execute each segment with pre-planned rhythm
   for (let si = 0; si < template.segments.length; si++) {
     const spec = template.segments[si];
     const segFn = SEGMENT_FNS[spec.type];
     if (!segFn) continue;
 
     const isLast = si === template.segments.length - 1;
-    const segEighths = eighthsPerSeg[si];
+    const plan = rhythmPlan[si];
 
-    // Compute actual beat position for this segment start
-    const segBeatPos = beatOffset + allNotes.length * 0.5; // approximate: segments before rhythm assignment
+    // Compute accurate beat position using actual accumulated notes
+    const segBeatPos = beatOffset + allNotes.reduce(
+      (sum, n) => sum + RHYTHM_BEATS[n.rhythm ?? 'e'], 0);
     const segParity = isOnBeat(segBeatPos) ? 0 : 1;
+
+    // For segments with triplet rhythm, convert noteCount to eighths equivalent
+    // (segment functions still expect "eighths" count parameter)
     const segNotes = segFn(
-      pool, mode, current, spec.direction, segEighths,
+      pool, mode, current, spec.direction, plan.noteCount,
       { goalNote: isLast ? goalNote : undefined, quality,
-        beatParity: segParity },
+        beatParity: segParity, rhythm: plan.rhythm },
     );
 
     if (!segNotes || segNotes.length === 0) {
       // Segment failed — try a simple scale run as fallback
-      const fallback = SEGMENT_FNS.scaleRun(pool, mode, current, spec.direction, segEighths);
+      const fallbackCount = Math.max(2, Math.floor(plan.beatBudget / 0.5));
+      const fallback = SEGMENT_FNS.scaleRun(pool, mode, current, spec.direction, fallbackCount);
       if (fallback && fallback.length > 0) {
-        for (const n of fallback) allNotes.push({ note: n, segIdx: si });
+        for (const n of fallback) allNotes.push({ note: n, segIdx: si, rhythm: 'e' });
         current = fallback[fallback.length - 1];
         continue;
       }
@@ -198,12 +260,13 @@ export function buildPhrase(
       // Reject if junction is too disjunct (> major 6th or > 2 strings apart)
       if (junctionLeap > 9 || stringDist > 3) {
         // Try fallback scale run instead
-        const fallback = SEGMENT_FNS.scaleRun(pool, mode, allNotes[allNotes.length - 1].note, spec.direction, segEighths);
+        const fallbackCount = Math.max(2, Math.floor(plan.beatBudget / 0.5));
+        const fallback = SEGMENT_FNS.scaleRun(pool, mode, allNotes[allNotes.length - 1].note, spec.direction, fallbackCount);
         if (fallback && fallback.length > 0) {
           const fb0 = fallback[0];
           const fbLeap = Math.abs(absolutePitch(fb0) - absolutePitch(prevNote));
           if (fbLeap <= 9) {
-            for (const n of fallback) allNotes.push({ note: n, segIdx: si });
+            for (const n of fallback) allNotes.push({ note: n, segIdx: si, rhythm: 'e' });
             current = fallback[fallback.length - 1];
             continue;
           }
@@ -223,15 +286,61 @@ export function buildPhrase(
       }
     }
     for (let ni = skipFirst ? 1 : 0; ni < segNotes.length; ni++) {
-      allNotes.push({ note: segNotes[ni], segIdx: si });
+      allNotes.push({ note: segNotes[ni], segIdx: si, rhythm: plan.rhythm });
     }
     current = segNotes[segNotes.length - 1];
   }
 
   if (allNotes.length < 3) return null;
 
-  // Assign rhythms based on segment types
-  const rawRhythms = assignRhythms(allNotes, template.segments, beatOffset, ctSet);
+  // E案: Extract pre-planned rhythms directly (no post-process assignRhythms)
+  const rawRhythms: RhythmType[] = allNotes.map(e => e.rhythm ?? 'e');
+
+  // Post-compress enclosure/chromatic segments to 16th notes
+  {
+    const segGroups: { start: number; end: number; type: string }[] = [];
+    let gi = 0;
+    while (gi < allNotes.length) {
+      const segIdx = allNotes[gi].segIdx;
+      const start = gi;
+      while (gi < allNotes.length && allNotes[gi].segIdx === segIdx) gi++;
+      segGroups.push({ start, end: gi, type: template.segments[segIdx]?.type ?? '' });
+    }
+    for (const group of segGroups) {
+      const count = group.end - group.start;
+      if (group.type === 'enclosure' && count >= 3 && Math.random() < 0.35) {
+        // Compress approach notes (all except last = target) to 16th
+        for (let j = group.start; j < group.end - 1; j++) rawRhythms[j] = 's';
+      }
+      if (group.type === 'chromatic' && count >= 2 && Math.random() < 0.45) {
+        const limit = Math.min(count, 6);
+        for (let j = group.start; j < group.start + limit; j++) rawRhythms[j] = 's';
+      }
+    }
+  }
+
+  // Last note CT → quarter (45% chance) for landing feel
+  if (allNotes.length > 0 && ctSet.has(allNotes[allNotes.length - 1].note.noteName) && Math.random() < 0.45) {
+    rawRhythms[rawRhythms.length - 1] = 'q';
+  }
+
+  // First note on downbeat CT → quarter (15% chance) for pickup/breathing feel
+  if (allNotes.length > 0 && !allNotes[0].isRest && ctSet.has(allNotes[0].note.noteName)
+      && isOnBeat(beatOffset) && Math.random() < 0.15) {
+    rawRhythms[0] = 'q';
+  }
+
+  // Segment boundary last note CT → quarter (20% chance) for phrasing
+  if (template.segments.length > 1) {
+    for (let i = 1; i < allNotes.length; i++) {
+      if (allNotes[i].segIdx !== allNotes[i - 1].segIdx && i > 0) {
+        const prevEntry = allNotes[i - 1];
+        if (!prevEntry.isRest && ctSet.has(prevEntry.note.noteName) && Math.random() < 0.20) {
+          rawRhythms[i - 1] = 'q';
+        }
+      }
+    }
+  }
 
   // Insert rests at segment junctions (15% probability, multi-segment templates only)
   if (template.segments.length > 1) {
