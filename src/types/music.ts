@@ -247,6 +247,12 @@ export interface PhraseConfig {
     rootNote: string;     // next chord's root
     quality: string;      // next chord's quality
   };
+  /** Pre-resolved start note from previous chord's VL — takes priority over startHint.
+   *  If inPosition=false, this note is played as a pickup then followed by a rest. */
+  resolvedStart?: {
+    note: PoolNote;
+    inPosition: boolean;
+  };
   /** Previous phrase's motivic pattern — signed interval sequence (WP6) */
   prevMotif?: number[];
   /** Beat count for normal mode (2/3/4 beats, default 4) */
@@ -274,6 +280,11 @@ export interface GeneratedPhrase {
   templateId?: string;
   /** Total number of beats in the phrase */
   totalBeats: number;
+  /** Resolved start for the next chord's phrase (from next chord's pool) */
+  resolvedGoalForNext?: {
+    note: PoolNote;
+    inPosition: boolean;
+  };
 }
 
 // --- Phrase Analysis Types ---

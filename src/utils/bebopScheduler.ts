@@ -204,6 +204,8 @@ export function buildPhrase(
   goalNote: PoolNote,
   totalEighths: number,
   beatOffset = 0,
+  goalIsVL = false,
+  forceStartNote?: PoolNote,
 ): PhraseNote[] | null {
   const ctSet = new Set(mode.chordTones);
   const bebopPassing = getBebopPassingTone(mode);
@@ -249,6 +251,19 @@ export function buildPhrase(
         continue;
       }
       return null; // can't recover
+    }
+
+    // forceStartNote prepend (first segment only):
+    // If the first segment didn't start with the forced note, prepend it.
+    // scaleRun/chromatic already preserve startNote, so prepend only fires
+    // for parity-independent segments (arpeggio, 1235, approachCT, etc.)
+    if (si === 0 && forceStartNote && segNotes.length > 0) {
+      const first = segNotes[0];
+      const forcePitch = absolutePitch(forceStartNote);
+      const firstPitch = absolutePitch(first);
+      if (forcePitch !== firstPitch || first.stringIdx !== forceStartNote.stringIdx) {
+        allNotes.push({ note: forceStartNote, segIdx: si, rhythm: plan.rhythm });
+      }
     }
 
     // Segment junction smoothness: check distance from previous segment's last note
@@ -529,8 +544,11 @@ export function buildPhrase(
   }
 
   // CT ending trial: swap last note to nearest CT if possible (~65% CT ending rate)
+  // Skip if goalIsVL and last note is already the goal (preserve VL resolution)
   const lastEntry = trimmed[trimmed.length - 1];
-  if (!ctSet.has(lastEntry.note.noteName)) {
+  const lastIsGoal = lastEntry.note.noteName === goalNote.noteName
+    && lastEntry.note.stringIdx === goalNote.stringIdx && lastEntry.note.fret === goalNote.fret;
+  if (!ctSet.has(lastEntry.note.noteName) && !(goalIsVL && lastIsGoal)) {
     const lastPitch = absolutePitch(lastEntry.note);
     // Compute other notes' pitch bounds (excluding last) to constrain swap
     const otherPitches = trimmed.slice(0, -1).map(e => absolutePitch(e.note));
@@ -558,9 +576,12 @@ export function buildPhrase(
   }
 
   // Tension ending: swap 26% of CT endings to neighboring non-CT scale tone (~95% × 0.74 ≈ 70%)
+  // Skip if goalIsVL and last note is the goal (preserve VL resolution)
   {
     const lastE = trimmed[trimmed.length - 1];
-    if (ctSet.has(lastE.note.noteName) && Math.random() < 0.26) {
+    const lastEIsGoal = lastE.note.noteName === goalNote.noteName
+      && lastE.note.stringIdx === goalNote.stringIdx && lastE.note.fret === goalNote.fret;
+    if (ctSet.has(lastE.note.noteName) && Math.random() < 0.26 && !(goalIsVL && lastEIsGoal)) {
       const lastPitch = absolutePitch(lastE.note);
       const scaleSemis = new Set(mode.semi);
       let bestTension: PoolNote | null = null;

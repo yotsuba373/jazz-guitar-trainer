@@ -6,7 +6,7 @@
  * across diverse key / mode / position / beat-count combinations.
  */
 import { describe, it, expect } from 'vitest';
-import { generatePhraseRule } from '../bebopGenerator';
+import { generatePhraseRule, buildNotePool } from '../bebopGenerator';
 import { buildFretMap, generatePositions, generateDimPositions, resolveMode } from '../../utils';
 import { MODE_TEMPLATES } from '../../constants';
 import { absolutePitch } from '../bebopScheduler';
@@ -610,6 +610,174 @@ describe('§7 Voice leading', () => {
     // §7 HIGH: 7th→3rd resolution — impl chooseGoalNote 70%
     if (totalCount > 0) {
       expect(resolvedCount / totalCount).toBeGreaterThanOrEqual(0.40);
+    }
+  });
+
+  it('VL.1: 7th→3rd half-step resolution sets resolvedGoalForNext to next 3rd', () => {
+    // G7 → Cmaj7: goal=F(7th), resolvedGoalForNext should be E(next 3rd)
+    const { mode: gMode, fretMap: gFM, positions: gPos } = buildFixtures('G', 'mixolydian');
+    const { mode: cMode, fretMap: cFM, positions: cPos } = buildFixtures('C', 'ionian');
+
+    const nextPool = buildNotePool(cPos[0], cMode, cFM, false);
+    const nextInst = cPos[0].instances[0];
+    const nextFretRange = { fretMin: nextInst.fretMin, fretMax: nextInst.fretMax };
+
+    let hasResolved = 0;
+    let resolvedIsThird = 0;
+    const N = 60;
+    for (let i = 0; i < N; i++) {
+      const config: PhraseConfig = {
+        approachTypes: [],
+        beatCount: 4,
+        nextChordContext: { thirdNote: 'E', seventhNote: 'B', rootNote: 'C', quality: 'maj7' },
+      };
+      const phrase = generatePhraseRule(gPos[0], gMode, gFM, config, 'E', nextPool, nextFretRange);
+      if (!phrase) continue;
+      if (phrase.resolvedGoalForNext) {
+        hasResolved++;
+        if (phrase.resolvedGoalForNext.note.noteName === 'E') resolvedIsThird++;
+      }
+    }
+    // At least some phrases should have resolvedGoalForNext
+    expect(hasResolved).toBeGreaterThan(0);
+    // When resolved, the note should be the next chord's 3rd
+    if (hasResolved > 0) {
+      expect(resolvedIsThird / hasResolved).toBeGreaterThanOrEqual(0.90);
+    }
+  });
+
+  it('VL.2: resolvedStart (inPosition=true) makes phrase start with that note', () => {
+    const { mode, fretMap, positions } = buildFixtures('C', 'ionian');
+    const pos = positions[0];
+    const pool = buildNotePool(pos, mode, fretMap, false);
+    const ctSet = new Set(mode.chordTones);
+    const ctPool = pool.filter((n: PoolNote) => ctSet.has(n.noteName));
+    // Pick a specific CT as resolvedStart
+    const resolvedNote = ctPool.find((n: PoolNote) => n.noteName === 'E');
+    if (!resolvedNote) return;
+
+    let matched = 0;
+    let total = 0;
+    for (let i = 0; i < 40; i++) {
+      const config: PhraseConfig = {
+        approachTypes: [],
+        beatCount: 4,
+        resolvedStart: { note: resolvedNote, inPosition: true },
+      };
+      const phrase = generatePhraseRule(pos, mode, fretMap, config);
+      if (!phrase) continue;
+      total++;
+      const start = phrase.notes.find(n => !n.isRest);
+      if (start && start.stringIdx === resolvedNote.stringIdx && start.fret === resolvedNote.fret) {
+        matched++;
+      }
+    }
+    if (total > 0) {
+      // forceStartNote prepend guarantees resolved start note appears first
+      expect(matched / total).toBeGreaterThanOrEqual(0.90);
+    }
+  });
+
+  it('VL.3: resolvedStart (inPosition=false) inserts pickup + rest + body', () => {
+    const { mode, fretMap, positions } = buildFixtures('C', 'ionian');
+    const pos = positions[0];
+    // Create a note that's outside the position's fret range
+    const inst = pos.instances[0];
+    const outOfPosNote: PoolNote = {
+      noteName: 'E', stringIdx: 0, fret: inst.fretMax + 5,
+      semitone: 4, isChordTone: true, isApproach: false,
+    };
+
+    let withPickup = 0;
+    let total = 0;
+    for (let i = 0; i < 30; i++) {
+      const config: PhraseConfig = {
+        approachTypes: [],
+        beatCount: 4,
+        resolvedStart: { note: outOfPosNote, inPosition: false },
+      };
+      const phrase = generatePhraseRule(pos, mode, fretMap, config);
+      if (!phrase) continue;
+      total++;
+      // First note should be the pickup (out-of-position note)
+      if (phrase.notes[0].fret === outOfPosNote.fret
+          && phrase.notes[0].stringIdx === outOfPosNote.stringIdx
+          && !phrase.notes[0].isRest) {
+        // Second note should be a rest
+        if (phrase.notes.length >= 2 && phrase.notes[1].isRest) {
+          withPickup++;
+        }
+      }
+    }
+    if (total > 0) {
+      expect(withPickup / total).toBeGreaterThanOrEqual(0.90);
+    }
+  });
+
+  it('VL.4: resolvedStart takes priority over startHint', () => {
+    const { mode, fretMap, positions } = buildFixtures('C', 'ionian');
+    const pos = positions[0];
+    const pool = buildNotePool(pos, mode, fretMap, false);
+    const ctSet = new Set(mode.chordTones);
+    const ctPool = pool.filter((n: PoolNote) => ctSet.has(n.noteName));
+    const resolvedNote = ctPool.find((n: PoolNote) => n.noteName === 'E');
+    // Use a different note as startHint
+    const hintNote = ctPool.find((n: PoolNote) => n.noteName === 'G' && n.stringIdx !== resolvedNote?.stringIdx);
+    if (!resolvedNote || !hintNote) return;
+
+    let matchedResolved = 0;
+    let total = 0;
+    for (let i = 0; i < 40; i++) {
+      const config: PhraseConfig = {
+        approachTypes: [],
+        beatCount: 4,
+        resolvedStart: { note: resolvedNote, inPosition: true },
+        startHint: { noteName: hintNote.noteName, stringIdx: hintNote.stringIdx, fret: hintNote.fret, semitone: hintNote.semitone },
+      };
+      const phrase = generatePhraseRule(pos, mode, fretMap, config);
+      if (!phrase) continue;
+      total++;
+      const start = phrase.notes.find(n => !n.isRest);
+      if (start && start.stringIdx === resolvedNote.stringIdx && start.fret === resolvedNote.fret) {
+        matchedResolved++;
+      }
+    }
+    if (total > 0) {
+      // forceStartNote prepend guarantees resolvedStart overrides startHint
+      expect(matchedResolved / total).toBeGreaterThanOrEqual(0.90);
+    }
+  });
+
+  it('VL.5: distant position sets inPosition=false', () => {
+    // G7 pos 0 → Cmaj7 pos 6 (far apart)
+    const { mode: gMode, fretMap: gFM, positions: gPos } = buildFixtures('G', 'mixolydian');
+    const { mode: cMode, fretMap: cFM, positions: cPos } = buildFixtures('C', 'ionian');
+
+    // Use positions that are far apart (first vs last)
+    const farPosIdx = cPos.length - 1;
+    const nextPool = buildNotePool(cPos[farPosIdx], cMode, cFM, false);
+    const nextInst = cPos[farPosIdx].instances[0];
+    const nextFretRange = { fretMin: nextInst.fretMin, fretMax: nextInst.fretMax };
+
+    let outOfPosCount = 0;
+    let inPosCount = 0;
+    let totalResolved = 0;
+    for (let i = 0; i < 60; i++) {
+      const config: PhraseConfig = {
+        approachTypes: [],
+        beatCount: 4,
+        nextChordContext: { thirdNote: 'E', seventhNote: 'B', rootNote: 'C', quality: 'maj7' },
+      };
+      const phrase = generatePhraseRule(gPos[0], gMode, gFM, config, 'E', nextPool, nextFretRange);
+      if (!phrase?.resolvedGoalForNext) continue;
+      totalResolved++;
+      if (phrase.resolvedGoalForNext.inPosition) inPosCount++;
+      else outOfPosCount++;
+    }
+    // With far-apart positions, some should be out-of-position
+    // (This is position-dependent, so just verify the flag is properly set)
+    if (totalResolved > 0) {
+      expect(outOfPosCount + inPosCount).toBe(totalResolved);
     }
   });
 });

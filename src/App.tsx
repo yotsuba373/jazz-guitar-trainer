@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import type { LabelMode, RootName, Progression, ChordNotationPrefs, ChartLayout, SongKey, ChordSlot, ApproachType, GeneratedPhrase, PhraseConfig, PhraseNote, PhraseContour, InstrumentType } from './types';
+import type { LabelMode, RootName, Progression, ChordNotationPrefs, ChartLayout, SongKey, ChordSlot, ApproachType, GeneratedPhrase, PhraseConfig, PhraseNote, PhraseContour, InstrumentType, PoolNote } from './types';
 import { MODE_TEMPLATES, ROOTS, MODE_COLORS, OPEN_STRINGS } from './constants';
 import {
   buildFretMap, generatePositions, generateDimPositions, resolveMode,
@@ -10,7 +10,7 @@ import {
   getGuideTones, findNoteLocations, classifyResolution,
   findVoicingsInPosition,
   playNote, playChordStrum, fretToFrequency,
-  generatePhraseRule, schedulePhrase,
+  generatePhraseRule, buildNotePool, schedulePhrase,
 } from './utils';
 import { Fretboard } from './components/Fretboard';
 import { RootSelector, ModeSelector, PositionSelector, OptionBar, PhraseControls, PhraseAnalysisPanel, GlobalAudioControls } from './components/Controls';
@@ -178,6 +178,7 @@ export default function App() {
   const prevLastNoteRef = useRef<PhraseNote | undefined>(undefined);
   const prevContourRef = useRef<PhraseContour | undefined>(undefined);
   const prevMotifRef = useRef<number[] | undefined>(undefined);
+  const prevResolvedStartRef = useRef<PhraseConfig['resolvedStart'] | undefined>(undefined);
 
   const template = MODE_TEMPLATES[modeIdx];
   const mode = useMemo(() => resolveMode(rootName, template), [rootName, modeIdx]);
@@ -424,6 +425,8 @@ export default function App() {
 
     let targetThirdNote: string | undefined;
     let nextChordContext: PhraseConfig['nextChordContext'] | undefined;
+    let nextChordPool: PoolNote[] | undefined;
+    let nextPosFretRange: { fretMin: number; fretMax: number } | undefined;
     const nextIdx = (chordIdx + 1) % chords.length;
     if (nextIdx !== chordIdx) {
       const nextChord = chords[nextIdx];
@@ -439,35 +442,50 @@ export default function App() {
             rootNote: nextMode.notes[0],
             quality: nextChord.quality,
           };
+          // Build next chord's note pool for VL resolution
+          const nextFretMap = buildFretMap(nextMode.semi, nextMode.notes);
+          const nextPositions = generatePositions(nextFretMap, nextMode.notes);
+          const nextPos = nextPositions.find(p => p.id === nextEff.posId);
+          if (nextPos) {
+            nextChordPool = buildNotePool(nextPos, nextMode, nextFretMap, false);
+            const nextInst = nextPos.instances[0];
+            if (nextInst) {
+              nextPosFretRange = { fretMin: nextInst.fretMin, fretMax: nextInst.fretMax };
+            }
+          }
         }
       }
     }
 
     const phraseLength = Math.min(8, Math.max(4, Math.round(step.beats * 2)));
     const pln = prevLastNoteRef.current;
+    const resolvedStart = prevResolvedStartRef.current;
     const config: PhraseConfig = {
       approachTypes: phraseApproachTypes,
-      startHint: pln ? {
+      resolvedStart: resolvedStart ?? undefined,
+      startHint: resolvedStart ? undefined : (pln ? {
         noteName: pln.noteName,
         stringIdx: pln.stringIdx,
         fret: pln.fret,
         semitone: pln.semitone,
-      } : undefined,
+      } : undefined),
       phraseLength,
       prevContour: prevContourRef.current,
       nextChordContext,
       prevMotif: prevMotifRef.current,
     };
 
-    const phrase = generatePhraseRule(pos, chordMode, chordFretMap, config, targetThirdNote);
+    const phrase = generatePhraseRule(pos, chordMode, chordFretMap, config, targetThirdNote, nextChordPool, nextPosFretRange);
     if (phrase) {
       prevLastNoteRef.current = phrase.notes[phrase.notes.length - 1];
       prevContourRef.current = phrase.config.contour;
       prevMotifRef.current = phrase.motif;
+      prevResolvedStartRef.current = phrase.resolvedGoalForNext;
     } else {
       prevLastNoteRef.current = undefined;
       prevContourRef.current = undefined;
       prevMotifRef.current = undefined;
+      prevResolvedStartRef.current = undefined;
     }
     return phrase;
   }
@@ -479,6 +497,7 @@ export default function App() {
       prevLastNoteRef.current = undefined;
       prevContourRef.current = undefined;
       prevMotifRef.current = undefined;
+      prevResolvedStartRef.current = undefined;
     }
   }, [phraseAutoPlay]);
 
@@ -521,6 +540,7 @@ export default function App() {
         prevLastNoteRef.current = undefined;
         prevContourRef.current = undefined;
         prevMotifRef.current = undefined;
+        prevResolvedStartRef.current = undefined;
         const initStep = seq[playPosRef.current];
         const phrase = initStep ? generatePhraseForChord(activeChordIdx, activeProg, initStep) : null;
         if (phrase) {
