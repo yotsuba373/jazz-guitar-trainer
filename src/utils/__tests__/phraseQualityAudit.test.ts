@@ -1107,19 +1107,63 @@ describe('Segment junction', () => {
     }
   });
 
-  it('J.5: rhythm diversity — non-eighth notes > 5%', () => {
+  it('R.1: triplet rate >= 8%', () => {
     const batch = generateBatch(PRIMARY_CONFIGS, 10);
     const counts = { e: 0, s: 0, t: 0, q: 0 };
     for (const { phrase } of batch) {
       for (const n of phrase.notes) {
-        counts[(n.duration ?? 'e') as keyof typeof counts]++;
+        if (!n.isRest) counts[(n.duration ?? 'e') as keyof typeof counts]++;
+      }
+    }
+    const total = Object.values(counts).reduce((a, b) => a + b, 0);
+    expect(counts.t / total).toBeGreaterThanOrEqual(0.08);
+  });
+
+  it('R.2: sixteenth note rate >= 3%', () => {
+    const batch = generateBatch(PRIMARY_CONFIGS, 10);
+    const counts = { e: 0, s: 0, t: 0, q: 0 };
+    for (const { phrase } of batch) {
+      for (const n of phrase.notes) {
+        if (!n.isRest) counts[(n.duration ?? 'e') as keyof typeof counts]++;
+      }
+    }
+    const total = Object.values(counts).reduce((a, b) => a + b, 0);
+    expect(counts.s / total).toBeGreaterThanOrEqual(0.03);
+  });
+
+  it('R.3: quarter note rate >= 3%', () => {
+    const batch = generateBatch(PRIMARY_CONFIGS, 10);
+    const counts = { e: 0, s: 0, t: 0, q: 0 };
+    for (const { phrase } of batch) {
+      for (const n of phrase.notes) {
+        if (!n.isRest) counts[(n.duration ?? 'e') as keyof typeof counts]++;
+      }
+    }
+    const total = Object.values(counts).reduce((a, b) => a + b, 0);
+    expect(counts.q / total).toBeGreaterThanOrEqual(0.03);
+  });
+
+  it('R.4: non-eighth total >= 15%', () => {
+    const batch = generateBatch(PRIMARY_CONFIGS, 10);
+    const counts = { e: 0, s: 0, t: 0, q: 0 };
+    for (const { phrase } of batch) {
+      for (const n of phrase.notes) {
+        if (!n.isRest) counts[(n.duration ?? 'e') as keyof typeof counts]++;
       }
     }
     const total = Object.values(counts).reduce((a, b) => a + b, 0);
     const nonEighth = total - counts.e;
-    expect(nonEighth / total).toBeGreaterThanOrEqual(0.03);
-    // 16th and/or triplets must appear
-    expect(counts.s + counts.t).toBeGreaterThan(0);
+    expect(nonEighth / total).toBeGreaterThanOrEqual(0.15);
+  });
+
+  it('R.5: rhythm-diverse phrase rate >= 30%', () => {
+    const batch = generateBatch(PRIMARY_CONFIGS, 10);
+    let diverseCount = 0;
+    for (const { phrase } of batch) {
+      const durations = new Set(phrase.notes.filter(n => !n.isRest).map(n => n.duration ?? 'e'));
+      if (durations.size >= 2) diverseCount++;
+    }
+    expect(diverseCount / batch.length).toBeGreaterThanOrEqual(0.30);
   });
 
   it('J.4: post-junction strong beat CT rate >= 35%', () => {
@@ -1231,6 +1275,11 @@ const QUALITY_TARGETS: QualityTarget[] = [
   { id: 'U.5', rule: 'Usb', priority: 'MEDIUM', metric: 'Fallback rate',             target: 0.05,  threshold: 0.20, higherIsBetter: false },
   { id: '10.2', rule: '§10', priority: 'LOW', metric: 'Rest upbeat start',       target: 0.70,  threshold: 0.50, higherIsBetter: true },
   { id: '10.3', rule: '§10', priority: 'LOW', metric: 'Rest frequency',          target: 0.11,  threshold: 0.03, higherIsBetter: true },
+  { id: 'R.1', rule: 'Rhy', priority: 'MEDIUM', metric: '3連符率',               target: 0.12,  threshold: 0.08, higherIsBetter: true },
+  { id: 'R.2', rule: 'Rhy', priority: 'MEDIUM', metric: '16分音符率',            target: 0.07,  threshold: 0.03, higherIsBetter: true },
+  { id: 'R.3', rule: 'Rhy', priority: 'MEDIUM', metric: '4分音符率',             target: 0.07,  threshold: 0.03, higherIsBetter: true },
+  { id: 'R.4', rule: 'Rhy', priority: 'MEDIUM', metric: '非8分合計率',           target: 0.25,  threshold: 0.15, higherIsBetter: true },
+  { id: 'R.5', rule: 'Rhy', priority: 'MEDIUM', metric: 'リズム多様フレーズ率',  target: 0.50,  threshold: 0.30, higherIsBetter: true },
 ];
 
 describe('Quality Gap Report', () => {
@@ -1370,6 +1419,27 @@ describe('Quality Gap Report', () => {
     const phrasesWithRest = batch.filter(r => r.phrase.notes.some(n => n.isRest));
     const restFreq = batch.length > 0 ? phrasesWithRest.length / batch.length : 0;
 
+    // R.1-R.5: Rhythm diversity metrics
+    const rCounts = { e: 0, s: 0, t: 0, q: 0 };
+    let rDiversePhrases = 0;
+    for (const { phrase } of batch) {
+      const durations = new Set<string>();
+      for (const n of phrase.notes) {
+        if (!n.isRest) {
+          const d = (n.duration ?? 'e') as keyof typeof rCounts;
+          rCounts[d]++;
+          durations.add(d);
+        }
+      }
+      if (durations.size >= 2) rDiversePhrases++;
+    }
+    const rTotal = Object.values(rCounts).reduce((a, b) => a + b, 0);
+    const tripletRate = rTotal > 0 ? rCounts.t / rTotal : 0;
+    const sixteenthRate = rTotal > 0 ? rCounts.s / rTotal : 0;
+    const quarterRate = rTotal > 0 ? rCounts.q / rTotal : 0;
+    const nonEighthRate = rTotal > 0 ? (rTotal - rCounts.e) / rTotal : 0;
+    const diversePhraseRate = batch.length > 0 ? rDiversePhrases / batch.length : 0;
+
     // --- Build report ---
     const actuals: Record<string, number> = {
       '1.1': ctOnStrong,
@@ -1385,6 +1455,11 @@ describe('Quality Gap Report', () => {
       'U.5': fallbackRate,
       '10.2': restUpbeatRate,
       '10.3': restFreq,
+      'R.1': tripletRate,
+      'R.2': sixteenthRate,
+      'R.3': quarterRate,
+      'R.4': nonEighthRate,
+      'R.5': diversePhraseRate,
     };
 
     const pct = (v: number) => (v * 100).toFixed(1) + '%';

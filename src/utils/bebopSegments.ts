@@ -16,6 +16,8 @@ export interface SegmentOpts {
   quality?: string;
   /** Beat parity: 0 = first note on downbeat, 1 = first note on upbeat */
   beatParity?: number;
+  /** Pre-planned rhythm for this segment (from planSegmentRhythms) */
+  rhythm?: 'q' | 't' | 'e' | 's';
 }
 
 export type SegmentFn = (
