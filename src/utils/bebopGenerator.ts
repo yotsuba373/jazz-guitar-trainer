@@ -71,7 +71,15 @@ export function buildNotePool(
 // Goal note selection
 // ---------------------------------------------------------------------------
 
-export interface GoalResult { note: PoolNote; reason: string }
+export interface GoalResult {
+  note: PoolNote;
+  reason: string;
+  /** Resolved start note for the next chord (from nextChordPool) */
+  resolvedNextStart?: {
+    note: PoolNote;
+    inPosition: boolean;
+  };
+}
 
 const SEMI_MAP: Record<string, number> = {
   'C': 0, 'D♭': 1, 'D': 2, 'E♭': 3, 'E': 4, 'F': 5,
@@ -88,7 +96,27 @@ export function chooseGoalNote(
   mode: Mode,
   targetThirdNote?: string,
   nextChordContext?: PhraseConfig['nextChordContext'],
+  nextChordPool?: PoolNote[],
+  nextPosFretRange?: { fretMin: number; fretMax: number },
 ): GoalResult {
+  // Helper: find resolved start in next chord's pool closest to goal note
+  const findResolvedNext = (goalNote: PoolNote, targetNoteName?: string): GoalResult['resolvedNextStart'] => {
+    if (!nextChordPool) return undefined;
+    // If we have a specific target note name (e.g. next 3rd), prefer it
+    const candidates = targetNoteName
+      ? nextChordPool.filter(n => n.noteName === targetNoteName)
+      : nextChordPool.filter(n => n.isChordTone);
+    if (candidates.length === 0) return undefined;
+    const goalPitch = absolutePitch(goalNote);
+    const closest = candidates.reduce((best, n) =>
+      Math.abs(absolutePitch(n) - goalPitch) < Math.abs(absolutePitch(best) - goalPitch) ? n : best
+    );
+    const inPosition = nextPosFretRange
+      ? closest.fret >= nextPosFretRange.fretMin && closest.fret <= nextPosFretRange.fretMax
+      : true;
+    return { note: closest, inPosition };
+  };
+
   // §7 HIGH: 7th→3rd half-step resolution (works with nextChordContext alone)
   if (nextChordContext) {
     const nextThirdSemi = findSemitone(nextChordContext.thirdNote);
@@ -99,7 +127,14 @@ export function chooseGoalNote(
         const seventhSemi = seventhCTs[0].semitone;
         const diff = ((nextThirdSemi - seventhSemi) + 12) % 12;
         if (diff === 1 || diff === 11) {
-          if (Math.random() < 0.70) return { note: pickRandom(seventhCTs), reason: '7th→次3rd半音解決' };
+          if (Math.random() < 0.70) {
+            const chosen = pickRandom(seventhCTs);
+            return {
+              note: chosen,
+              reason: '7th→次3rd半音解決',
+              resolvedNextStart: findResolvedNext(chosen, nextChordContext.thirdNote),
+            };
+          }
         }
       }
     }
@@ -112,10 +147,20 @@ export function chooseGoalNote(
         const diff = ((targetSemi - n.semitone) + 12) % 12;
         return diff === 1 || diff === 11;
       });
-      if (halfStepCTs.length > 0) return { note: pickRandom(halfStepCTs), reason: '次3rdへ半音VL' };
+      if (halfStepCTs.length > 0) {
+        const chosen = pickRandom(halfStepCTs);
+        return {
+          note: chosen,
+          reason: '次3rdへ半音VL',
+          resolvedNextStart: findResolvedNext(chosen, targetThirdNote),
+        };
+      }
     }
     const exact = ctPool.filter(n => n.noteName === targetThirdNote);
-    if (exact.length > 0) return { note: pickRandom(exact), reason: '次3rd一致' };
+    if (exact.length > 0) {
+      const chosen = pickRandom(exact);
+      return { note: chosen, reason: '次3rd一致', resolvedNextStart: findResolvedNext(chosen) };
+    }
   }
 
   const degIdx = STRONG_RESOLUTION_DEGREE_IDX[mode.key];
@@ -125,15 +170,22 @@ export function chooseGoalNote(
       const diff = ((targetSemi - n.semitone) + 12) % 12;
       return diff === 1 || diff === 11;
     });
-    if (halfStepCTs.length > 0) return { note: pickRandom(halfStepCTs), reason: '強進行→半音解決' };
+    if (halfStepCTs.length > 0) {
+      const chosen = pickRandom(halfStepCTs);
+      return { note: chosen, reason: '強進行→半音解決', resolvedNextStart: findResolvedNext(chosen) };
+    }
   }
 
   const preferred = ctPool.filter(n =>
     n.noteName === mode.chordTones[1] || n.noteName === mode.chordTones[3]
   );
-  if (preferred.length > 0) return { note: pickRandom(preferred), reason: '3rd/7th優先' };
+  if (preferred.length > 0) {
+    const chosen = pickRandom(preferred);
+    return { note: chosen, reason: '3rd/7th優先', resolvedNextStart: findResolvedNext(chosen) };
+  }
 
-  return { note: pickRandom(ctPool), reason: 'CT (ランダム)' };
+  const chosen = pickRandom(ctPool);
+  return { note: chosen, reason: 'CT (ランダム)', resolvedNextStart: findResolvedNext(chosen) };
 }
 
 // ---------------------------------------------------------------------------
@@ -146,6 +198,8 @@ export function generatePhraseRule(
   fretMap: FretMap,
   config: PhraseConfig,
   targetThirdNote?: string,
+  nextChordPool?: PoolNote[],
+  nextPosFretRange?: { fretMin: number; fretMax: number },
 ): GeneratedPhrase | null {
   // 1. Build note pool (always include chromatic for approach notes)
   const pool = buildNotePool(position, mode, fretMap, true);
@@ -178,6 +232,7 @@ export function generatePhraseRule(
   // 5. Goal note
   let goalNote: PoolNote;
   let goalReason: string;
+  let goalResult: GoalResult;
   if (config.goalNoteOverride) {
     const override = config.goalNoteOverride;
     const exact = activeCtPool.find(n => n.stringIdx === override.stringIdx && n.fret === override.fret);
@@ -188,48 +243,102 @@ export function generatePhraseRule(
     if (closest) {
       goalNote = closest;
       goalReason = 'ユーザー指定ゴール';
+      goalResult = { note: closest, reason: goalReason };
     } else {
-      const result = chooseGoalNote(activeCtPool, mode, targetThirdNote, config.nextChordContext);
-      goalNote = result.note;
-      goalReason = result.reason;
+      goalResult = chooseGoalNote(activeCtPool, mode, targetThirdNote, config.nextChordContext, nextChordPool, nextPosFretRange);
+      goalNote = goalResult.note;
+      goalReason = goalResult.reason;
     }
   } else {
-    const result = chooseGoalNote(activeCtPool, mode, targetThirdNote, config.nextChordContext);
-    goalNote = result.note;
-    goalReason = result.reason;
+    goalResult = chooseGoalNote(activeCtPool, mode, targetThirdNote, config.nextChordContext, nextChordPool, nextPosFretRange);
+    goalNote = goalResult.note;
+    goalReason = goalResult.reason;
   }
 
-  // 6. Beat offset: upbeat start for standalone phrases (50% chance)
-  const beatOffset = config.startHint ? 0 : (Math.random() < 0.7 ? 0.5 : 0);
-  const totalEighths = Math.floor((totalBeats - beatOffset) * 2);
+  // 6. Resolved start handling + beat offset
+  const rs = config.resolvedStart;
+  let resolvedPickupNote: PoolNote | undefined;
+  let bodyBeatBudget = totalBeats;
+
+  if (rs && !rs.inPosition) {
+    // Out-of-position resolved start: play as pickup (8th) + rest (8th) = 1 beat
+    resolvedPickupNote = rs.note;
+    bodyBeatBudget = Math.max(1, totalBeats - 1);
+  }
+
+  const hasChaining = !!(rs || config.startHint);
+  const beatOffset = hasChaining ? 0 : (Math.random() < 0.7 ? 0.5 : 0);
+  const bodyBeatOffset = resolvedPickupNote ? 1 : beatOffset;
+  const totalEighths = Math.floor((bodyBeatBudget - bodyBeatOffset + (resolvedPickupNote ? 1 : 0)) * 2);
+  const bodyEighths = resolvedPickupNote ? Math.floor(bodyBeatBudget * 2) - 2 : totalEighths;
 
   // 7. Start note with GT priority (3rd/7th get 2x weight)
   const gtNames = new Set<string>();
   if (mode.chordTones.length >= 2) gtNames.add(mode.chordTones[1]); // 3rd
   if (mode.chordTones.length >= 4) gtNames.add(mode.chordTones[3]); // 7th
 
-  const startNote: PoolNote = config.startHint
-    ? (activeCtPool.find(n =>
+  let startNote: PoolNote;
+  if (rs?.inPosition) {
+    // In-position resolved start: use directly
+    startNote = rs.note;
+  } else if (rs && !rs.inPosition) {
+    // Out-of-position: body starts with GT-weighted random from pool
+    startNote = pickWeighted(activeCtPool, activeCtPool.map(n => gtNames.has(n.noteName) ? 2 : 1));
+  } else if (config.startHint) {
+    startNote = activeCtPool.find(n =>
         n.stringIdx === config.startHint!.stringIdx && n.fret === config.startHint!.fret
       ) ??
       activeCtPool.reduce((best, n) =>
         Math.abs(absolutePitch(n) - absolutePitch(config.startHint as any)) <
         Math.abs(absolutePitch(best) - absolutePitch(config.startHint as any)) ? n : best
-      ))
-    : pickWeighted(activeCtPool, activeCtPool.map(n => gtNames.has(n.noteName) ? 2 : 1));
+      );
+  } else {
+    startNote = pickWeighted(activeCtPool, activeCtPool.map(n => gtNames.has(n.noteName) ? 2 : 1));
+  }
 
-  // 8. Template selection + execution with 3 retries
+  // 8. Template selection + execution with 5 retries
+  const goalIsVL = !!(goalResult.resolvedNextStart);
+  const forceStart = rs?.inPosition ? rs.note : undefined;
   for (let attempt = 0; attempt < 5; attempt++) {
     const template = selectTemplate(mode.chordQuality, totalBeats, contour);
 
     const phraseNotes = buildPhrase(
       template, activePool, mode,
-      startNote, goalNote, totalEighths, beatOffset,
+      startNote, goalNote, bodyEighths > 0 ? bodyEighths : totalEighths, bodyBeatOffset,
+      goalIsVL,
+      forceStart,
     );
 
     if (phraseNotes && phraseNotes.length >= 3) {
+      // Prepend resolved pickup note + rest if out-of-position
+      let finalNotes = phraseNotes;
+      if (resolvedPickupNote) {
+        const pickupPhraseNote: import('../types').PhraseNote = {
+          noteName: resolvedPickupNote.noteName,
+          stringIdx: resolvedPickupNote.stringIdx,
+          fret: resolvedPickupNote.fret,
+          semitone: resolvedPickupNote.semitone,
+          isChordTone: ctSet.has(resolvedPickupNote.noteName),
+          isApproach: resolvedPickupNote.isApproach,
+          beatPosition: 1,
+          isStrong: true,
+          duration: 'e',
+          beatStart: 0,
+          segmentIdx: 0,
+        };
+        const restNote: import('../types').PhraseNote = {
+          ...pickupPhraseNote,
+          beatPosition: 1,
+          isStrong: false,
+          isRest: true,
+          duration: 'e',
+          beatStart: 0.5,
+        };
+        finalNotes = [pickupPhraseNote, restNote, ...phraseNotes];
+      }
+
       // Verify final note — update goal reason
-      const finalNote = phraseNotes[phraseNotes.length - 1];
+      const finalNote = finalNotes[finalNotes.length - 1];
       let actualGoalReason = goalReason;
       if (finalNote.noteName !== goalNote.noteName) {
         if (ctSet.has(finalNote.noteName)) {
@@ -239,14 +348,21 @@ export function generatePhraseRule(
         }
       }
 
+      // Determine resolvedGoalForNext
+      const goalReached = finalNote.noteName === goalNote.noteName;
+      const resolvedGoalForNext = goalReached && goalResult.resolvedNextStart
+        ? goalResult.resolvedNextStart
+        : undefined;
+
       // Extract motif
       const motif: number[] = [];
-      for (let i = 1; i < Math.min(3, phraseNotes.length); i++) {
-        motif.push(absolutePitch(phraseNotes[i]) - absolutePitch(phraseNotes[i - 1]));
+      const soundNotes = finalNotes.filter(n => !n.isRest);
+      for (let i = 1; i < Math.min(3, soundNotes.length); i++) {
+        motif.push(absolutePitch(soundNotes[i]) - absolutePitch(soundNotes[i - 1]));
       }
 
       return {
-        notes: phraseNotes,
+        notes: finalNotes,
         posId: position.id,
         modeKey: mode.key,
         rootName: mode.notes[0],
@@ -255,6 +371,7 @@ export function generatePhraseRule(
         goalReason: actualGoalReason,
         templateId: template.id,
         totalBeats,
+        resolvedGoalForNext,
       };
     }
   }
@@ -271,6 +388,14 @@ export function generatePhraseRule(
       fbSlice = fbSlice.slice(0, -1);
     }
     if (fbSlice.length < 3) return null;
+
+    // Prepend forceStartNote if fallback didn't start with it
+    if (forceStart && fbSlice.length > 0) {
+      const first = fbSlice[0];
+      if (absolutePitch(first) !== absolutePitch(forceStart) || first.stringIdx !== forceStart.stringIdx) {
+        fbSlice.unshift(forceStart);
+      }
+    }
 
     const ctSetLocal = new Set(mode.chordTones);
     let accBeat = beatOffset;

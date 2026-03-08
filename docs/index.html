@@ -365,7 +365,7 @@
 <pre>npm install       # 依存インストール
 npm run dev       # 開発サーバー → http://localhost:5173
 npm run build     # tsc + vite build
-npm test          # vitest run (776 tests)
+npm test          # vitest run (781 tests)
 npm run lint      # ESLint</pre>
 
 <h2 id="architecture">Architecture</h2>
@@ -414,7 +414,7 @@ Utils Layer (pure functions):
 │   ├── bebopSegments.ts          — セグメント関数9種 (Arp, ScaleRun, Enclosure, OctaveDisp等)
 │   ├── bebopTemplates.ts         — テンプレート定義11種 + 選択ロジック
 │   ├── phraseAnalysis.ts         — analyzePhrase(), computeSummary()
-│   └── __tests__/                — 776 テスト
+│   └── __tests__/                — 781 テスト
 ├── components/
 │   ├── Fretboard/                — SVG指板 (Fretboard, FretboardNote, GhostNote, PhrasePath)
 │   ├── Controls/                 — 全コントロールUI
@@ -614,13 +614,16 @@ degree ラベル、フレーバーテキストを持ちます。</p>
 ├─ Step 4: chooseGoalNote()
 │   ├─ goalNoteOverride → ユーザー指定ゴール (最優先)
 │   ├─ 進行モード: nextChordContext → 7th→3rd 半音解決 (70%)
+│   ├─ nextChordPool あり → resolvedNextStart を確定 (次コードの解決先PoolNote)
 │   └─ 通常モード: STRONG_RESOLUTION_DEGREE_IDX で推定
 │
-├─ Step 5: Beat Offset Selection
-│   └─ 単体生成時 70% で裏拍 (beatOffset=0.5) 開始
+├─ Step 5: resolvedStart 処理 + Beat Offset
+│   ├─ resolvedStart (inPosition=true): そのまま startNote に使用
+│   ├─ resolvedStart (inPosition=false): 解決音(8分)+休符(8分)→ポジション内本体
+│   └─ なし: 単体生成時 70% で裏拍 (beatOffset=0.5) 開始
 │
 ├─ Step 6: Start Note (GT優先)
-│   └─ 3rd/7th に2倍の重み付きランダム選択
+│   └─ resolvedStart なし時: 3rd/7th に2倍の重み付きランダム選択
 │
 ├─ Step 7: Template Selection
 │   ├─ 品質フィルタ (dim7-from-3rd→dom7, upper-structure→m7/maj7)
@@ -636,8 +639,8 @@ degree ラベル、フレーバーテキストを持ちます。</p>
 │   ├─ セグメント接合部の同ピッチ重複を自動除去
 │   ├─ セグメント接合部で15%確率で休符/ブレス挿入
 │   ├─ CT表拍プロモーション: 非CTスケール音→近接CTにスワップ
-│   ├─ CT終止試行: 最終音が非CTなら ±3半音・±1弦以内の最近接CTにスワップ
-│   └─ テンション終止: CT終止の26%を隣接非CTスケール音にスワップ
+│   ├─ CT終止試行: 最終音が非CTなら ±3半音・±1弦以内の最近接CTにスワップ (goalIsVL時保護)
+│   └─ テンション終止: CT終止の26%を隣接非CTスケール音にスワップ (goalIsVL時保護)
 │
 └─ Step 9: Quality Check
     ├─ CT表拍配置率 ≥ 40%
@@ -686,12 +689,25 @@ degree ラベル、フレーバーテキストを持ちます。</p>
 
 <h4><code>chooseGoalNote()</code> の決定ロジック</h4>
 <div class="card">
-  <div class="card-title">進行モード（nextChordContext あり）</div>
+  <div class="card-title">進行モード（nextChordContext + nextChordPool あり）</div>
   <ol>
     <li>現コードの7thが次コードの3rdに半音で解決する場合 → <strong>70%の確率</strong>で現コードの7thをゴールに</li>
     <li>次コードの3rdと1半音差のCTを優先検索</li>
     <li>フォールバック: 次コードの3rdと同名のCTを選択</li>
+    <li><strong>resolvedNextStart</strong>: ゴール音に absolutePitch が最も近い次コードプール内の音を確定。次コードのポジション fretMin〜fretMax 内かどうかで <code>inPosition</code> を設定</li>
   </ol>
+</div>
+
+<div class="card">
+  <div class="card-title">コード間ボイスリーディング接続 (resolvedStart)</div>
+  <p>演奏者の思考を再現する VL 意図の伝達メカニズム:</p>
+  <ol>
+    <li>コードA: <code>chooseGoalNote()</code> が <code>resolvedNextStart</code> を確定（次コードの解決先 PoolNote + inPosition フラグ）</li>
+    <li>コードA: フレーズ生成、ゴール到達時に <code>resolvedGoalForNext</code> を返す</li>
+    <li>コードB: <code>config.resolvedStart</code> として受け取り、<code>startHint</code> より優先</li>
+  </ol>
+  <p><strong>inPosition=true</strong>: 解決音をそのまま次フレーズの開始音に使用（シームレス接続）</p>
+  <p><strong>inPosition=false</strong>: 解決音を1音(8分音符)で鳴らし、8分休符を挿入してからポジション内で本体開始（演奏者の「解決→ブレス→新ポジション」の動き）</p>
 </div>
 
 <div class="card">
@@ -1084,7 +1100,7 @@ interface Progression {
   <tr><th>Test File</th><th>Tests</th><th>Coverage</th></tr>
   <tr><td>fretboard.test.ts</td><td>388</td><td>Pos1リファレンス、度数オフセット不変条件、構造検証</td></tr>
   <tr><td>progression.test.ts</td><td>125</td><td>parseChordSymbol, QUALITY_TO_MODES, 近接ランキング</td></tr>
-  <tr><td>phraseQualityAudit.test.ts</td><td>49</td><td>品質監査: §1拍位置(2), §2ビバップスケール(3), §3アプローチ方向(1), §4エンクロージャー(2), §5テンプレート構造(5), §6開始終了(3), §7VL(1), §9Musical Forces(2), 全モード網羅(3), 多様性(4), 拍数適合(2), ポジション(1), 実用性(7), セグメント接合(4), リズム多様性R.1-R.5(5), 休符(3), GAPレポート(1)</td></tr>
+  <tr><td>phraseQualityAudit.test.ts</td><td>54</td><td>品質監査: §1拍位置(2), §2ビバップスケール(3), §3アプローチ方向(1), §4エンクロージャー(2), §5テンプレート構造(5), §6開始終了(3), §7VL(6), §9Musical Forces(2), 全モード網羅(3), 多様性(4), 拍数適合(2), ポジション(1), 実用性(7), セグメント接合(4), リズム多様性R.1-R.5(5), 休符(3), GAPレポート(1)</td></tr>
   <tr><td>jazzStandards.test.ts</td><td>42</td><td>パース、エンディング、リピート、ビート幅</td></tr>
   <tr><td>chordForms.test.ts</td><td>36</td><td>Drop 2/3 ボイシング検索、テンプレート構造</td></tr>
   <tr><td>guideTones.test.ts</td><td>22</td><td>ガイドトーン抽出、解決分類</td></tr>
