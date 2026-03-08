@@ -7,6 +7,8 @@ import { PianoRoll } from './PianoRoll';
 interface PhraseAnalysisPanelProps {
   phrase: GeneratedPhrase;
   mode: Mode;
+  swingAmount?: number;
+  bpm?: number;
 }
 
 const PHRASE_COLOR = '#FF6B9D';
@@ -130,7 +132,7 @@ function TemplateInfo({ phrase }: { phrase: GeneratedPhrase }) {
   );
 }
 
-export function PhraseAnalysisPanel({ phrase, mode }: PhraseAnalysisPanelProps) {
+export function PhraseAnalysisPanel({ phrase, mode, swingAmount, bpm }: PhraseAnalysisPanelProps) {
   const [open, setOpen] = useState(false);
   const analysis = useMemo(() => analyzePhrase(phrase, mode), [phrase, mode]);
   const { notes, summary } = analysis;
@@ -288,7 +290,7 @@ export function PhraseAnalysisPanel({ phrase, mode }: PhraseAnalysisPanelProps) 
 
           {/* Piano Roll visualization */}
           <div className="mt-2 pt-1" style={{ borderTop: '1px solid #333' }}>
-            <PianoRoll phrase={phrase} noteAnalysis={notes} />
+            <PianoRoll phrase={phrase} noteAnalysis={notes} swingAmount={swingAmount} bpm={bpm} />
           </div>
         </div>
       )}

@@ -57,3 +57,4 @@ export { absolutePitch, pickRandom, isExtensionTone } from './bebopScheduler';
 export { pickWeighted } from './bebopTemplates';
 export { generatePhraseRule, buildNotePool, chooseGoalNote } from './bebopGenerator';
 export { analyzePhrase } from './phraseAnalysis';
+export { swingBeatStart, swingVolumeMult, swingDurMult } from './swing';

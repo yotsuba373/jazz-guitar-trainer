@@ -1,5 +1,6 @@
 import type { GeneratedPhrase } from '../../types';
 import { FW, SG, TP, LP } from '../../constants';
+import { swingBeatStart } from '../../utils/swing';
 
 /** Generate a beat color via linear interpolation between start and end hues.
  *  Warm pink (first note) → cool violet (last note). */
@@ -41,6 +42,8 @@ interface PhrasePathProps {
   phrase: GeneratedPhrase;
   animKey?: number;
   animSpeed?: number;
+  swingAmount?: number;
+  bpm?: number;
 }
 
 /** Convert fretboard (stringIdx, fret) to SVG (x, y) */
@@ -208,7 +211,7 @@ function buildSegments(points: Point[]): Segment[] {
   });
 }
 
-export function PhrasePath({ phrase, animKey, animSpeed = 350 }: PhrasePathProps) {
+export function PhrasePath({ phrase, animKey, animSpeed = 350, swingAmount = 0, bpm = 120 }: PhrasePathProps) {
   const visitMeta = computeVisitMeta(phrase.notes);
   const points = phrase.notes.map((n, i) => {
     const base = toSvg(n.stringIdx, n.fret);
@@ -218,7 +221,10 @@ export function PhrasePath({ phrase, animKey, animSpeed = 350 }: PhrasePathProps
   const fadeDur = Math.max(60, Math.round(animSpeed * 0.4));
   const fadeStyle = (i: number): React.CSSProperties => {
     if (animSpeed <= 0) return {};
-    const delay = (phrase.notes[i].beatStart ?? 0) * animSpeed * 2;
+    const bs = phrase.notes[i].beatStart ?? 0;
+    const dur = phrase.notes[i].duration ?? 'e';
+    const swungBeat = swingBeatStart(bs, dur, swingAmount, bpm);
+    const delay = swungBeat * animSpeed * 2;
     return { animation: `phraseIn ${fadeDur}ms ease-out ${Math.round(delay)}ms both` };
   };
 

@@ -289,6 +289,7 @@
     <a href="#bpm-playback" class="nav-link">BPM Playback</a>
     <a href="#metronome" class="nav-link">Metronome</a>
     <a href="#volume-mixer" class="nav-link">Volume Mixer</a>
+    <a href="#swing" class="nav-link">Swing Mode</a>
   </div>
 
   <div class="nav-group">
@@ -347,6 +348,7 @@
     <li><strong>Drop 2/3 ボイシング</strong> — 20テンプレートによるコードフォーム表示</li>
     <li><strong>ガイドトーン表示</strong> — 3rd/7th のボイスリーディング可視化</li>
     <li><strong>BPM自動再生</strong> — メトロノーム、コード音声、フレーズ再生 (両モード共通)</li>
+    <li><strong>スウィングモード</strong> — タイミング+ダイナミクス+アーティキュレーションの多次元スウィング</li>
   </ul>
 </div>
 
@@ -365,7 +367,7 @@
 <pre>npm install       # 依存インストール
 npm run dev       # 開発サーバー → http://localhost:5173
 npm run build     # tsc + vite build
-npm test          # vitest run (781 tests)
+npm test          # vitest run (806 tests)
 npm run lint      # ESLint</pre>
 
 <h2 id="architecture">Architecture</h2>
@@ -414,7 +416,8 @@ Utils Layer (pure functions):
 │   ├── bebopSegments.ts          — セグメント関数9種 (Arp, ScaleRun, Enclosure, OctaveDisp等)
 │   ├── bebopTemplates.ts         — テンプレート定義11種 + 選択ロジック
 │   ├── phraseAnalysis.ts         — analyzePhrase(), computeSummary()
-│   └── __tests__/                — 781 テスト
+│   ├── swing.ts                  — swingBeatStart(), swingVolumeMult(), swingDurMult()
+│   └── __tests__/                — 806 テスト
 ├── components/
 │   ├── Fretboard/                — SVG指板 (Fretboard, FretboardNote, GhostNote, PhrasePath)
 │   ├── Controls/                 — 全コントロールUI
@@ -904,6 +907,43 @@ actualBeats = (beatWidth / sumOfBeatWidths) * 4</pre>
 <code>GlobalAudioControls</code> コンポーネントで両モード共通の UI を提供。
 各チャンネルにミュートボタン付き（メトロノーム/コード/単音）。タップテンポ対応（TAPボタン連続タップでBPM設定）。</p>
 
+<h2 id="swing">Swing Mode</h2>
+<p>単一スライダー (0-100%) で制御する多次元スウィング。<code>GlobalAudioControls</code> ドロップダウンパネル内に配置。
+タイミング・ダイナミクス・アーティキュレーションの3軸を連動させ、自然なジャズフィールを実現。</p>
+
+<h3>3次元パラメータ</h3>
+<table>
+  <tr><th>Dimension</th><th>Effect</th><th>Detail</th></tr>
+  <tr><td>Timing</td><td>裏拍8分音符を後ろにシフト</td><td>最大で3連符フィール。200 BPM超でテンポ補正</td></tr>
+  <tr><td>Dynamics</td><td>表拍を強調、裏拍を抑制</td><td>表拍 +15%、裏拍 -20%</td></tr>
+  <tr><td>Articulation</td><td>表拍をレガート、裏拍をスタッカート</td><td>表拍 +25% (長め)、裏拍 -30% (短め)</td></tr>
+</table>
+
+<h3>対象ノート</h3>
+<ul>
+  <li><strong>8分音符</strong> — スウィング適用対象。裏拍のタイミング・音量・デュレーションを変化</li>
+  <li><strong>4分音符 / 3連符</strong> — スウィングの影響を受けない</li>
+</ul>
+
+<h3>ビジュアル同期</h3>
+<p>PhrasePath アニメーションと PianoRoll の表示位置がスウィング後のタイミングを反映。
+音声と視覚が一致したフィードバックを提供。</p>
+
+<h3>API (<code>src/utils/swing.ts</code>)</h3>
+<table>
+  <tr><th>Function</th><th>Description</th></tr>
+  <tr><td><code>swingBeatStart(beatStart, rhythm, amount)</code></td><td>裏拍8分のビート開始位置をシフト</td></tr>
+  <tr><td><code>swingVolumeMult(beatStart, rhythm, amount)</code></td><td>表拍/裏拍の音量倍率を返す</td></tr>
+  <tr><td><code>swingDurMult(beatStart, rhythm, amount)</code></td><td>表拍/裏拍のデュレーション倍率を返す</td></tr>
+</table>
+
+<h3>State 永続化</h3>
+<table>
+  <tr><th>localStorage Key</th><th>Type</th><th>Default</th></tr>
+  <tr><td><code>swingEnabled</code></td><td>boolean</td><td>false</td></tr>
+  <tr><td><code>swingAmount</code></td><td>number (0-100)</td><td>60</td></tr>
+</table>
+
 <!-- ==================== UI ==================== -->
 <h2 id="chart-layout">Chart Layout (iReal Pro Style)</h2>
 
@@ -960,7 +1000,7 @@ CSS Grid 描画</div>
 <h4>Normal Mode</h4>
 <pre>RootSelector (12キー)
 ModeSelector (18モード)
-GlobalAudioControls (音量ミキサー, メトロノーム, BPM, タップテンポ)
+GlobalAudioControls (音量ミキサー, メトロノーム, BPM, タップテンポ, スウィング)
 PositionSelector (Pos 1-7 + 全表示 + 重ねる) ＋ VoicingGrid
 OptionBar (CT, ラベル, 記法, ガイドトーン, コードフォーム, フレーズ)
 PhraseControls (フレーズON時)
@@ -971,7 +1011,7 @@ Footer</pre>
 
 <h4>Progression Mode</h4>
 <pre>ProgressionEditor (編集時のみ)
-GlobalAudioControls (▶/■ + 音量ミキサー, メトロノーム, BPM, タップテンポ)
+GlobalAudioControls (▶/■ + 音量ミキサー, メトロノーム, BPM, タップテンポ, スウィング)
 ProgressionPlayer (ChordChart + モード/ポジション選択 + VoicingGrid)
 OptionBar (フレーズ含む)
 PhraseControls (フレーズON時)
@@ -1094,7 +1134,7 @@ interface Progression {
 
 <!-- ==================== TESTING ==================== -->
 <h2 id="testing">Test Suite</h2>
-<p><code>npm test</code> — Vitest による <strong>776テスト</strong>。</p>
+<p><code>npm test</code> — Vitest による <strong>806テスト</strong>。</p>
 
 <table>
   <tr><th>Test File</th><th>Tests</th><th>Coverage</th></tr>
@@ -1110,6 +1150,7 @@ interface Progression {
   <tr><td>bebopSegments.test.ts</td><td>11</td><td>各セグメント関数 (Arp, ScaleRun, Enclosure, 1235, dim7, ApproachCT, Chromatic, UpperStructure)</td></tr>
   <tr><td>bebopTemplates.test.ts</td><td>15</td><td>テンプレート構造、品質フィルタ、コンター親和、拍配分(allocateEighths/allocateBeats)</td></tr>
   <tr><td>bebopGenerator.test.ts</td><td>25</td><td>ルールベース生成 (全7モード+LydDom+Alt対応、CT表拍率、音域、跳躍制限、メタデータ、可変リズム、assignRhythms, planSegmentRhythms)</td></tr>
+  <tr><td>swing.test.ts</td><td>25</td><td>スウィングタイミング, ダイナミクス倍率, アーティキュレーション倍率, 4分/3連符非適用, テンポ補正</td></tr>
 </table>
 
 <div class="callout warn">

@@ -16,6 +16,10 @@ interface GlobalAudioControlsProps {
   onNoteVolumeChange: (v: number) => void;
   instrument: InstrumentType;
   onInstrumentChange: (inst: InstrumentType) => void;
+  swingEnabled: boolean;
+  onToggleSwing: () => void;
+  swingAmount: number;
+  onSwingAmountChange: (v: number) => void;
   isPlaying?: boolean;
   onTogglePlay?: () => void;
   showPlayButton?: boolean;
@@ -58,6 +62,7 @@ export function GlobalAudioControls({
   chordVolume, onChordVolumeChange,
   noteVolume, onNoteVolumeChange,
   instrument, onInstrumentChange,
+  swingEnabled, onToggleSwing, swingAmount, onSwingAmountChange,
   isPlaying, onTogglePlay, showPlayButton,
 }: GlobalAudioControlsProps) {
   const [bpmStr, setBpmStr] = useState(String(bpm));
@@ -210,6 +215,28 @@ export function GlobalAudioControls({
                   {label}
                 </button>
               ))}
+            </div>
+            {/* Swing controls */}
+            <div className="flex items-center gap-1.5 mt-1 pt-1" style={{ borderTop: '1px solid #333' }}>
+              <button
+                onClick={onToggleSwing}
+                className="rounded cursor-pointer text-[9px] font-mono px-1.5 h-[18px] inline-flex items-center"
+                style={{
+                  border: `1px solid ${swingEnabled ? '#E67E22' : '#555'}`,
+                  background: swingEnabled ? '#2a1a0a' : '#1a1a1a',
+                  color: swingEnabled ? '#E67E22' : '#888',
+                }}
+              >
+                Swing
+              </button>
+              <input type="range" min={0} max={100} step={5}
+                value={Math.round(swingAmount * 100)}
+                onChange={e => onSwingAmountChange(Number(e.target.value) / 100)}
+                className="flex-1"
+                style={{ accentColor: '#E67E22', opacity: swingEnabled ? 1 : 0.3 }}
+                disabled={!swingEnabled}
+              />
+              <span className="text-[10px] text-text-dim w-[28px] text-right">{Math.round(swingAmount * 100)}%</span>
             </div>
           </div>
         )}
