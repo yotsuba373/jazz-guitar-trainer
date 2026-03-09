@@ -16,8 +16,14 @@ export interface SegmentOpts {
   quality?: string;
   /** Beat parity: 0 = first note on downbeat, 1 = first note on upbeat */
   beatParity?: number;
+  /** Beat phase (0-3): 0=strong-on, 1=strong-off, 2=nonstrong-on, 3=nonstrong-off */
+  beatPhase?: number;
   /** Pre-planned rhythm for this segment (from planSegmentRhythms) */
   rhythm?: 'q' | 't' | 'e' | 's';
+  /** Skeleton-driven: the anchor this segment aims toward */
+  exitAnchor?: PoolNote;
+  /** Skeleton-driven: intermediate anchors to pass through */
+  interiorAnchors?: PoolNote[];
 }
 
 export type SegmentFn = (
@@ -134,13 +140,15 @@ function findNearest(
 // segArpeggio — CT arpeggio (R-3-5-7 or subset)
 // ---------------------------------------------------------------------------
 
-export const segArpeggio: SegmentFn = (pool, mode, startNote, direction, eighths) => {
+export const segArpeggio: SegmentFn = (pool, mode, startNote, direction, eighths, opts) => {
   const ctNames = new Set(mode.chordTones);
   const ctPool = pool.filter(n => ctNames.has(n.noteName));
   if (ctPool.length < 2) return null;
 
   // Build semitone set for CT filtering in nextScaleTone
   const ctSemiSet = new Set(ctPool.map(n => n.semitone));
+  const exitTarget = opts?.exitAnchor;
+  const interiorAnchors = opts?.interiorAnchors ?? [];
 
   const result: PoolNote[] = [];
   let current = startNote;
@@ -156,7 +164,32 @@ export const segArpeggio: SegmentFn = (pool, mode, startNote, direction, eighths
 
   result.push(current);
 
-  for (let i = 1; i < eighths; i++) {
+  // If interior anchors are provided, pass through them
+  if (interiorAnchors.length > 0) {
+    for (const anchor of interiorAnchors) {
+      if (result.length >= eighths) break;
+      if (ctNames.has(anchor.noteName)) {
+        const leap = Math.abs(absolutePitch(anchor) - absolutePitch(current));
+        if (leap <= 9) {
+          result.push(anchor);
+          current = anchor;
+        }
+      }
+    }
+  }
+
+  for (let i = result.length; i < eighths; i++) {
+    // Aim toward exitAnchor if close to end
+    if (exitTarget && i >= eighths - 1) {
+      const dist = Math.abs(absolutePitch(current) - absolutePitch(exitTarget));
+      if (dist <= 9 && ctNames.has(exitTarget.noteName)) {
+        if (absolutePitch(exitTarget) !== absolutePitch(current) || exitTarget.stringIdx !== current.stringIdx) {
+          result.push(exitTarget);
+        }
+        break;
+      }
+    }
+
     const next = nextScaleTone(ctPool, current, direction, ctSemiSet);
     if (!next) break;
     // Guard against large leaps
@@ -178,6 +211,7 @@ export const segScaleRun: SegmentFn = (pool, mode, startNote, direction, eighths
   const allSemis = new Set([...scaleSemis]);
   const bebopPassing = getBebopPassingTone(mode);
   const parity = opts?.beatParity ?? 0;
+  const exitTarget = opts?.exitAnchor;
 
   // §1: GT (3rd/7th) preferred on strong beats
   const gtSemis = new Set<number>();
@@ -190,11 +224,61 @@ export const segScaleRun: SegmentFn = (pool, mode, startNote, direction, eighths
     if (idx7 >= 0) gtSemis.add(mode.semi[idx7]);
   }
 
+  // Build waypoint queue: interiorAnchors followed by exitAnchor
+  const waypoints: PoolNote[] = [
+    ...(opts?.interiorAnchors ?? []),
+    ...(exitTarget ? [exitTarget] : []),
+  ];
+  let wpIdx = 0;
+
+  // Determine effective direction toward current waypoint (or use original direction)
+  const directionToward = (from: PoolNote, target: PoolNote): 'asc' | 'desc' => {
+    const fp = absolutePitch(from);
+    const tp = absolutePitch(target);
+    return tp >= fp ? 'asc' : 'desc';
+  };
+
+  let effDirection = direction;
+  if (waypoints.length > 0) {
+    effDirection = directionToward(startNote, waypoints[0]);
+  } else if (exitTarget) {
+    const startPitch = absolutePitch(startNote);
+    const exitPitch = absolutePitch(exitTarget);
+    if (exitPitch > startPitch) effDirection = 'asc';
+    else if (exitPitch < startPitch) effDirection = 'desc';
+  }
+
   const result: PoolNote[] = [startNote];
   let current = startNote;
 
   for (let i = 1; i < eighths; i++) {
-    let next = nextScaleTone(pool, current, direction, allSemis, false);
+    const currentWp = wpIdx < waypoints.length ? waypoints[wpIdx] : null;
+    const isLastWp = wpIdx === waypoints.length - 1;
+
+    // Waypoint proximity check: snap when close enough
+    if (currentWp) {
+      const wpDist = Math.abs(absolutePitch(current) - absolutePitch(currentWp));
+      const wpStrDist = Math.abs(current.stringIdx - currentWp.stringIdx);
+      // For last waypoint (exitAnchor): only snap near the end
+      // For interior waypoints: snap when within reach
+      const shouldSnap = isLastWp ? (i >= eighths - 1 && wpDist <= 4 && wpStrDist <= 1)
+                                   : (wpDist <= 3 && wpStrDist <= 1);
+      if (shouldSnap) {
+        if (absolutePitch(currentWp) !== absolutePitch(current) || currentWp.stringIdx !== current.stringIdx) {
+          result.push(currentWp);
+          current = currentWp;
+        }
+        wpIdx++;
+        // Update direction toward next waypoint
+        if (wpIdx < waypoints.length) {
+          effDirection = directionToward(current, waypoints[wpIdx]);
+        }
+        if (isLastWp) break;
+        continue;
+      }
+    }
+
+    let next = nextScaleTone(pool, current, effDirection, allSemis, false);
     if (!next) break;
     if (Math.abs(absolutePitch(next) - absolutePitch(current)) > 4) break; // max a major 3rd step
     // §2: Bebop passing tone must fall on off-beats
@@ -202,7 +286,7 @@ export const segScaleRun: SegmentFn = (pool, mode, startNote, direction, eighths
     const isOnBeat = (i + parity) % 2 === 0;
     if (bebopPassing !== null && next.semitone === bebopPassing && isOnBeat) {
       // Passing tone would land on a downbeat — skip it and try the next scale tone
-      const skip = nextScaleTone(pool, next, direction, allSemis, false);
+      const skip = nextScaleTone(pool, next, effDirection, allSemis, false);
       if (skip && Math.abs(absolutePitch(skip) - absolutePitch(current)) <= 4) {
         result.push(skip);
         current = skip;
@@ -220,7 +304,7 @@ export const segScaleRun: SegmentFn = (pool, mode, startNote, direction, eighths
         Math.abs(absolutePitch(n) - absolutePitch(current)) <= 4 &&
         Math.abs(absolutePitch(n) - nextPitch) <= 2 &&
         Math.abs(n.stringIdx - current.stringIdx) <= 1 &&
-        (direction === 'asc' ? absolutePitch(n) > absolutePitch(current) : absolutePitch(n) < absolutePitch(current))
+        (effDirection === 'asc' ? absolutePitch(n) > absolutePitch(current) : absolutePitch(n) < absolutePitch(current))
       );
       if (gtCandidates.length > 0) {
         // Pick closest GT to current note
@@ -244,9 +328,9 @@ export const segScaleRun: SegmentFn = (pool, mode, startNote, direction, eighths
 /** Enclosure type definitions (§4) */
 type EnclosureType = 'mixed' | 'diatonic' | 'chromatic' | '3-note';
 const ENCLOSURE_TYPES: { type: EnclosureType; weight: number }[] = [
-  { type: 'mixed',     weight: 40 },  // scale above + chrom below → CT (most common)
-  { type: 'diatonic',  weight: 25 },  // scale above + scale below → CT
-  { type: 'chromatic', weight: 20 },  // chrom above + chrom below → CT
+  { type: 'mixed',     weight: 55 },  // scale above + chrom below → CT (most common)
+  { type: 'diatonic',  weight: 20 },  // scale above + scale below → CT
+  { type: 'chromatic', weight: 15 },  // chrom above + chrom below → CT
   { type: '3-note',    weight: 15 },  // scale above + approach + chrom below → CT
 ];
 
@@ -256,8 +340,13 @@ export const segEnclosure: SegmentFn = (pool, mode, startNote, _direction, eight
   const scaleSemis = new Set(mode.semi);
   const parity = opts?.beatParity ?? 0;
 
-  // Find target CT (goal or nearest CT from start)
-  let target: PoolNote | null = opts?.goalNote ?? null;
+  // Find target CT: exitAnchor > goalNote > nearest CT from start
+  let target: PoolNote | null = null;
+  if (opts?.exitAnchor && ctSet.has(opts.exitAnchor.noteName)) {
+    target = opts.exitAnchor;
+  } else {
+    target = opts?.goalNote ?? null;
+  }
   if (!target) {
     const ctPool = pool.filter(n => ctSet.has(n.noteName));
     target = bestCandidate(ctPool, startNote, null);
@@ -272,58 +361,99 @@ export const segEnclosure: SegmentFn = (pool, mode, startNote, _direction, eight
 
   // Build the core enclosure pattern based on type
   let above: PoolNote | null = null;
-  let below: PoolNote | null = null;
   let result: PoolNote[];
 
   const chromAboveSemi = (target.semitone + 1) % 12;
   const chromBelowSemi = (target.semitone + 11) % 12;
 
-  switch (enclType) {
-    case 'mixed': {
-      // Diatonic above + chromatic below → target
-      above = nextScaleTone(pool, target, 'asc', scaleSemis);
-      below = findNearest(pool, chromBelowSemi, target, 'desc') ??
-        pool.find(n => n.fret === target!.fret - 1 && n.stringIdx === target!.stringIdx) ?? null;
-      if (!above || !below) return null;
-      result = [above, below, target];
-      break;
-    }
-    case 'diatonic': {
-      // Scale above + scale below → target
-      above = nextScaleTone(pool, target, 'asc', scaleSemis);
-      below = nextScaleTone(pool, target, 'desc', scaleSemis);
-      if (!above || !below) return null;
-      result = [above, below, target];
-      break;
-    }
-    case 'chromatic': {
-      // Chromatic above + chromatic below → target
-      above = findNearest(pool, chromAboveSemi, target, 'asc') ??
-        pool.find(n => n.fret === target!.fret + 1 && n.stringIdx === target!.stringIdx) ?? null;
-      below = findNearest(pool, chromBelowSemi, target, 'desc') ??
-        pool.find(n => n.fret === target!.fret - 1 && n.stringIdx === target!.stringIdx) ?? null;
-      if (!above || !below) return null;
-      result = [above, below, target];
-      break;
-    }
-    case '3-note': {
-      // Scale above + approach (chrom above of below) + chromatic below → target
-      above = nextScaleTone(pool, target, 'asc', scaleSemis);
-      below = findNearest(pool, chromBelowSemi, target, 'desc') ??
-        pool.find(n => n.fret === target!.fret - 1 && n.stringIdx === target!.stringIdx) ?? null;
-      if (!above || !below) return null;
-      // Insert an extra approach note: scale tone above 'above'
-      const extraAbove = nextScaleTone(pool, above, 'asc', scaleSemis);
-      if (extraAbove) {
-        result = [extraAbove, above, below, target];
-      } else {
-        result = [above, below, target]; // fall back to mixed
+  // Helper to synthesize a chromatic approach note from target (not necessarily in pool)
+  // Frets are clamped to pool range to avoid position-range violations (U.1)
+  const SEMITONE_TO_NAME: Record<number, string> = {
+    0: 'C', 1: 'D♭', 2: 'D', 3: 'E♭', 4: 'E', 5: 'F',
+    6: 'G♭', 7: 'G', 8: 'A♭', 9: 'A', 10: 'B♭', 11: 'B',
+  };
+  const poolFretMin = Math.min(...pool.map(n => n.fret));
+  const poolFretMax = Math.max(...pool.map(n => n.fret));
+  const synthChromNote = (ref: PoolNote, semiOffset: number): PoolNote => {
+    const semi = ((ref.semitone + semiOffset) % 12 + 12) % 12;
+    return {
+      noteName: SEMITONE_TO_NAME[semi] ?? ref.noteName,
+      stringIdx: ref.stringIdx,
+      fret: Math.max(poolFretMin, Math.min(poolFretMax, ref.fret + semiOffset)),
+      semitone: semi,
+      isChordTone: false,
+      isApproach: true,
+    };
+  };
+
+  // Helper to find chromatic note: try pool first, then synthesize
+  const findChromBelow = (ref: PoolNote): PoolNote =>
+    findNearest(pool, chromBelowSemi, ref, 'desc') ??
+    pool.find(n => n.fret === ref.fret - 1 && n.stringIdx === ref.stringIdx) ??
+    synthChromNote(ref, -1);
+  const findChromAbove = (ref: PoolNote): PoolNote =>
+    findNearest(pool, chromAboveSemi, ref, 'asc') ??
+    pool.find(n => n.fret === ref.fret + 1 && n.stringIdx === ref.stringIdx) ??
+    synthChromNote(ref, 1);
+
+  // Helper to build enclosure pattern; returns null if required notes not found
+  const buildEncl = (type: EnclosureType): PoolNote[] | null => {
+    switch (type) {
+      case 'mixed': {
+        let a = nextScaleTone(pool, target!, 'asc', scaleSemis);
+        if (!a) {
+          // Synthesize diatonic above: find next scale semitone above target
+          const sortedSemis = Array.from(scaleSemis).sort((x, y) => x - y);
+          const nextSemi = sortedSemis.find(s => s > target!.semitone)
+            ?? sortedSemis[0]; // wrap around
+          if (nextSemi !== undefined) {
+            const offset = ((nextSemi - target!.semitone) + 12) % 12;
+            a = { ...synthChromNote(target!, offset), isApproach: true };
+          }
+        }
+        if (!a) return null;
+        // Below must be truly chromatic (not in scale) for mixed enclosure
+        const cb1 = (target!.semitone + 11) % 12;
+        if (scaleSemis.has(cb1)) return null;
+        const b = findChromBelow(target!);
+        return [a, b, target!];
       }
-      break;
+      case 'diatonic': {
+        const a = nextScaleTone(pool, target!, 'asc', scaleSemis);
+        const b = nextScaleTone(pool, target!, 'desc', scaleSemis);
+        return a && b ? [a, b, target!] : null;
+      }
+      case 'chromatic': {
+        const a = findChromAbove(target!);
+        const b = findChromBelow(target!);
+        return [a, b, target!];
+      }
+      case '3-note': {
+        const a = nextScaleTone(pool, target!, 'asc', scaleSemis);
+        if (!a) return null;
+        const b = findChromBelow(target!);
+        const extraAbove = nextScaleTone(pool, a, 'asc', scaleSemis);
+        return extraAbove ? [extraAbove, a, b, target!] : [a, b, target!];
+      }
+      default:
+        return null;
     }
-    default:
-      return null;
+  };
+
+  // Try selected type first, then fallback through other types
+  let enclResult = buildEncl(enclType);
+  if (!enclResult) {
+    const fallbackOrder: EnclosureType[] = ['diatonic', 'mixed', 'chromatic'];
+    for (const fb of fallbackOrder) {
+      if (fb === enclType) continue;
+      enclResult = buildEncl(fb);
+      if (enclResult) break;
+    }
   }
+  if (!enclResult) return null;
+  result = enclResult;
+  // Extract 'above' note from the result pattern (needed for extras padding loop)
+  above = result.length >= 3 ? result[result.length - 3] : result[0];
 
   // §4: CT target must land on a downbeat
   // Core pattern is 3 notes [above, below, target]. Target is at index 2.
@@ -345,21 +475,52 @@ export const segEnclosure: SegmentFn = (pool, mode, startNote, _direction, eight
   // Adds an extra approach note so the target lands one eighth later
   const useDelayedResolution = Math.random() < 0.3 && result.length < eighths;
 
+  // Helper: find a pad note before the first note of the enclosure
+  const findPadNote = (): PoolNote | null => {
+    const padRef = result[0];
+    return nextScaleTone(pool, padRef, 'asc', scaleSemis)
+      ?? nextScaleTone(pool, padRef, 'desc', scaleSemis)
+      ?? synthChromNote(padRef, 1);
+  };
+
+  // Beat phase: 0=strong-on, 1=strong-off, 2=nonstrong-on, 3=nonstrong-off
+  // Determines exactly where the target lands in the strong-beat cycle
+  const beatPhase = opts?.beatPhase ?? (parity === 0 ? 0 : 1);
+  const targetPhase = (beatPhase + result.length - 1) % 4;
+  const targetIsStrong = targetPhase === 0;
+  const targetIsOnBeat = targetPhase === 0 || targetPhase === 2;
+
   if (!useDelayedResolution) {
-    // Normal: ensure target lands on a strong beat
-    const targetIdx = result.length - 1;
-    if ((targetIdx + parity) % 2 !== 0) {
-      const padRef = result[0];
-      const pad = nextScaleTone(pool, padRef, 'asc', scaleSemis);
-      if (pad) result.unshift(pad);
+    // Normal: prefer target on strong beat (beats 1, 3)
+    if (!targetIsStrong) {
+      // Calculate how many pads needed to reach strong beat (phase 0)
+      const padsFor1 = (beatPhase + result.length) % 4;      // target phase after +1
+      const padsFor2 = (beatPhase + result.length + 1) % 4;  // target phase after +2
+      if (padsFor1 === 0) {
+        // 1 pad reaches strong beat
+        const pad = findPadNote();
+        if (pad) result.unshift(pad);
+      } else if (padsFor2 === 0) {
+        // 2 pads reach strong beat (only if within budget)
+        const pad1 = findPadNote();
+        if (pad1) {
+          result.unshift(pad1);
+          const pad2Ref = result[0];
+          const pad2 = nextScaleTone(pool, pad2Ref, 'asc', scaleSemis)
+            ?? nextScaleTone(pool, pad2Ref, 'desc', scaleSemis)
+            ?? synthChromNote(pad2Ref, 1);
+          if (pad2) result.unshift(pad2);
+        }
+      } else if (!targetIsOnBeat) {
+        // At least shift to on-beat if strong isn't reachable
+        const pad = findPadNote();
+        if (pad) result.unshift(pad);
+      }
     }
   } else {
-    // Delayed: ensure target lands on an off-beat by adding/removing a pad note
-    const targetIdx = result.length - 1;
-    if ((targetIdx + parity) % 2 === 0) {
-      // Target would land on strong beat — add one note to shift it
-      const padRef = result[0];
-      const pad = nextScaleTone(pool, padRef, 'asc', scaleSemis);
+    // Delayed: target should NOT be on strong beat
+    if (targetIsStrong) {
+      const pad = findPadNote();
       if (pad) result.unshift(pad);
     }
   }
@@ -371,7 +532,9 @@ export const segEnclosure: SegmentFn = (pool, mode, startNote, _direction, eight
 // seg1235 — 1-2-3-5 four-note ascending pattern
 // ---------------------------------------------------------------------------
 
-export const seg1235: SegmentFn = (pool, mode, startNote, _direction, eighths) => {
+export const seg1235: SegmentFn = (pool, mode, startNote, _direction, eighths, opts) => {
+  const exitTarget = opts?.exitAnchor;
+
   // Find R, 2, 3, 5 near startNote
   const targetDegrees = [0, 1, 2, 4]; // indices into mode.semi / mode.notes
   const targets = targetDegrees.map(idx => {
@@ -382,6 +545,42 @@ export const seg1235: SegmentFn = (pool, mode, startNote, _direction, eighths) =
 
   if (targets.some(t => t === null)) return null;
   const result = targets as PoolNote[];
+
+  // If exitAnchor is provided, try to pick octave of root that brings pattern closer
+  if (exitTarget) {
+    const exitPitch = absolutePitch(exitTarget);
+    const rootSemi = mode.semi[0];
+    const rootCandidates = pool.filter(n => n.semitone === rootSemi);
+    if (rootCandidates.length > 1) {
+      // Pick root octave whose resulting pattern end is closest to exitAnchor
+      let bestRoot = result[0];
+      let bestDist = Infinity;
+      for (const rc of rootCandidates) {
+        // Estimate where 5th degree would land from this root
+        const rcPitch = absolutePitch(rc);
+        const fifthSemi = mode.semi[4];
+        const fifthCandidates = pool.filter(n =>
+          n.semitone === fifthSemi && absolutePitch(n) > rcPitch
+        );
+        if (fifthCandidates.length > 0) {
+          const fifthPitch = Math.min(...fifthCandidates.map(n => absolutePitch(n)));
+          const dist = Math.abs(fifthPitch - exitPitch);
+          if (dist < bestDist) {
+            bestDist = dist;
+            bestRoot = rc;
+          }
+        }
+      }
+      // Rebuild from chosen root if different
+      if (bestRoot !== result[0]) {
+        result[0] = bestRoot;
+        for (let idx = 1; idx < targetDegrees.length; idx++) {
+          const semi = mode.semi[targetDegrees[idx]];
+          result[idx] = findNearest(pool, semi, result[idx - 1], 'asc') ?? result[idx];
+        }
+      }
+    }
+  }
 
   // Ensure ascending order
   for (let i = 1; i < result.length; i++) {
@@ -414,17 +613,27 @@ export const segDim7From3rd: SegmentFn = (pool, mode, startNote, direction, eigh
   const rootSemi = mode.semi[0];
   const b9Semi = (rootSemi + 1) % 12;
 
+  // If exitAnchor is provided, prefer direction toward it
+  const exitTarget = opts?.exitAnchor;
+  let effDirection = direction;
+  if (exitTarget) {
+    const startPitch = absolutePitch(startNote);
+    const exitPitch = absolutePitch(exitTarget);
+    if (exitPitch > startPitch) effDirection = 'asc';
+    else if (exitPitch < startPitch) effDirection = 'desc';
+  }
+
   // Find the 4 notes near startNote
-  const thirdNote = findNearest(pool, mode.semi[mode.notes.indexOf(third)] ?? -1, startNote, direction);
-  const fifthNote = thirdNote ? findNearest(pool, mode.semi[mode.notes.indexOf(fifth)] ?? -1, thirdNote, direction) : null;
-  const seventhNote = fifthNote ? findNearest(pool, mode.semi[mode.notes.indexOf(seventh)] ?? -1, fifthNote, direction) : null;
-  const b9Note = seventhNote ? findNearest(pool, b9Semi, seventhNote, direction) : null;
+  const thirdNote = findNearest(pool, mode.semi[mode.notes.indexOf(third)] ?? -1, startNote, effDirection);
+  const fifthNote = thirdNote ? findNearest(pool, mode.semi[mode.notes.indexOf(fifth)] ?? -1, thirdNote, effDirection) : null;
+  const seventhNote = fifthNote ? findNearest(pool, mode.semi[mode.notes.indexOf(seventh)] ?? -1, fifthNote, effDirection) : null;
+  const b9Note = seventhNote ? findNearest(pool, b9Semi, seventhNote, effDirection) : null;
 
   const notes = [thirdNote, fifthNote, seventhNote, b9Note].filter(Boolean) as PoolNote[];
   if (notes.length < 3) return null;
 
   // Ensure proper direction
-  if (direction === 'asc') {
+  if (effDirection === 'asc') {
     for (let i = 1; i < notes.length; i++) {
       if (absolutePitch(notes[i]) <= absolutePitch(notes[i - 1])) {
         const higher = pool.filter(n =>
@@ -437,6 +646,17 @@ export const segDim7From3rd: SegmentFn = (pool, mode, startNote, direction, eigh
     }
   }
 
+  // If exitAnchor provided, try to pick last note closer to it
+  if (exitTarget && notes.length >= 2) {
+    const lastIdx = Math.min(eighths, 4) - 1;
+    if (lastIdx < notes.length) {
+      const lastSemi = notes[lastIdx].semitone;
+      const closer = pool.filter(n => n.semitone === lastSemi);
+      const best = bestCandidate(closer, exitTarget, null);
+      if (best) notes[lastIdx] = best;
+    }
+  }
+
   return notes.slice(0, Math.min(eighths, 4));
 };
 
@@ -444,7 +664,18 @@ export const segDim7From3rd: SegmentFn = (pool, mode, startNote, direction, eigh
 // segUpperStructure — 3rd-based m7/maj7 arpeggio
 // ---------------------------------------------------------------------------
 
-export const segUpperStructure: SegmentFn = (pool, mode, startNote, direction, eighths) => {
+export const segUpperStructure: SegmentFn = (pool, mode, startNote, direction, eighths, opts) => {
+  const exitTarget = opts?.exitAnchor;
+
+  // If exitAnchor provided, prefer direction toward it
+  let effDirection = direction;
+  if (exitTarget) {
+    const startPitch = absolutePitch(startNote);
+    const exitPitch = absolutePitch(exitTarget);
+    if (exitPitch > startPitch) effDirection = 'asc';
+    else if (exitPitch < startPitch) effDirection = 'desc';
+  }
+
   // From the 3rd, arpeggiate: 3-5-7-9 (upper structure triad/7th)
   const targets = [1, 2, 3].map(idx => {
     if (idx >= mode.chordTones.length) return null;
@@ -457,14 +688,39 @@ export const segUpperStructure: SegmentFn = (pool, mode, startNote, direction, e
 
   const result: PoolNote[] = [];
   let ref = startNote;
-  for (const semi of targets) {
+  for (let ti = 0; ti < targets.length; ti++) {
+    const semi = targets[ti];
     if (semi === null || semi === undefined) continue;
-    const note = findNearest(pool, semi, ref, direction);
+
+    // On last note, if exitAnchor matches this semitone, prefer note closer to it
+    const isLast = result.length === Math.min(eighths, targets.filter(s => s !== null && s !== undefined).length) - 1;
+    let note: PoolNote | null;
+    if (exitTarget && isLast && exitTarget.semitone === semi) {
+      note = exitTarget;
+    } else {
+      note = findNearest(pool, semi, ref, effDirection);
+    }
     if (!note) continue;
     if (result.length > 0 && Math.abs(absolutePitch(note) - absolutePitch(result[result.length - 1])) > 9) continue;
     result.push(note);
     ref = note;
     if (result.length >= eighths) break;
+  }
+
+  // If exitAnchor provided and close to last note, try to snap last note closer
+  if (exitTarget && result.length >= 2) {
+    const last = result[result.length - 1];
+    const dist = Math.abs(absolutePitch(last) - absolutePitch(exitTarget));
+    if (dist <= 5) {
+      const closer = pool.filter(n =>
+        n.semitone === last.semitone &&
+        Math.abs(absolutePitch(n) - absolutePitch(exitTarget)) < dist
+      );
+      if (closer.length > 0) {
+        const best = bestCandidate(closer, exitTarget, null);
+        if (best) result[result.length - 1] = best;
+      }
+    }
   }
 
   return result.length >= 2 ? result : null;
@@ -521,7 +777,7 @@ function buildApproachNotes(
   return notes;
 }
 
-export const segApproachCT: SegmentFn = (pool, mode, startNote, _direction, eighths) => {
+export const segApproachCT: SegmentFn = (pool, mode, startNote, _direction, eighths, opts) => {
   const ctSet = new Set(mode.chordTones);
   const ctSemis = new Set(pool.filter(n => ctSet.has(n.noteName)).map(n => n.semitone));
   const ctPool = pool.filter(n => ctSet.has(n.noteName));
@@ -531,17 +787,34 @@ export const segApproachCT: SegmentFn = (pool, mode, startNote, _direction, eigh
   const pitches = pool.map(n => absolutePitch(n)).sort((a, b) => a - b);
   const poolMedianPitch = pitches[Math.floor(pitches.length / 2)];
 
+  // If skeleton anchors are provided, use them as ordered targets
+  const anchorTargets: PoolNote[] = [];
+  if (opts?.interiorAnchors) {
+    for (const a of opts.interiorAnchors) {
+      if (ctSet.has(a.noteName)) anchorTargets.push(a);
+    }
+  }
+  if (opts?.exitAnchor && ctSet.has(opts.exitAnchor.noteName)) {
+    anchorTargets.push(opts.exitAnchor);
+  }
+
   const result: PoolNote[] = [];
   let ref = startNote;
   let prevNote: PoolNote | undefined;
   const usedSemitones = new Set<number>();
   let budget = eighths;
+  let anchorIdx = 0;
 
   while (budget >= 2) {
-    // Find nearest CT that hasn't been targeted yet (with Musical Forces)
-    const availableCTs = ctPool.filter(n => !usedSemitones.has(n.semitone));
-    const candidates = availableCTs.length > 0 ? availableCTs : ctPool;
-    const target = bestCandidate(candidates, ref, null, { prevNote, poolMedianPitch, ctSemis });
+    // Use anchor targets in order if available, otherwise find CT via Musical Forces
+    let target: PoolNote | null = null;
+    if (anchorIdx < anchorTargets.length) {
+      target = anchorTargets[anchorIdx++];
+    } else {
+      const availableCTs = ctPool.filter(n => !usedSemitones.has(n.semitone));
+      const candidates = availableCTs.length > 0 ? availableCTs : ctPool;
+      target = bestCandidate(candidates, ref, null, { prevNote, poolMedianPitch, ctSemis });
+    }
     if (!target) break;
 
     usedSemitones.add(target.semitone);
@@ -574,19 +847,38 @@ export const segApproachCT: SegmentFn = (pool, mode, startNote, _direction, eigh
 // segChromatic — chromatic run between two CTs
 // ---------------------------------------------------------------------------
 
-export const segChromatic: SegmentFn = (pool, _mode, startNote, direction, eighths) => {
+export const segChromatic: SegmentFn = (pool, _mode, startNote, direction, eighths, opts) => {
+  const exitTarget = opts?.exitAnchor;
   const result: PoolNote[] = [startNote];
   let current = startNote;
-  const step = direction === 'asc' ? 1 : -1;
+
+  // Determine step direction: if exitAnchor is given, walk toward it
+  let step = direction === 'asc' ? 1 : -1;
+  if (exitTarget) {
+    const diff = absolutePitch(exitTarget) - absolutePitch(startNote);
+    if (diff > 0) step = 1;
+    else if (diff < 0) step = -1;
+  }
 
   for (let i = 1; i < eighths; i++) {
+    // Snap to exitAnchor when close enough at end
+    if (exitTarget && i >= eighths - 1) {
+      const dist = Math.abs(absolutePitch(current) - absolutePitch(exitTarget));
+      if (dist <= 2) {
+        if (absolutePitch(exitTarget) !== absolutePitch(current) || exitTarget.stringIdx !== current.stringIdx) {
+          result.push(exitTarget);
+        }
+        break;
+      }
+    }
+
     const targetSemi = (current.semitone + step + 12) % 12;
     // Prefer same string
     const sameStr = pool.find(n =>
       n.semitone === targetSemi && n.stringIdx === current.stringIdx &&
       n.fret === current.fret + step
     );
-    const next = sameStr ?? findNearest(pool, targetSemi, current, direction);
+    const next = sameStr ?? findNearest(pool, targetSemi, current, step > 0 ? 'asc' : 'desc');
     if (!next) break;
     result.push(next);
     current = next;
@@ -599,9 +891,10 @@ export const segChromatic: SegmentFn = (pool, _mode, startNote, direction, eight
 // segOctaveDisp — Honeysuckle Rose: Root → 1oct-lower 3rd → ascending
 // ---------------------------------------------------------------------------
 
-export const segOctaveDisp: SegmentFn = (pool, mode, startNote, _direction, eighths) => {
+export const segOctaveDisp: SegmentFn = (pool, mode, startNote, _direction, eighths, opts) => {
   if (eighths < 3) return null;
   const ctSet = new Set(mode.chordTones);
+  const exitTarget = opts?.exitAnchor;
 
   // Find root near startNote
   const rootSemi = mode.semi[0];
@@ -633,6 +926,17 @@ export const segOctaveDisp: SegmentFn = (pool, mode, startNote, _direction, eigh
   const scaleSemis = new Set(mode.semi);
   let current = lowThird;
   for (let i = 2; i < eighths; i++) {
+    // If exitAnchor provided and near end, try to snap toward it
+    if (exitTarget && i >= eighths - 1) {
+      const dist = Math.abs(absolutePitch(current) - absolutePitch(exitTarget));
+      if (dist <= 5 && Math.abs(current.stringIdx - exitTarget.stringIdx) <= 1) {
+        if (absolutePitch(exitTarget) !== absolutePitch(current) || exitTarget.stringIdx !== current.stringIdx) {
+          result.push(exitTarget);
+        }
+        break;
+      }
+    }
+
     const next = nextScaleTone(pool, current, 'asc', scaleSemis);
     if (!next) break;
     if (Math.abs(absolutePitch(next) - absolutePitch(current)) > 5) break;

@@ -245,6 +245,18 @@ export function PhraseAnalysisPanel({ phrase, mode, swingAmount, bpm }: PhraseAn
                       ...(n.isSkeletonBeat ? { background: `${SKELETON_COLOR}18`, borderRadius: 2 } : {}),
                     }}>
                       {n.beatPosition}
+                      {n.isSkeletonBeat && phrase.skeleton?.slots && (() => {
+                        const pn = phrase.notes[i];
+                        const slot = phrase.skeleton!.slots!.find(s =>
+                          s.noteName === pn.noteName && Math.abs(s.beatPos - (pn.beatStart ?? -1)) < 0.1
+                        );
+                        if (!slot) return null;
+                        const sym = slot.role === 'start' ? '★'
+                          : slot.role === 'strong-gt' ? '◆'
+                          : slot.role === 'downbeat-ct' ? '●'
+                          : null;
+                        return sym ? <span style={{ color: SKELETON_COLOR, fontSize: 8, marginLeft: 2 }}>{sym}</span> : null;
+                      })()}
                     </td>
                     <td className="py-[2px] pr-2" style={{ fontWeight: isCT ? 700 : 400 }}>
                       {n.noteName}

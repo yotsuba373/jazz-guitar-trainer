@@ -1,9 +1,10 @@
 import type { Position, Mode, FretMap, PhraseConfig, GeneratedPhrase, PhraseContour, PoolNote } from '../types';
 import { OPEN_STRINGS } from '../constants';
-import { absolutePitch, pickRandom } from './bebopScheduler';
+import { absolutePitch, pickRandom, fillSkeleton } from './bebopScheduler';
 import { pickWeighted, selectTemplate } from './bebopTemplates';
 import { buildPhrase } from './bebopScheduler';
 import { SEGMENT_FNS } from './bebopSegments';
+import { buildSkeleton } from './skeleton';
 
 // ---------------------------------------------------------------------------
 // Strong-resolution mapping (normal mode: where does this mode resolve to?)
@@ -127,14 +128,17 @@ export function chooseGoalNote(
         const seventhSemi = seventhCTs[0].semitone;
         const diff = ((nextThirdSemi - seventhSemi) + 12) % 12;
         if (diff === 1 || diff === 11) {
-          if (Math.random() < 0.70) {
-            const chosen = pickRandom(seventhCTs);
-            return {
-              note: chosen,
-              reason: '7th→次3rd半音解決',
-              resolvedNextStart: findResolvedNext(chosen, nextChordContext.thirdNote),
-            };
-          }
+          const chosen = pickRandom(seventhCTs);
+          const inPos = nextPosFretRange
+            ? nextChordPool?.some(n => n.noteName === nextChordContext.thirdNote
+              && n.fret >= nextPosFretRange.fretMin && n.fret <= nextPosFretRange.fretMax) ?? true
+            : true;
+          const caseLabel = inPos ? 'Case A: ポジション内' : 'Case B: ポジション外';
+          return {
+            note: chosen,
+            reason: `→${nextChordContext.quality}の3rd(${nextChordContext.thirdNote}) [${caseLabel}]`,
+            resolvedNextStart: findResolvedNext(chosen, nextChordContext.thirdNote),
+          };
         }
       }
     }
@@ -151,7 +155,7 @@ export function chooseGoalNote(
         const chosen = pickRandom(halfStepCTs);
         return {
           note: chosen,
-          reason: '次3rdへ半音VL',
+          reason: `次3rd(${targetThirdNote})へ半音VL`,
           resolvedNextStart: findResolvedNext(chosen, targetThirdNote),
         };
       }
@@ -159,7 +163,7 @@ export function chooseGoalNote(
     const exact = ctPool.filter(n => n.noteName === targetThirdNote);
     if (exact.length > 0) {
       const chosen = pickRandom(exact);
-      return { note: chosen, reason: '次3rd一致', resolvedNextStart: findResolvedNext(chosen) };
+      return { note: chosen, reason: `次3rd(${targetThirdNote})一致`, resolvedNextStart: findResolvedNext(chosen) };
     }
   }
 
@@ -296,10 +300,147 @@ export function generatePhraseRule(
     startNote = pickWeighted(activeCtPool, activeCtPool.map(n => gtNames.has(n.noteName) ? 2 : 1));
   }
 
-  // 8. Template selection + execution with 5 retries
+  // 7b. Tension ending at skeleton stage: 26% chance to swap CT goal to non-CT scale tone
+  // Only applies when goalIsVL is false (no voice-leading resolution)
   const goalIsVL = !!(goalResult.resolvedNextStart);
+  if (!goalIsVL && ctSet.has(goalNote.noteName) && Math.random() < 0.26) {
+    const goalPitch = absolutePitch(goalNote);
+    const scaleSemis = new Set(mode.semi);
+    let bestTension: PoolNote | null = null;
+    let bestDist = Infinity;
+    for (const n of activePool) {
+      if (ctSet.has(n.noteName)) continue;
+      if (n.isApproach) continue;
+      if (!scaleSemis.has(n.semitone)) continue;
+      const pd = Math.abs(absolutePitch(n) - goalPitch);
+      const sd = Math.abs(n.stringIdx - goalNote.stringIdx);
+      if (pd <= 2 && sd <= 1 && pd < bestDist) {
+        bestDist = pd;
+        bestTension = n;
+      }
+    }
+    if (bestTension) {
+      goalNote = bestTension;
+      goalReason = `テンション終止 (${bestTension.noteName})`;
+    }
+  }
+
+  // 8. Skeleton-driven generation with fallback to legacy buildPhrase
   const forceStart = rs?.inPosition ? rs.note : undefined;
-  for (let attempt = 0; attempt < 5; attempt++) {
+
+  // Helper to finalize phrase result
+  const finalize = (phraseNotes: import('../types').PhraseNote[], templateId: string, skelContour?: import('../types').PhraseContour): GeneratedPhrase | null => {
+    // Prepend resolved pickup note + rest if out-of-position
+    let finalNotes = phraseNotes;
+    if (resolvedPickupNote) {
+      const pickupPhraseNote: import('../types').PhraseNote = {
+        noteName: resolvedPickupNote.noteName,
+        stringIdx: resolvedPickupNote.stringIdx,
+        fret: resolvedPickupNote.fret,
+        semitone: resolvedPickupNote.semitone,
+        isChordTone: ctSet.has(resolvedPickupNote.noteName),
+        isApproach: resolvedPickupNote.isApproach,
+        beatPosition: 1,
+        isStrong: true,
+        duration: 'e',
+        beatStart: 0,
+        segmentIdx: 0,
+      };
+      const restNote: import('../types').PhraseNote = {
+        ...pickupPhraseNote,
+        beatPosition: 1,
+        isStrong: false,
+        isRest: true,
+        duration: 'e',
+        beatStart: 0.5,
+      };
+      finalNotes = [pickupPhraseNote, restNote, ...phraseNotes];
+    }
+
+    const finalNote = finalNotes[finalNotes.length - 1];
+    let actualGoalReason = goalReason;
+    if (finalNote.noteName !== goalNote.noteName) {
+      if (ctSet.has(finalNote.noteName)) {
+        actualGoalReason = `CT到達 (${finalNote.noteName})`;
+      } else {
+        actualGoalReason = 'テンプレート終端';
+      }
+    }
+
+    const goalReached = finalNote.noteName === goalNote.noteName;
+    const resolvedGoalForNext = goalReached && goalResult.resolvedNextStart
+      ? goalResult.resolvedNextStart
+      : undefined;
+
+    const motif: number[] = [];
+    const soundNotes = finalNotes.filter(n => !n.isRest);
+    for (let i = 1; i < Math.min(3, soundNotes.length); i++) {
+      motif.push(absolutePitch(soundNotes[i]) - absolutePitch(soundNotes[i - 1]));
+    }
+
+    return {
+      notes: finalNotes,
+      posId: position.id,
+      modeKey: mode.key,
+      rootName: mode.notes[0],
+      config: { ...config, contour: skelContour ?? contour },
+      motif,
+      goalReason: actualGoalReason,
+      templateId,
+      totalBeats,
+      resolvedGoalForNext,
+    };
+  };
+
+  // 8a. Try skeleton-driven approach (2 retries)
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const skeleton = buildSkeleton(
+      activePool, activeCtPool, mode,
+      startNote, goalNote, bodyBeatBudget, bodyBeatOffset,
+      config.prevContour,
+    );
+    if (!skeleton) continue;
+
+    const template = selectTemplate(mode.chordQuality, totalBeats, skeleton.contour);
+
+    const phraseNotes = fillSkeleton(
+      skeleton, template, activePool, mode,
+      goalIsVL, forceStart,
+    );
+
+    if (phraseNotes && phraseNotes.length >= 3) {
+      const result = finalize(phraseNotes, template.id, skeleton.contour);
+      if (result) {
+        // Attach skeleton metadata
+        const skelSlots = skeleton.slots;
+        const CT_LABELS_SKEL = ['R', '3rd', '5th', '7th'];
+        result.skeleton = {
+          patternLabel: skelSlots
+            .filter(s => s.role !== 'target')
+            .map(s => {
+              const ctIdx = mode.chordTones.indexOf(s.note.noteName);
+              return ctIdx >= 0 ? ['R', '3', '5', '7'][ctIdx] : s.note.noteName;
+            }).join('→'),
+          direction: skeleton.contour === 'ascending' ? 'asc'
+            : skeleton.contour === 'descending' ? 'desc' : 'mixed',
+          slots: skelSlots.map(s => {
+            const ctIdx = mode.chordTones.indexOf(s.note.noteName);
+            return {
+              beatPos: s.beatPos,
+              noteName: s.note.noteName,
+              role: s.role,
+              ctLabel: ctIdx >= 0 ? CT_LABELS_SKEL[ctIdx] : undefined,
+            };
+          }),
+          contour: skeleton.contour,
+        };
+        return result;
+      }
+    }
+  }
+
+  // 8b. Fallback to legacy buildPhrase (3 retries)
+  for (let attempt = 0; attempt < 3; attempt++) {
     const template = selectTemplate(mode.chordQuality, totalBeats, contour);
 
     const phraseNotes = buildPhrase(
@@ -310,69 +451,7 @@ export function generatePhraseRule(
     );
 
     if (phraseNotes && phraseNotes.length >= 3) {
-      // Prepend resolved pickup note + rest if out-of-position
-      let finalNotes = phraseNotes;
-      if (resolvedPickupNote) {
-        const pickupPhraseNote: import('../types').PhraseNote = {
-          noteName: resolvedPickupNote.noteName,
-          stringIdx: resolvedPickupNote.stringIdx,
-          fret: resolvedPickupNote.fret,
-          semitone: resolvedPickupNote.semitone,
-          isChordTone: ctSet.has(resolvedPickupNote.noteName),
-          isApproach: resolvedPickupNote.isApproach,
-          beatPosition: 1,
-          isStrong: true,
-          duration: 'e',
-          beatStart: 0,
-          segmentIdx: 0,
-        };
-        const restNote: import('../types').PhraseNote = {
-          ...pickupPhraseNote,
-          beatPosition: 1,
-          isStrong: false,
-          isRest: true,
-          duration: 'e',
-          beatStart: 0.5,
-        };
-        finalNotes = [pickupPhraseNote, restNote, ...phraseNotes];
-      }
-
-      // Verify final note — update goal reason
-      const finalNote = finalNotes[finalNotes.length - 1];
-      let actualGoalReason = goalReason;
-      if (finalNote.noteName !== goalNote.noteName) {
-        if (ctSet.has(finalNote.noteName)) {
-          actualGoalReason = `CT到達 (${finalNote.noteName})`;
-        } else {
-          actualGoalReason = 'テンプレート終端';
-        }
-      }
-
-      // Determine resolvedGoalForNext
-      const goalReached = finalNote.noteName === goalNote.noteName;
-      const resolvedGoalForNext = goalReached && goalResult.resolvedNextStart
-        ? goalResult.resolvedNextStart
-        : undefined;
-
-      // Extract motif
-      const motif: number[] = [];
-      const soundNotes = finalNotes.filter(n => !n.isRest);
-      for (let i = 1; i < Math.min(3, soundNotes.length); i++) {
-        motif.push(absolutePitch(soundNotes[i]) - absolutePitch(soundNotes[i - 1]));
-      }
-
-      return {
-        notes: finalNotes,
-        posId: position.id,
-        modeKey: mode.key,
-        rootName: mode.notes[0],
-        config: { ...config, contour },
-        motif,
-        goalReason: actualGoalReason,
-        templateId: template.id,
-        totalBeats,
-        resolvedGoalForNext,
-      };
+      return finalize(phraseNotes, template.id);
     }
   }
 
