@@ -228,14 +228,9 @@ def process_files(paths):
         print("MIDIファイルが見つかりません")
         return
 
-    # 既存のlicks.jsonがあれば読み込む
+    # 毎回ゼロから構築 (MIDIファイルがマスターデータ)
     output_path = os.path.join(os.path.dirname(__file__), "data", "licks.json")
-    if os.path.exists(output_path):
-        with open(output_path, "r") as f:
-            db = json.load(f)
-        print(f"既存DB読み込み: {sum(len(v) for v in db.values())} リック")
-    else:
-        db = {}
+    db = {}
 
     total_new = 0
 
