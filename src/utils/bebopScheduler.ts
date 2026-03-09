@@ -1,8 +1,9 @@
 import type { Mode, PhraseNote, RhythmType, PoolNote, ApproachGroupInfo, ApproachType } from '../types';
 import { SEGMENT_FNS } from './bebopSegments';
 import { getBebopPassingTone } from '../constants/bebopScales';
-import type { PhraseTemplate, SegmentSpec } from './bebopTemplates';
+import type { PhraseTemplate } from './bebopTemplates';
 import { allocateBeats } from './bebopTemplates';
+import type { PhraseSkeleton, SkeletonSlot } from './skeleton';
 
 // ---------------------------------------------------------------------------
 // Shared helpers (moved from phraseGenerator.ts)
@@ -88,15 +89,14 @@ export function planSegmentRhythms(
     }
 
     const beatsPerNote = RHYTHM_BEATS[rhythm];
-    const noteCount = Math.max(2, Math.floor(budget / beatsPerNote));
+    // Enclosure needs at least 3 notes (above + below + target)
+    const minNotes = spec.type === 'enclosure' ? 3 : 2;
+    const noteCount = Math.max(minNotes, Math.floor(budget / beatsPerNote));
     return { rhythm, beatBudget: budget, noteCount };
   });
 }
 
 // ---------------------------------------------------------------------------
-// assignRhythms — post-process: assign rhythm per segment type
-// @deprecated — kept for backward compatibility with existing tests.
-// New code uses planSegmentRhythms() for pre-generation rhythm planning.
 // ---------------------------------------------------------------------------
 
 /** Check if a beat position falls on a downbeat (integer beat position: 1,2,3,4) */
@@ -108,88 +108,6 @@ function isOnBeat(beat: number): boolean {
 function isOnStrongBeat(beat: number): boolean {
   if (!isOnBeat(beat)) return false;
   return Math.round(beat) % 2 === 0;
-}
-
-/**
- * Assign rhythms to notes based on segment type.
- * Pattern-based per segment for musical coherence (not random per note).
- */
-export function assignRhythms(
-  notes: { note: PoolNote; segIdx: number }[],
-  segments: SegmentSpec[],
-  beatOffset: number,
-  ctSet: Set<string>,
-): RhythmType[] {
-  const rhythms: RhythmType[] = new Array(notes.length).fill('e');
-
-  // Group notes by segIdx
-  const segGroups: { start: number; end: number; type: string }[] = [];
-  let i = 0;
-  while (i < notes.length) {
-    const segIdx = notes[i].segIdx;
-    const start = i;
-    while (i < notes.length && notes[i].segIdx === segIdx) i++;
-    segGroups.push({ start, end: i, type: segments[segIdx]?.type ?? '' });
-  }
-
-  // Compute beat position for each note (assuming all 'e' initially, will refine)
-  // We need segment start beats for condition checks
-  const segStartBeats: number[] = [];
-  {
-    let beat = beatOffset;
-    let gi = 0;
-    for (let ni = 0; ni < notes.length; ni++) {
-      if (gi < segGroups.length && ni === segGroups[gi].start) {
-        segStartBeats.push(beat);
-        gi++;
-      }
-      beat += 0.5; // eighth note default
-    }
-  }
-
-  for (let g = 0; g < segGroups.length; g++) {
-    const { start, end, type } = segGroups[g];
-    const count = end - start;
-    const segBeat = segStartBeats[g];
-
-    if (type === 'arpeggio') {
-      // §10: triplet for CT arpeggio — 25% chance
-      // Allow first segment even on off-beat (pickup triplets are idiomatic in bebop)
-      const isFirstSeg = (start === 0);
-      if (count >= 3 && (isOnBeat(segBeat) || isFirstSeg) && Math.random() < 0.25) {
-        // Apply triplet to first 3 notes only
-        for (let j = 0; j < 3 && start + j < end; j++) {
-          rhythms[start + j] = 't';
-        }
-      }
-    } else if (type === 'enclosure') {
-      // §10: 16th notes for approach notes — 35% chance, ≥3 notes
-      // segEnclosure already controls parity for CT target placement
-      if (count >= 3 && Math.random() < 0.35) {
-        const numApproach = count - 1; // last note is target
-        for (let j = 0; j < numApproach; j++) {
-          rhythms[start + j] = 's';
-        }
-        // Target note stays 'e'
-      }
-    } else if (type === 'chromatic') {
-      // §10: 16th notes for chromatic runs — 40% chance, ≥2 notes, max 6
-      if (count >= 2 && Math.random() < 0.40) {
-        const limit = Math.min(count, 6);
-        for (let j = 0; j < limit; j++) {
-          rhythms[start + j] = 's';
-        }
-      }
-    }
-    // scaleRun, 1235, approachCT, etc. → stay 'e' (§2 core principle)
-  }
-
-  // Last note → quarter (12% chance, CT only) for landing feel
-  if (notes.length > 0 && ctSet.has(notes[notes.length - 1].note.noteName) && Math.random() < 0.18) {
-    rhythms[notes.length - 1] = 'q';
-  }
-
-  return rhythms;
 }
 
 // ---------------------------------------------------------------------------
@@ -232,13 +150,15 @@ export function buildPhrase(
     const segBeatPos = beatOffset + allNotes.reduce(
       (sum, n) => sum + RHYTHM_BEATS[n.rhythm ?? 'e'], 0);
     const segParity = isOnBeat(segBeatPos) ? 0 : 1;
+    // Beat phase (0-3): 0=strong-on, 1=strong-off, 2=nonstrong-on, 3=nonstrong-off
+    const segBeatPhase = Math.round(segBeatPos * 2) % 4;
 
     // For segments with triplet rhythm, convert noteCount to eighths equivalent
     // (segment functions still expect "eighths" count parameter)
     const segNotes = segFn(
       pool, mode, current, spec.direction, plan.noteCount,
       { goalNote: isLast ? goalNote : undefined, quality,
-        beatParity: segParity, rhythm: plan.rhythm },
+        beatParity: segParity, beatPhase: segBeatPhase, rhythm: plan.rhythm },
     );
 
     if (!segNotes || segNotes.length === 0) {
@@ -323,10 +243,9 @@ export function buildPhrase(
     }
     for (const group of segGroups) {
       const count = group.end - group.start;
-      if (group.type === 'enclosure' && count >= 3 && Math.random() < 0.35) {
-        // Compress approach notes (all except last = target) to 16th
-        for (let j = group.start; j < group.end - 1; j++) rawRhythms[j] = 's';
-      }
+      // Note: enclosure segments are NOT compressed to 16th; the padding in
+      // segEnclosure carefully aligns the target to a strong beat at 8th spacing,
+      // and 16th compression would shift the target off that beat.
       if (group.type === 'chromatic' && count >= 2 && Math.random() < 0.45) {
         const limit = Math.min(count, 6);
         for (let j = group.start; j < group.start + limit; j++) rawRhythms[j] = 's';
@@ -741,4 +660,525 @@ export function buildPhrase(
   });
 
   return phraseNotes;
+}
+
+// ---------------------------------------------------------------------------
+// fillSkeleton — skeleton-driven phrase construction (Phase 3)
+// ---------------------------------------------------------------------------
+
+/**
+ * Fill a skeleton with notes using template segments.
+ * Each segment is guided by skeleton anchors (exitAnchor / interiorAnchors).
+ * Post-processing is minimal: only safety checks (range, leap, direction).
+ */
+export function fillSkeleton(
+  skeleton: PhraseSkeleton,
+  template: PhraseTemplate,
+  pool: PoolNote[],
+  mode: Mode,
+  goalIsVL = false,
+  forceStartNote?: PoolNote,
+): PhraseNote[] | null {
+  const ctSet = new Set(mode.chordTones);
+  const bebopPassing = getBebopPassingTone(mode);
+  const quality = mode.chordQuality;
+
+  const { slots, beatOffset, totalBeats } = skeleton;
+  if (slots.length < 2) return null;
+
+  const startNote = slots[0].note;
+  const goalNote = slots[slots.length - 1].note;
+
+  // Allocate beats per segment
+  const beatsPerSeg = allocateBeats(template, totalBeats);
+  const rhythmPlan = planSegmentRhythms(template, beatsPerSeg, beatOffset);
+
+  // Distribute skeleton interior slots across segments
+  const interiorSlots = slots.filter(s => s.role !== 'start' && s.role !== 'target');
+  const segAnchors = distributeAnchors(interiorSlots, template, beatsPerSeg, beatOffset);
+
+  const allNotes: { note: PoolNote; segIdx: number; isRest?: boolean; rhythm?: RhythmType }[] = [];
+  let current = startNote;
+
+  for (let si = 0; si < template.segments.length; si++) {
+    const spec = template.segments[si];
+    const segFn = SEGMENT_FNS[spec.type];
+    if (!segFn) continue;
+
+    const isLast = si === template.segments.length - 1;
+    const plan = rhythmPlan[si];
+
+    // Beat position for parity
+    const segBeatPos = beatOffset + allNotes.reduce(
+      (sum, n) => sum + RHYTHM_BEATS[n.rhythm ?? 'e'], 0);
+    const segParity = isOnBeat(segBeatPos) ? 0 : 1;
+    const segBeatPhase = Math.round(segBeatPos * 2) % 4;
+
+    // Determine exit anchor for this segment
+    const exitAnchor = isLast ? goalNote : segAnchors[si]?.exit ?? undefined;
+    const interior = segAnchors[si]?.interior ?? [];
+
+    const segNotes = segFn(
+      pool, mode, current, spec.direction, plan.noteCount,
+      { goalNote: isLast ? goalNote : undefined, quality,
+        beatParity: segParity, beatPhase: segBeatPhase, rhythm: plan.rhythm,
+        exitAnchor, interiorAnchors: interior },
+    );
+
+    if (!segNotes || segNotes.length === 0) {
+      // Fallback: scale run toward exit
+      const fbCount = Math.max(2, Math.floor(plan.beatBudget / 0.5));
+      const fb = SEGMENT_FNS.scaleRun(pool, mode, current, spec.direction, fbCount,
+        { exitAnchor, beatParity: segParity, beatPhase: segBeatPhase });
+      if (fb && fb.length > 0) {
+        for (const n of fb) allNotes.push({ note: n, segIdx: si, rhythm: 'e' });
+        current = fb[fb.length - 1];
+        continue;
+      }
+      return null;
+    }
+
+    // forceStartNote prepend (first segment only)
+    if (si === 0 && forceStartNote && segNotes.length > 0) {
+      const first = segNotes[0];
+      const forcePitch = absolutePitch(forceStartNote);
+      const firstPitch = absolutePitch(first);
+      if (forcePitch !== firstPitch || first.stringIdx !== forceStartNote.stringIdx) {
+        allNotes.push({ note: forceStartNote, segIdx: si, rhythm: plan.rhythm });
+      }
+    }
+
+    // Junction smoothness
+    if (allNotes.length > 0) {
+      const prevNote = allNotes[allNotes.length - 1].note;
+      const firstNote = segNotes[0];
+      const junctionLeap = Math.abs(absolutePitch(firstNote) - absolutePitch(prevNote));
+      const stringDist = Math.abs(firstNote.stringIdx - prevNote.stringIdx);
+      if (junctionLeap > 9 || stringDist > 3) {
+        const fbCount = Math.max(2, Math.floor(plan.beatBudget / 0.5));
+        const fb = SEGMENT_FNS.scaleRun(pool, mode, allNotes[allNotes.length - 1].note,
+          spec.direction, fbCount, { exitAnchor, beatParity: segParity });
+        if (fb && fb.length > 0) {
+          const fbLeap = Math.abs(absolutePitch(fb[0]) - absolutePitch(prevNote));
+          if (fbLeap <= 9) {
+            for (const n of fb) allNotes.push({ note: n, segIdx: si, rhythm: 'e' });
+            current = fb[fb.length - 1];
+            continue;
+          }
+        }
+        return null;
+      }
+    }
+
+    // Junction dedup
+    let skipFirst = false;
+    if (allNotes.length > 0 && segNotes.length > 1) {
+      const prev = allNotes[allNotes.length - 1].note;
+      const first = segNotes[0];
+      if (absolutePitch(first) === absolutePitch(prev) && first.stringIdx === prev.stringIdx) {
+        skipFirst = true;
+      }
+    }
+    for (let ni = skipFirst ? 1 : 0; ni < segNotes.length; ni++) {
+      allNotes.push({ note: segNotes[ni], segIdx: si, rhythm: plan.rhythm });
+    }
+    current = segNotes[segNotes.length - 1];
+  }
+
+  if (allNotes.length < 3) return null;
+
+  // Build rhythms from pre-planned values
+  const rawRhythms: RhythmType[] = allNotes.map(e => e.rhythm ?? 'e');
+
+  // Post-compress enclosure/chromatic
+  {
+    const segGroups: { start: number; end: number; type: string }[] = [];
+    let gi = 0;
+    while (gi < allNotes.length) {
+      const segIdx = allNotes[gi].segIdx;
+      const start = gi;
+      while (gi < allNotes.length && allNotes[gi].segIdx === segIdx) gi++;
+      segGroups.push({ start, end: gi, type: template.segments[segIdx]?.type ?? '' });
+    }
+    for (const group of segGroups) {
+      const count = group.end - group.start;
+      // Note: enclosure segments are NOT compressed to 16th (see buildPhrase comment)
+      if (group.type === 'chromatic' && count >= 2 && Math.random() < 0.45) {
+        const limit = Math.min(count, 6);
+        for (let j = group.start; j < group.start + limit; j++) rawRhythms[j] = 's';
+      }
+    }
+  }
+
+  // Last note CT → quarter
+  if (allNotes.length > 0 && ctSet.has(allNotes[allNotes.length - 1].note.noteName) && Math.random() < 0.45) {
+    rawRhythms[rawRhythms.length - 1] = 'q';
+  }
+
+  // First note on downbeat CT → quarter
+  if (allNotes.length > 0 && !allNotes[0].isRest && ctSet.has(allNotes[0].note.noteName)
+      && isOnBeat(beatOffset) && Math.random() < 0.15) {
+    rawRhythms[0] = 'q';
+  }
+
+  // Segment boundary quarter
+  if (template.segments.length > 1) {
+    for (let i = 1; i < allNotes.length; i++) {
+      if (allNotes[i].segIdx !== allNotes[i - 1].segIdx && i > 0) {
+        const prevEntry = allNotes[i - 1];
+        if (!prevEntry.isRest && ctSet.has(prevEntry.note.noteName) && Math.random() < 0.20) {
+          rawRhythms[i - 1] = 'q';
+        }
+      }
+    }
+  }
+
+  // Insert rests at segment junctions
+  if (template.segments.length > 1) {
+    for (let i = allNotes.length - 1; i > 0; i--) {
+      if (allNotes[i].segIdx !== allNotes[i - 1].segIdx && Math.random() < 0.15) {
+        let accBeat = beatOffset;
+        for (let j = 0; j < i; j++) accBeat += RHYTHM_BEATS[rawRhythms[j]] ?? 0.5;
+        const onDownbeat = Math.abs(accBeat - Math.round(accBeat)) < 0.1;
+        const restDuration: RhythmType = onDownbeat
+          ? (Math.random() < 0.7 ? 'e' : 'q')
+          : (Math.random() < 0.7 ? 'q' : 'e');
+        allNotes.splice(i, 0, {
+          note: { ...allNotes[i - 1].note },
+          segIdx: allNotes[i - 1].segIdx,
+          isRest: true,
+        });
+        rawRhythms.splice(i, 0, restDuration);
+      }
+    }
+  }
+
+  // --- Rhythm anchor awareness: nudge skeleton anchor notes toward downbeats ---
+  // If an interior/exit anchor from the skeleton lands on an offbeat, try to shift
+  // it to the nearest downbeat by lengthening the preceding note's duration.
+  {
+    const anchorSemis = new Set<number>();
+    for (const sa of segAnchors) {
+      if (sa.exit) anchorSemis.add(absolutePitch(sa.exit));
+      for (const ia of sa.interior) anchorSemis.add(absolutePitch(ia));
+    }
+    if (anchorSemis.size > 0) {
+      let bp = beatOffset;
+      for (let i = 0; i < allNotes.length; i++) {
+        const entry = allNotes[i];
+        const notePitch = entry.isRest ? -1 : absolutePitch(entry.note);
+        if (!entry.isRest && anchorSemis.has(notePitch) && !isOnBeat(bp) && i > 0) {
+          // This anchor is on an offbeat — try to lengthen the preceding note
+          const prevRhythm = rawRhythms[i - 1];
+          const prevBeats = RHYTHM_BEATS[prevRhythm];
+          // Only do simple promotions: e→q (0.5→1.0) or s→e (0.25→0.5)
+          let newPrevRhythm: RhythmType | null = null;
+          if (prevRhythm === 'e') newPrevRhythm = 'q';
+          else if (prevRhythm === 's') newPrevRhythm = 'e';
+          if (newPrevRhythm) {
+            const newPrevBeats = RHYTHM_BEATS[newPrevRhythm];
+            const newBp = bp - prevBeats + newPrevBeats;
+            // Only accept if the anchor now lands on a downbeat
+            if (isOnBeat(newBp)) {
+              rawRhythms[i - 1] = newPrevRhythm;
+              // Recalculate bp with the new rhythm
+              bp = newBp;
+            }
+          }
+        }
+        bp += RHYTHM_BEATS[rawRhythms[i]];
+      }
+    }
+  }
+
+  // Trim to beat budget
+  const beatBudget = totalBeats;
+  const trimmed: typeof allNotes = [];
+  const trimmedRhythms: RhythmType[] = [];
+  let usedBeats = 0;
+  for (let i = 0; i < allNotes.length; i++) {
+    const noteBeats = RHYTHM_BEATS[rawRhythms[i]];
+    if (usedBeats + noteBeats > beatBudget + 0.01) break;
+    trimmed.push(allNotes[i]);
+    trimmedRhythms.push(rawRhythms[i]);
+    usedBeats += noteBeats;
+  }
+
+  // Goal connector
+  if (trimmed.length > 0 && trimmed[trimmed.length - 1].note.noteName !== goalNote.noteName
+      && usedBeats + 0.5 <= beatBudget + 0.01) {
+    trimmed.push({ note: goalNote, segIdx: trimmed[trimmed.length - 1].segIdx });
+    trimmedRhythms.push('e');
+  }
+
+  if (trimmed.length < 3) return null;
+
+  // --- Skeleton integrity check: verify required slots are present ---
+  {
+    const requiredSlots = slots.filter(s => s.required);
+    let bp = beatOffset;
+    const noteBeats: number[] = [];
+    for (let i = 0; i < trimmed.length; i++) {
+      noteBeats.push(bp);
+      bp += RHYTHM_BEATS[trimmedRhythms[i]];
+    }
+    for (const slot of requiredSlots) {
+      const slotSemi = slot.note.semitone;
+      const slotStr = slot.note.stringIdx;
+      // Check that a note matching this slot exists near the expected beat position
+      const found = trimmed.some((entry, idx) => {
+        if (entry.isRest) return false;
+        if (entry.note.semitone !== slotSemi) return false;
+        if (entry.note.stringIdx !== slotStr) return false;
+        // Allow ±1 beat tolerance for beat position matching
+        return Math.abs(noteBeats[idx] - slot.beatPos) <= 1.0;
+      });
+      if (!found) return null;
+    }
+  }
+
+  // --- Safety checks ---
+
+  // §2: Bebop passing tone downbeat fix
+  if (bebopPassing !== null) {
+    let bp = beatOffset;
+    for (let i = 0; i < trimmed.length; i++) {
+      if (trimmed[i].isRest) { bp += RHYTHM_BEATS[trimmedRhythms[i]]; continue; }
+      if (isOnBeat(bp) && trimmed[i].note.semitone === bebopPassing && !ctSet.has(trimmed[i].note.noteName)) {
+        const cur = trimmed[i].note;
+        const curPitch = absolutePitch(cur);
+        const scaleSemis = new Set(mode.semi);
+        let bestSwap: PoolNote | null = null;
+        let bestDist = Infinity;
+        for (const n of pool) {
+          if (n.isApproach) continue;
+          if (n.semitone === bebopPassing) continue;
+          if (!scaleSemis.has(n.semitone) && !ctSet.has(n.noteName)) continue;
+          const pd = Math.abs(absolutePitch(n) - curPitch);
+          const sd = Math.abs(n.stringIdx - cur.stringIdx);
+          if (pd <= 2 && sd <= 1 && pd < bestDist) {
+            bestDist = pd;
+            bestSwap = n;
+          }
+        }
+        if (bestSwap) trimmed[i] = { note: bestSwap, segIdx: trimmed[i].segIdx };
+      }
+      bp += RHYTHM_BEATS[trimmedRhythms[i]];
+    }
+  }
+
+  // CT ending trial (only if not VL goal)
+  const lastEntry = trimmed[trimmed.length - 1];
+  const lastIsGoal = lastEntry.note.noteName === goalNote.noteName
+    && lastEntry.note.stringIdx === goalNote.stringIdx && lastEntry.note.fret === goalNote.fret;
+  if (!ctSet.has(lastEntry.note.noteName) && !(goalIsVL && lastIsGoal)) {
+    const lastPitch = absolutePitch(lastEntry.note);
+    const otherPitches = trimmed.slice(0, -1).map(e => absolutePitch(e.note));
+    const otherMin = Math.min(...otherPitches);
+    const otherMax = Math.max(...otherPitches);
+    let bestCt: PoolNote | null = null;
+    let bestDist = Infinity;
+    for (const n of pool) {
+      if (!ctSet.has(n.noteName)) continue;
+      const pd = Math.abs(absolutePitch(n) - lastPitch);
+      const sd = Math.abs(n.stringIdx - lastEntry.note.stringIdx);
+      const np = absolutePitch(n);
+      const newMin = Math.min(otherMin, np);
+      const newMax = Math.max(otherMax, np);
+      if (pd <= 3 && sd <= 1 && pd < bestDist && (newMax - newMin) <= 15 && (newMax - newMin) >= 4) {
+        bestDist = pd;
+        bestCt = n;
+      }
+    }
+    if (bestCt) trimmed[trimmed.length - 1] = { note: bestCt, segIdx: lastEntry.segIdx };
+  }
+
+  // Tension ending: moved to skeleton/generator stage (generatePhraseRule)
+  // fillSkeleton no longer swaps CT endings to tension — the goal note itself
+  // is already set to a tension tone when applicable.
+
+  // Range check
+  const soundNotes = trimmed.filter(e => !e.isRest);
+  const pitches = soundNotes.map(e => absolutePitch(e.note));
+  const range = Math.max(...pitches) - Math.min(...pitches);
+  if (range > 15 || range < 4) return null;
+
+  // Leap check
+  for (let i = 1; i < soundNotes.length; i++) {
+    const leap = Math.abs(absolutePitch(soundNotes[i].note) - absolutePitch(soundNotes[i - 1].note));
+    if (leap > 9) return null;
+  }
+
+  // Direction change on strong beats
+  if (soundNotes.length >= 4) {
+    let dirChanges = 0;
+    let dirChangesOnStrong = 0;
+    const soundBeatPos: number[] = [];
+    {
+      let bp = beatOffset;
+      for (let ni = 0; ni < trimmed.length; ni++) {
+        if (!trimmed[ni].isRest) soundBeatPos.push(bp);
+        bp += RHYTHM_BEATS[trimmedRhythms[ni]];
+      }
+    }
+    for (let i = 2; i < soundNotes.length; i++) {
+      const prev = absolutePitch(soundNotes[i - 1].note) - absolutePitch(soundNotes[i - 2].note);
+      const cur = absolutePitch(soundNotes[i].note) - absolutePitch(soundNotes[i - 1].note);
+      if (prev !== 0 && cur !== 0 && ((prev > 0 && cur < 0) || (prev < 0 && cur > 0))) {
+        dirChanges++;
+        if (isOnStrongBeat(soundBeatPos[i])) dirChangesOnStrong++;
+      }
+    }
+    if (dirChanges >= 2 && dirChangesOnStrong / dirChanges > 0.6) return null;
+  }
+
+  // --- Annotate approach groups ---
+  const approachGroupMap = new Map<number, ApproachGroupInfo>();
+  {
+    let groupId = 0;
+    let groupStart = 0;
+    for (let i = 0; i < trimmed.length; i++) {
+      if (trimmed[i].isRest) { groupStart = i + 1; continue; }
+      const segType = template.segments[trimmed[i].segIdx]?.type;
+      const isApproachSeg = segType === 'approachCT' || segType === 'enclosure';
+      const nextSegDiff = i + 1 < trimmed.length && trimmed[i + 1].segIdx !== trimmed[i].segIdx;
+      const isLast = i === trimmed.length - 1;
+      const isCT = ctSet.has(trimmed[i].note.noteName);
+
+      if (!isApproachSeg) { groupStart = i + 1; continue; }
+
+      if (isCT && i > groupStart) {
+        const gId = groupId++;
+        const approachCount = i - groupStart;
+        const groupSize = approachCount + 1;
+        let approachType: ApproachType;
+        if (segType === 'enclosure' && approachCount >= 2) {
+          approachType = 'enclosure';
+        } else if (approachCount >= 2) {
+          approachType = 'double-chromatic';
+        } else {
+          const apPitch = absolutePitch(trimmed[groupStart].note);
+          const tgPitch = absolutePitch(trimmed[i].note);
+          const diff = tgPitch - apPitch;
+          if (diff === 1) approachType = 'single-below';
+          else if (diff === -1) approachType = 'single-above';
+          else if (diff > 0) approachType = 'diatonic-below';
+          else approachType = 'diatonic-above';
+        }
+        for (let j = groupStart; j < i; j++) {
+          approachGroupMap.set(j, {
+            groupId: gId, approachType, role: 'approach',
+            positionInGroup: j - groupStart, groupSize,
+          });
+        }
+        approachGroupMap.set(i, {
+          groupId: gId, approachType, role: 'target',
+          positionInGroup: approachCount, groupSize,
+        });
+        groupStart = i + 1;
+      } else if (!isCT) {
+        // accumulating
+      } else {
+        groupStart = i + 1;
+      }
+      if (nextSegDiff || isLast) groupStart = i + 1;
+    }
+  }
+
+  // --- Convert to PhraseNote[] ---
+  let accBeat = beatOffset;
+  const phraseNotes: PhraseNote[] = trimmed.map((entry, idx) => {
+    const { note, segIdx } = entry;
+    const duration = trimmedRhythms[idx];
+    const beatPos = Math.min(Math.floor(accBeat * 2) + 1, 8);
+    const strong = isOnStrongBeat(accBeat);
+    const isCT = ctSet.has(note.noteName);
+    const isBebopPass = bebopPassing !== null && note.semitone === bebopPassing && !isCT;
+    const ag = approachGroupMap.get(idx);
+    const segType = template.segments[segIdx]?.type;
+    const isDim7 = !isCT && segType === 'dim7From3rd';
+
+    // Mark skeleton beat notes
+    const isSkeletonNote = slots.some(s =>
+      s.role !== 'target' &&
+      Math.abs(s.beatPos - accBeat) < 0.05 &&
+      s.note.noteName === note.noteName
+    );
+
+    const pn: PhraseNote = {
+      noteName: note.noteName,
+      stringIdx: note.stringIdx,
+      fret: note.fret,
+      semitone: note.semitone,
+      isChordTone: isCT,
+      isApproach: note.isApproach || (ag?.role === 'approach'),
+      beatPosition: beatPos,
+      isStrong: strong,
+      duration,
+      beatStart: accBeat,
+      segmentIdx: segIdx,
+      isDim7Tone: isDim7 || undefined,
+      isBebopPassing: isBebopPass || undefined,
+      isRest: entry.isRest || undefined,
+      approachGroup: ag,
+      isSkeletonBeat: isSkeletonNote || undefined,
+    };
+    accBeat += RHYTHM_BEATS[duration];
+    return pn;
+  });
+
+  return phraseNotes;
+}
+
+// ---------------------------------------------------------------------------
+// distributeAnchors — assign skeleton slots to template segments
+// ---------------------------------------------------------------------------
+
+interface SegAnchorInfo {
+  exit?: PoolNote;
+  interior: PoolNote[];
+}
+
+function distributeAnchors(
+  interiorSlots: SkeletonSlot[],
+  template: PhraseTemplate,
+  beatsPerSeg: number[],
+  beatOffset: number,
+): SegAnchorInfo[] {
+  const result: SegAnchorInfo[] = template.segments.map(() => ({ interior: [] }));
+  if (interiorSlots.length === 0) return result;
+
+  // Calculate beat range for each segment
+  let segStart = beatOffset;
+  const segRanges: { start: number; end: number }[] = [];
+  for (let si = 0; si < template.segments.length; si++) {
+    const end = segStart + beatsPerSeg[si];
+    segRanges.push({ start: segStart, end });
+    segStart = end;
+  }
+
+  // Assign each interior slot to the segment whose range contains it
+  for (const slot of interiorSlots) {
+    for (let si = 0; si < segRanges.length; si++) {
+      const { start, end } = segRanges[si];
+      if (slot.beatPos >= start - 0.01 && slot.beatPos < end + 0.01) {
+        // If this slot is near the end of the segment, make it exit anchor
+        if (slot.beatPos >= end - 0.5) {
+          result[si].exit = slot.note;
+        } else {
+          result[si].interior.push(slot.note);
+        }
+        break;
+      }
+    }
+  }
+
+  // If a non-last segment has no exit anchor, use the last interior anchor
+  for (let si = 0; si < result.length - 1; si++) {
+    if (!result[si].exit && result[si].interior.length > 0) {
+      result[si].exit = result[si].interior.pop();
+    }
+  }
+
+  return result;
 }

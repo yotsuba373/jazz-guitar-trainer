@@ -269,7 +269,7 @@ describe('Summary statistics', () => {
   });
 
   it('contour label is a valid Japanese label', () => {
-    const VALID_LABELS = ['アーチ', '逆アーチ', '下行', 'ウェーブ', '上行'];
+    const VALID_LABELS = ['アーチ', '逆アーチ', '下行', '波形', '上行'];
     let tested = false;
     for (let i = 0; i < 30; i++) {
       const phrase = genPhrase('A', 'aeolian', { approachTypes: [], contour: 'arch' });

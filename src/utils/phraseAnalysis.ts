@@ -185,11 +185,45 @@ const APPROACH_TYPE_LABEL: Record<string, string> = {
   'b9-arpeggio': '♭9アルペジオ',
 };
 
+const CONTOUR_LABELS_NARRATIVE: Record<string, string> = {
+  'arch': 'アーチ',
+  'reverse-arch': '逆アーチ',
+  'descending': '下行',
+  'wave': '波形',
+  'ascending': '上行',
+};
+
 function buildNarrative(summary: PhraseAnalysisSummary): string {
   const parts: string[] = [];
 
-  // Skeleton
-  if (summary.skeletonLabel) parts.push(`${summary.skeletonLabel}骨格でCTを配置`);
+  // Skeleton — show start CT, anchor chain, contour, strong-GT info
+  if (summary.skeletonLabel) {
+    let skelDesc = '';
+    // Start note CT label
+    if (summary.skeletonStartCtLabel) {
+      const startSlotNote = summary.skeletonLabel.split(' ')[0].split('→')[0];
+      skelDesc += `${startSlotNote}(${summary.skeletonStartCtLabel})起点`;
+    }
+    // Contour from skeleton (more precise than config contour)
+    const contourStr = summary.skeletonContour
+      ? CONTOUR_LABELS_NARRATIVE[summary.skeletonContour] ?? summary.skeletonContour
+      : summary.contourLabel;
+    if (contourStr) {
+      skelDesc += (skelDesc ? '、' : '') + `${contourStr}コンター`;
+    }
+    // Strong-GT info
+    if (summary.skeletonHasStrongGT) {
+      skelDesc += (skelDesc ? '、' : '') + '強拍GT配置';
+    }
+    parts.push(`${summary.skeletonLabel}骨格${skelDesc ? ' (' + skelDesc + ')' : ''}でCTを配置`);
+  } else if (summary.contourLabel) {
+    parts.push(`${summary.contourLabel}コンター`);
+  }
+
+  // Template
+  if (summary.templateLabel) {
+    parts.push(`テンプレート: ${summary.templateLabel}`);
+  }
 
   // Digital pattern
   if (summary.digitalPatternUsed && summary.digitalPatternBeats) {
@@ -204,8 +238,10 @@ function buildNarrative(summary: PhraseAnalysisSummary): string {
     parts.push(`アプローチ: ${labels}`);
   }
 
-  // Goal reason
-  if (summary.goalReason) parts.push(`ゴール: ${summary.goalReason}`);
+  // Goal reason — enriched with next chord info when available
+  if (summary.goalReason) {
+    parts.push(`ゴール: ${summary.goalReason}`);
+  }
 
   return parts.join('。') + (parts.length > 0 ? '。' : '');
 }
@@ -256,6 +292,11 @@ function computeSummary(phrase: GeneratedPhrase, notes: NoteAnalysis[]): PhraseA
     ? `${phrase.skeleton.patternLabel} ${DIR_ARROW[phrase.skeleton.direction] ?? ''}`
     : undefined;
 
+  // Skeleton detail fields
+  const skeletonStartCtLabel = phrase.skeleton?.slots?.find(s => s.role === 'start')?.ctLabel;
+  const skeletonContour = phrase.skeleton?.contour;
+  const skeletonHasStrongGT = phrase.skeleton?.slots?.some(s => s.role === 'strong-gt') ?? false;
+
   // Digital pattern used
   const dpNotes = phrase.notes.filter(n => n.digitalPattern);
   let digitalPatternUsed: string | undefined;
@@ -295,6 +336,9 @@ function computeSummary(phrase: GeneratedPhrase, notes: NoteAnalysis[]): PhraseA
     approachNoteCount: soundPhraseNotes.filter(n => n.isApproach).length,
     scaleNoteCount: soundPhraseNotes.filter(n => !n.isChordTone && !n.isApproach).length,
     skeletonLabel,
+    skeletonStartCtLabel: skeletonStartCtLabel ?? undefined,
+    skeletonContour: skeletonContour ?? undefined,
+    skeletonHasStrongGT: skeletonHasStrongGT || undefined,
     digitalPatternUsed,
     digitalPatternBeats,
     goalReason: phrase.goalReason,

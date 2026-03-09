@@ -3,9 +3,7 @@ import { generatePhraseRule } from '../bebopGenerator';
 import { buildFretMap, generatePositions, resolveMode } from '../../utils';
 import { MODE_TEMPLATES } from '../../constants';
 import { absolutePitch } from '../bebopScheduler';
-import type { PoolNote } from '../../types';
-import { assignRhythms, RHYTHM_BEATS, planSegmentRhythms } from '../bebopScheduler';
-import type { SegmentSpec } from '../bebopTemplates';
+import { RHYTHM_BEATS, planSegmentRhythms } from '../bebopScheduler';
 import { PHRASE_TEMPLATES, allocateBeats } from '../bebopTemplates';
 import type { PhraseConfig, RootName } from '../../types';
 
@@ -162,148 +160,103 @@ describe('generatePhraseRule', () => {
   });
 });
 
-describe('assignRhythms', () => {
-  // Helper: create a mock pool note
-  function mockNote(name: string, semi: number, fret = 5, str = 2): PoolNote {
-    return { noteName: name, semitone: semi, fret, stringIdx: str, isApproach: false };
-  }
+describe('skeleton-driven generation', () => {
+  it('returns a phrase with skeleton metadata when successful', () => {
+    // Skeleton path may not succeed every time, so try multiple runs
+    let foundSkeleton = false;
+    for (let i = 0; i < 30; i++) {
+      const { phrase } = generate('C', 'mixolydian');
+      if (phrase?.skeleton) {
+        foundSkeleton = true;
+        expect(phrase.skeleton.patternLabel).toBeTruthy();
+        expect(phrase.skeleton.direction).toBeTruthy();
+        break;
+      }
+    }
+    // Skeleton should succeed at least once in 30 attempts
+    expect(foundSkeleton).toBe(true);
+  });
 
-  it('scaleRun always gets eighth notes', () => {
-    const notes = [
-      { note: mockNote('C', 0), segIdx: 0 },
-      { note: mockNote('D', 2), segIdx: 0 },
-      { note: mockNote('E', 4), segIdx: 0 },
-      { note: mockNote('F', 5), segIdx: 0 },
-    ];
-    const segs: SegmentSpec[] = [{ type: 'scaleRun', direction: 'desc', beats: 0 }];
-    const ctSet = new Set(['C', 'E', 'G']);
-    // Run many times — should always be 'e'
+  it('skeleton.slots contains expected fields (beatPos, noteName, role, ctLabel)', () => {
+    let checked = false;
+    for (let i = 0; i < 30; i++) {
+      const { phrase } = generate('C', 'mixolydian');
+      if (phrase?.skeleton?.slots && phrase.skeleton.slots.length > 0) {
+        for (const slot of phrase.skeleton.slots) {
+          expect(typeof slot.beatPos).toBe('number');
+          expect(typeof slot.noteName).toBe('string');
+          expect(slot.noteName.length).toBeGreaterThan(0);
+          expect(['start', 'downbeat-ct', 'strong-gt', 'target']).toContain(slot.role);
+          // ctLabel is optional but if present should be one of the CT labels
+          if (slot.ctLabel !== undefined) {
+            expect(['R', '3rd', '5th', '7th']).toContain(slot.ctLabel);
+          }
+        }
+        checked = true;
+        break;
+      }
+    }
+    expect(checked).toBe(true);
+  });
+
+  it('skeleton-driven phrases have isSkeletonBeat set on some notes', () => {
+    let found = false;
+    for (let i = 0; i < 30; i++) {
+      const { phrase } = generate('C', 'mixolydian');
+      if (phrase?.skeleton) {
+        const hasSkelBeat = phrase.notes.some(n => n.isSkeletonBeat === true);
+        if (hasSkelBeat) {
+          found = true;
+          break;
+        }
+      }
+    }
+    // At least one skeleton-driven phrase should have isSkeletonBeat notes
+    expect(found).toBe(true);
+  });
+
+  it('fallback phrases (non-skeleton) still return valid phrases', () => {
+    // Even if skeleton fails, legacy buildPhrase or scale-down fallback should work
+    let validCount = 0;
     for (let i = 0; i < 20; i++) {
-      const rhythms = assignRhythms(notes, segs, 0, ctSet);
-      expect(rhythms.every(r => r === 'e')).toBe(true);
+      const { phrase } = generate('C', 'mixolydian');
+      if (phrase) {
+        expect(phrase.notes.length).toBeGreaterThanOrEqual(3);
+        expect(phrase.templateId).toBeTruthy();
+        expect(phrase.totalBeats).toBeGreaterThan(0);
+        validCount++;
+      }
     }
+    // Should almost always produce a valid phrase
+    expect(validCount).toBeGreaterThanOrEqual(15);
   });
 
-  it('arpeggio on downbeat can get triplet rhythm', () => {
-    const notes = [
-      { note: mockNote('C', 0), segIdx: 0 },
-      { note: mockNote('E', 4), segIdx: 0 },
-      { note: mockNote('G', 7), segIdx: 0 },
-      { note: mockNote('B', 11), segIdx: 0 },
-    ];
-    const segs: SegmentSpec[] = [{ type: 'arpeggio', direction: 'asc', beats: 2 }];
-    const ctSet = new Set(['C', 'E', 'G', 'B']);
-    // Run enough times to hit the 25% chance
-    let tripletSeen = false;
-    for (let i = 0; i < 100; i++) {
-      const rhythms = assignRhythms(notes, segs, 0, ctSet); // beatOffset=0 → downbeat
-      if (rhythms[0] === 't') {
-        tripletSeen = true;
-        expect(rhythms[1]).toBe('t');
-        expect(rhythms[2]).toBe('t');
+  it('skeleton metadata includes contour', () => {
+    let found = false;
+    for (let i = 0; i < 30; i++) {
+      const { phrase } = generate('C', 'mixolydian');
+      if (phrase?.skeleton?.contour) {
+        expect(['ascending', 'descending', 'arch', 'reverse-arch', 'wave']).toContain(phrase.skeleton.contour);
+        found = true;
         break;
       }
     }
-    expect(tripletSeen).toBe(true);
+    expect(found).toBe(true);
   });
 
-  it('arpeggio on offbeat: first segment can get triplet, later segments cannot', () => {
-    const ctSet = new Set(['C', 'E', 'G']);
-    // First segment (start=0) on offbeat — allowed by isFirstSeg
-    const notes0 = [
-      { note: mockNote('C', 0), segIdx: 0 },
-      { note: mockNote('E', 4), segIdx: 0 },
-      { note: mockNote('D', 2), segIdx: 0 },
-    ];
-    const segs0: SegmentSpec[] = [{ type: 'arpeggio', direction: 'asc', beats: 2 }];
-    let hasTriplet = false;
-    for (let i = 0; i < 100; i++) {
-      const rhythms = assignRhythms(notes0, segs0, 0.5, ctSet);
-      if (rhythms.some(r => r === 't')) { hasTriplet = true; break; }
-    }
-    expect(hasTriplet).toBe(true);
-
-    // Later segment on offbeat — NOT allowed (not first, not strong beat)
-    const notes1 = [
-      { note: mockNote('C', 0), segIdx: 0 },
-      { note: mockNote('E', 4), segIdx: 1 },
-      { note: mockNote('G', 7), segIdx: 1 },
-      { note: mockNote('D', 2), segIdx: 1 },
-    ];
-    const segs1: SegmentSpec[] = [
-      { type: 'scaleRun', direction: 'asc', beats: 1 },
-      { type: 'arpeggio', direction: 'asc', beats: 2 },
-    ];
-    for (let i = 0; i < 50; i++) {
-      const rhythms = assignRhythms(notes1, segs1, 0.5, ctSet);
-      // seg1 starts at note index 1, which is the 2nd note at beat 1.0 (strong),
-      // so it CAN get triplet. Test a non-strong, non-first case:
-    }
-    // Use offset 0 so seg1 starts at beat 0.5 (not strong, not first)
-    const notes2 = [
-      { note: mockNote('C', 0), segIdx: 0 },
-      { note: mockNote('E', 4), segIdx: 1 },
-      { note: mockNote('G', 7), segIdx: 1 },
-      { note: mockNote('D', 2), segIdx: 1 },
-    ];
-    for (let i = 0; i < 50; i++) {
-      const rhythms = assignRhythms(notes2, segs1, 0, ctSet);
-      // seg1 starts at beat 0.5 (not strong, not first seg) → no triplet
-      const seg1Rhythms = rhythms.slice(1);
-      expect(seg1Rhythms.some(r => r === 't')).toBe(false);
-    }
-  });
-
-  it('enclosure can get 16th note approaches when target lands on strong beat', () => {
-    // 3-note enclosure at beatOffset=0.5: approach at 0.5, 0.75 → target at 1.0 (strong!)
-    const notes = [
-      { note: mockNote('D', 2, 5, 2), segIdx: 0 }, // approach
-      { note: mockNote('Db', 1, 4, 2), segIdx: 0 }, // approach
-      { note: mockNote('C', 0, 3, 2), segIdx: 0 },  // target CT
-    ];
-    const segs: SegmentSpec[] = [{ type: 'enclosure', direction: 'desc', beats: 2 }];
-    const ctSet = new Set(['C', 'E', 'G']);
-    let sixteenthSeen = false;
-    for (let i = 0; i < 200; i++) {
-      const rhythms = assignRhythms(notes, segs, 0.5, ctSet);
-      if (rhythms[0] === 's') {
-        sixteenthSeen = true;
-        expect(rhythms[1]).toBe('s'); // both approaches are 16th
-        // target stays eighth or quarter (last-note CT quarter rule may fire)
-        expect(['e', 'q']).toContain(rhythms[2]);
-        break;
+  it('works across different modes with skeleton', () => {
+    const modes = ['ionian', 'dorian', 'mixolydian'];
+    for (const modeKey of modes) {
+      let hasSkeleton = false;
+      for (let i = 0; i < 20; i++) {
+        const { phrase } = generate('C', modeKey);
+        if (phrase?.skeleton) {
+          hasSkeleton = true;
+          break;
+        }
       }
-    }
-    expect(sixteenthSeen).toBe(true);
-  });
-
-  it('last note CT can get quarter note', () => {
-    const notes = [
-      { note: mockNote('D', 2), segIdx: 0 },
-      { note: mockNote('E', 4), segIdx: 0 },
-      { note: mockNote('C', 0), segIdx: 0 }, // last, CT
-    ];
-    const segs: SegmentSpec[] = [{ type: 'scaleRun', direction: 'desc', beats: 0 }];
-    const ctSet = new Set(['C', 'E', 'G']);
-    let quarterSeen = false;
-    for (let i = 0; i < 200; i++) {
-      const rhythms = assignRhythms(notes, segs, 0, ctSet);
-      if (rhythms[2] === 'q') { quarterSeen = true; break; }
-    }
-    expect(quarterSeen).toBe(true);
-  });
-
-  it('last note non-CT never gets quarter note', () => {
-    const notes = [
-      { note: mockNote('C', 0), segIdx: 0 },
-      { note: mockNote('E', 4), segIdx: 0 },
-      { note: mockNote('D', 2), segIdx: 0 }, // last, NOT CT
-    ];
-    const segs: SegmentSpec[] = [{ type: 'scaleRun', direction: 'desc', beats: 0 }];
-    const ctSet = new Set(['C', 'E', 'G']);
-    for (let i = 0; i < 50; i++) {
-      const rhythms = assignRhythms(notes, segs, 0, ctSet);
-      expect(rhythms[2]).not.toBe('q');
+      // Each mode should be able to produce at least one skeleton-driven phrase
+      expect(hasSkeleton).toBe(true);
     }
   });
 });

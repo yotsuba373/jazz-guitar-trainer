@@ -174,6 +174,13 @@ export interface SkeletonMeta {
   patternLabel: string;     // "R→3→5→7"
   direction: 'asc' | 'desc' | 'mixed';
   continuityCtIdx?: number;  // startHintから決定されたbeat1 CT index
+  slots?: Array<{
+    beatPos: number;
+    noteName: string;
+    role: 'start' | 'downbeat-ct' | 'strong-gt' | 'target';
+    ctLabel?: string;  // e.g. 'R', '3rd', '5th', '7th'
+  }>;
+  contour?: string;  // e.g. 'ascending', 'descending', 'arch', etc.
 }
 
 /** Tag identifying a digital pattern applied to a note */
@@ -320,6 +327,9 @@ export interface PhraseAnalysisSummary {
   approachNoteCount: number;
   scaleNoteCount: number;
   skeletonLabel?: string;        // e.g. "R→3→5→7 ↑"
+  skeletonStartCtLabel?: string; // e.g. "3rd" — CT label of the starting note
+  skeletonContour?: string;      // e.g. "ascending" — contour from skeleton meta
+  skeletonHasStrongGT?: boolean; // true if any strong-gt slots exist
   digitalPatternUsed?: string;   // e.g. "1-2-3-5"
   digitalPatternBeats?: string;  // e.g. "3-6"
   goalReason?: string;
