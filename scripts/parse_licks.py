@@ -13,6 +13,8 @@ DAWからエクスポートしたMIDIファイルを1小節ずつ分割し、
   - BPM 120, 4/4拍子, DAW側でクオンタイズ済み
   - 1小節 = 1リック、連続で弾く
   - 空小節があればスキップ
+  - サブビート分割: ファイル名末尾に _N で1小節をN拍ずつに分割
+    例: dom7_2.mid → 2拍リック, min7_3.mid → 3拍リック
 
 出力:
   scripts/data/licks.json — 全品質統合リックDB
@@ -38,10 +40,63 @@ def snap_to_grid(value):
     return round(value * GRID) / GRID
 
 
-def parse_midi_file(filepath):
+def build_lick_from_notes(raw_notes, beats_per_lick):
+    """ノートリストからリックを構築 (休符挿入含む)
+
+    Args:
+        raw_notes: beatStart/duration が既にリック内ローカル座標のノート群
+        beats_per_lick: このリックの拍数
+    Returns:
+        dict or None: リックデータ (ノートが空ならNone)
     """
-    MIDIファイルを読み込み、1小節ごとにリックとして切り出す。
-    ノート間の休符も記録する。
+    if not raw_notes:
+        return None
+
+    raw_notes.sort(key=lambda n: (n["beatStart"], n["pitch"]))
+
+    events = []
+    cursor = 0.0
+
+    for note in raw_notes:
+        gap = note["beatStart"] - cursor
+        if gap >= REST_THRESHOLD:
+            rest_dur = snap_to_grid(gap)
+            if rest_dur > 0:
+                events.append({
+                    "rest": True,
+                    "beatStart": round(cursor, 6),
+                    "duration": rest_dur,
+                })
+        events.append(note)
+        cursor = note["beatStart"] + note["duration"]
+
+    # リック末尾の休符
+    end_gap = beats_per_lick - cursor
+    if end_gap >= REST_THRESHOLD:
+        rest_dur = snap_to_grid(end_gap)
+        if rest_dur > 0:
+            events.append({
+                "rest": True,
+                "beatStart": round(cursor, 6),
+                "duration": rest_dur,
+            })
+
+    note_count = sum(1 for e in events if "pitch" in e)
+    return {
+        "notes": events,
+        "noteCount": note_count,
+        "beats": beats_per_lick,
+    }
+
+
+def parse_midi_file(filepath, beats_per_lick=BEATS_PER_MEASURE):
+    """
+    MIDIファイルを読み込み、リックとして切り出す。
+    beats_per_lick が BEATS_PER_MEASURE 未満の場合、1小節を複数リックに分割する。
+
+    Args:
+        filepath: MIDIファイルパス
+        beats_per_lick: 1リックの拍数 (デフォルト4、2や3も可)
 
     Returns:
         list of dict: [{
@@ -51,7 +106,7 @@ def parse_midi_file(filepath):
                 ...
             ],
             "noteCount": 8,
-            "beats": 4,
+            "beats": 4,  # or 2, 3
         }, ...]
     """
     midi = pretty_midi.PrettyMIDI(filepath)
@@ -80,82 +135,59 @@ def parse_midi_file(filepath):
     last_end = max(n.end for n in all_notes)
     total_measures = int(last_end / sec_per_measure) + 1
 
-    # 小節ごとにノートを分類
+    # 1小節あたりのリック数
+    licks_per_measure = BEATS_PER_MEASURE // beats_per_lick
+    sec_per_lick = sec_per_beat * beats_per_lick
+
+    # 小節ごと → リックスロットごとにノートを分類
     licks = []
     for m in range(total_measures):
         measure_start = m * sec_per_measure
-        measure_end = (m + 1) * sec_per_measure
 
-        # この小節内に開始するノートを収集
-        raw_notes = []
-        for note in all_notes:
-            if measure_start - 0.001 <= note.start < measure_end - 0.001:
-                beat_start = (note.start - measure_start) / sec_per_beat
-                duration = (note.end - note.start) / sec_per_beat
+        for s in range(licks_per_measure):
+            slot_start = measure_start + s * sec_per_lick
+            slot_end = slot_start + sec_per_lick
 
-                beat_start = snap_to_grid(beat_start)
-                duration = snap_to_grid(duration)
-                duration = max(duration, 1.0 / GRID)
+            # このスロット内に開始するノートを収集
+            raw_notes = []
+            for note in all_notes:
+                if slot_start - 0.001 <= note.start < slot_end - 0.001:
+                    beat_start = (note.start - slot_start) / sec_per_beat
+                    duration = (note.end - note.start) / sec_per_beat
 
-                raw_notes.append({
-                    "pitch": note.pitch,
-                    "beatStart": beat_start,
-                    "duration": duration,
-                })
+                    beat_start = snap_to_grid(beat_start)
+                    duration = snap_to_grid(duration)
+                    # リック境界を超えないようクリップ
+                    if beat_start + duration > beats_per_lick:
+                        duration = snap_to_grid(beats_per_lick - beat_start)
+                    duration = max(duration, 1.0 / GRID)
 
-        # 空小節はスキップ
-        if not raw_notes:
-            continue
-
-        # beatStartでソート
-        raw_notes.sort(key=lambda n: (n["beatStart"], n["pitch"]))
-
-        # 休符を挿入
-        events = []
-        cursor = 0.0  # 現在の拍位置
-
-        for note in raw_notes:
-            gap = note["beatStart"] - cursor
-            if gap >= REST_THRESHOLD:
-                rest_dur = snap_to_grid(gap)
-                if rest_dur > 0:
-                    events.append({
-                        "rest": True,
-                        "beatStart": round(cursor, 6),
-                        "duration": rest_dur,
+                    raw_notes.append({
+                        "pitch": note.pitch,
+                        "beatStart": beat_start,
+                        "duration": duration,
                     })
-            events.append(note)
-            cursor = note["beatStart"] + note["duration"]
 
-        # 小節末尾の休符 (最後のノート終了 → 4拍目)
-        end_gap = BEATS_PER_MEASURE - cursor
-        if end_gap >= REST_THRESHOLD:
-            rest_dur = snap_to_grid(end_gap)
-            if rest_dur > 0:
-                events.append({
-                    "rest": True,
-                    "beatStart": round(cursor, 6),
-                    "duration": rest_dur,
-                })
-
-        note_count = sum(1 for e in events if "pitch" in e)
-
-        licks.append({
-            "notes": events,
-            "noteCount": note_count,
-            "beats": BEATS_PER_MEASURE,
-        })
+            lick = build_lick_from_notes(raw_notes, beats_per_lick)
+            if lick:
+                licks.append(lick)
 
     return licks
 
 
 def quality_from_filename(filepath):
-    """ファイル名からコード品質を判定"""
+    """ファイル名からコード品質とサブビート数を判定
+
+    例: dom7.mid → ("dom7", 4), dom7_2.mid → ("dom7", 2), min7_3.mid → ("min7", 3)
+    """
     basename = os.path.splitext(os.path.basename(filepath))[0].lower()
     for q in VALID_QUALITIES:
         if basename.startswith(q):
-            return q
-    return None
+            suffix = basename[len(q):]
+            if suffix.startswith("_") and suffix[1:].isdigit():
+                return q, int(suffix[1:])
+            return q, BEATS_PER_MEASURE
+    return None, None
 
 
 def lick_signature(lick):
@@ -208,14 +240,15 @@ def process_files(paths):
     total_new = 0
 
     for filepath in midi_files:
-        quality = quality_from_filename(filepath)
+        quality, beats_per_lick = quality_from_filename(filepath)
         if quality is None:
             print(f"  スキップ (品質不明): {filepath}")
             print(f"    ファイル名を {', '.join(sorted(VALID_QUALITIES))} のいずれかで始めてください")
             continue
 
-        print(f"  処理中: {os.path.basename(filepath)} -> {quality}")
-        licks = parse_midi_file(filepath)
+        beats_label = f"{beats_per_lick}拍" if beats_per_lick != BEATS_PER_MEASURE else "4拍"
+        print(f"  処理中: {os.path.basename(filepath)} -> {quality} ({beats_label}リック)")
+        licks = parse_midi_file(filepath, beats_per_lick)
 
         if not licks:
             print(f"    ノートが見つかりません")
@@ -269,8 +302,10 @@ if __name__ == "__main__":
     if len(sys.argv) < 2:
         print(__doc__)
         print("使用例:")
-        print("  python scripts/parse_licks.py scripts/data/midi/dom7.mid")
-        print("  python scripts/parse_licks.py scripts/data/midi/")
+        print("  python scripts/parse_licks.py scripts/data/midi/dom7.mid     # 4拍リック")
+        print("  python scripts/parse_licks.py scripts/data/midi/dom7_2.mid   # 2拍リック")
+        print("  python scripts/parse_licks.py scripts/data/midi/min7_3.mid   # 3拍リック")
+        print("  python scripts/parse_licks.py scripts/data/midi/             # 全ファイル")
         sys.exit(1)
 
     process_files(sys.argv[1:])
