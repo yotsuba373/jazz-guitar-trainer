@@ -490,20 +490,22 @@ Parker Omnibook (50ソロ, MusicXML) + Weimar Jazz Database (456ソロ, SQLite3)
 
 ## リックパーサー (`scripts/parse_licks.py`)
 
-DAWで録音したMIDIファイルを1小節ずつ分割し、コード品質別のリックDB (JSON) を生成。
-将来のリック検索型フレーズジェネレーター（ルールベースとは別系統）の入力データ。
+DAWで録音したMIDIファイルをリックタイプ別に分割し、リック練習用DB (JSON) を生成。
 
-- 入力: BPM 120, 4/4, Cルート, DAWクオンタイズ済みMIDI (ファイル名=品質: dom7/maj7/min7/m7b5/dim7)
-- 出力: `scripts/data/licks.json` — `{ quality: [{ notes, noteCount, beats }] }`
+- 入力: BPM 120, 4/4, Cルート, DAWクオンタイズ済みMIDI
+- ファイル名規約: `{ソース}_{タイプ}_{小節数}.mid` (例: `parker_dom7_1.mid`, `cannonball_maj-ii-V-long_2.mid`)
+- 有効タイプ: dom7, min7, maj7, m7b5, maj-ii-V-short, maj-ii-V-long, min-ii-V-short
+- 出力: `scripts/data/licks.json` — `{ type: [{ notes, noteCount, beats, source? }] }`
 - 24グリッド量子化 (lcm(8,3)): 8分/16分/三連符を正確表現
-- 休符検出 (先頭/末尾含む)、重複排除、増分更新
+- マルチ小節リック対応 (最大3小節)、音域正規化 (最低音C4付近)
+- 休符検出 (先頭/末尾含む)、重複排除、毎回全置き換え (MIDIがマスターデータ)
 - 依存: `pip install pretty_midi`
 
 ---
 
 ## 今後の開発予定
 
-1. リック検索型フレーズジェネレーター (TypeScript側エンジン + アプリ統合)
+1. リック練習UI (TypeScript側: リック一覧表示・選択・指板表示・BPM再生)
 2. ポジション間移動ガイド (共通音ハイライト)
 
 ---
