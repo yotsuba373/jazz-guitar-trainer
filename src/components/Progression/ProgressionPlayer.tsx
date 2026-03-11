@@ -5,7 +5,7 @@ import {
   QUALITY_TO_MODES, rankPositionsByProximity, computeEffectiveSelections,
   resolveMode, buildFretMap, generatePositions, generateDimPositions,
 } from '../../utils';
-import { ChordChart } from './ChordChart';
+import { ChordChart, type SelectedBeatInfo } from './ChordChart';
 import { VoicingGrid } from '../Controls/VoicingGrid';
 
 interface ProgressionPlayerProps {
@@ -24,6 +24,9 @@ interface ProgressionPlayerProps {
   editing?: boolean;
   onRemoveChord?: (idx: number) => void;
   onInsertAtBeat?: (referenceIdx: number, beat: number) => void;
+  onEmptyMeasureBeat?: (sectionIdx: number, measureIdx: number, endingIdx: number | undefined, beat: number) => void;
+  onRemoveEmptyMeasure?: (sectionIdx: number, measureIdx: number, endingIdx: number | undefined) => void;
+  selectedBeat?: SelectedBeatInfo | null;
 }
 
 const btnBase = 'rounded cursor-pointer text-[10px] font-mono px-2 h-[24px] inline-flex items-center';
@@ -32,7 +35,7 @@ export function ProgressionPlayer({
   progression, activeChordIdx, allPos, chordPrefs,
   onChordSelect, onModeChange, onPosChange, onReset,
   selPosIds, availableVoicings, selectedVoicingIdx, onSelectVoicing,
-  editing, onRemoveChord, onInsertAtBeat,
+  editing, onRemoveChord, onInsertAtBeat, onEmptyMeasureBeat, onRemoveEmptyMeasure, selectedBeat,
 }: ProgressionPlayerProps) {
   const chords = progression.chords;
   const activeChord = chords[activeChordIdx];
@@ -84,6 +87,9 @@ export function ProgressionPlayer({
         editing={editing}
         onRemoveChord={onRemoveChord}
         onInsertAtBeat={onInsertAtBeat}
+        onEmptyMeasureBeat={onEmptyMeasureBeat}
+        onRemoveEmptyMeasure={onRemoveEmptyMeasure}
+        selectedBeat={selectedBeat}
       />
 
       {/* Active chord controls */}

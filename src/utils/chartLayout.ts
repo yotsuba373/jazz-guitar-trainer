@@ -43,9 +43,8 @@ export function removeChordFromLayout(
         keep.push(ci > deletedIdx ? ci - 1 : ci);
         if (keepBw && m.beatWidths) keepBw.push(m.beatWidths[j]);
       }
-      if (keep.length > 0) {
-        out.push(keepBw ? { chordIndices: keep, beatWidths: keepBw } : { chordIndices: keep });
-      }
+      // Keep measure even if empty (user can delete empty measures explicitly)
+      out.push(keepBw && keep.length > 0 ? { chordIndices: keep, beatWidths: keepBw } : { chordIndices: keep });
     }
     return out;
   }
@@ -71,6 +70,7 @@ export function removeChordFromLayout(
 
 /**
  * Append a new chord (by index) as a new measure at the end of the last section.
+ * If the last section has endings, appends to the last ending's measures.
  */
 export function appendChordToLayout(
   layout: ChartLayout,
@@ -78,10 +78,72 @@ export function appendChordToLayout(
 ): ChartLayout {
   const sections = layout.sections.map((sec, i) => {
     if (i < layout.sections.length - 1) return sec;
+    // If section has endings, append to the last ending
+    if (sec.endings && sec.endings.length > 0) {
+      const endings = sec.endings.map((e, ei) =>
+        ei === sec.endings!.length - 1
+          ? [...e, { chordIndices: [newIdx] }]
+          : e,
+      );
+      return { ...sec, endings };
+    }
     return {
       ...sec,
       measures: [...sec.measures, { chordIndices: [newIdx] }],
     };
+  });
+  return { sections, barsPerRow: layout.barsPerRow };
+}
+
+/**
+ * Insert an empty measure (chordIndices: []) into the layout.
+ * If afterChordIdx is given, inserts after that chord's measure.
+ * Otherwise appends at the end of the last section.
+ */
+export function insertEmptyMeasure(
+  layout: ChartLayout,
+  afterChordIdx?: number,
+): ChartLayout {
+  if (afterChordIdx == null) {
+    // Append at end of last section
+    const sections = layout.sections.map((sec, i) => {
+      if (i < layout.sections.length - 1) return sec;
+      if (sec.endings && sec.endings.length > 0) {
+        const endings = sec.endings.map((e, ei) =>
+          ei === sec.endings!.length - 1
+            ? [...e, { chordIndices: [] as number[] }]
+            : e,
+        );
+        return { ...sec, endings };
+      }
+      return { ...sec, measures: [...sec.measures, { chordIndices: [] as number[] }] };
+    });
+    return { sections, barsPerRow: layout.barsPerRow };
+  }
+
+  // Insert after the measure containing afterChordIdx
+  const sections = layout.sections.map(sec => {
+    // Try main measures
+    const mi = sec.measures.findIndex(m => m.chordIndices.includes(afterChordIdx));
+    if (mi >= 0) {
+      const measures = [...sec.measures];
+      measures.splice(mi + 1, 0, { chordIndices: [] });
+      return { ...sec, measures };
+    }
+    // Try endings
+    if (sec.endings) {
+      const endings = sec.endings.map(ending => {
+        const ei = ending.findIndex(m => m.chordIndices.includes(afterChordIdx));
+        if (ei >= 0) {
+          const copy = [...ending];
+          copy.splice(ei + 1, 0, { chordIndices: [] });
+          return copy;
+        }
+        return ending;
+      });
+      return { ...sec, endings };
+    }
+    return sec;
   });
   return { sections, barsPerRow: layout.barsPerRow };
 }
@@ -210,6 +272,265 @@ export function insertChordAtBeat(
     measures: patchMeasures(sec.measures),
     ...(sec.endings ? { endings: sec.endings.map(e => patchMeasures(e)) } : {}),
   }));
+  return { sections, barsPerRow: layout.barsPerRow };
+}
+
+/**
+ * Rename a section's label.
+ */
+export function renameSection(
+  layout: ChartLayout,
+  sectionIdx: number,
+  newLabel: string,
+): ChartLayout {
+  const sections = layout.sections.map((s, i) =>
+    i === sectionIdx ? { ...s, label: newLabel } : s,
+  );
+  return { sections, barsPerRow: layout.barsPerRow };
+}
+
+/**
+ * Split a section at a given measure index.
+ * Measures [0..measureIdx-1] stay in the original section,
+ * measures [measureIdx..end] become a new section with auto-label.
+ */
+export function splitSection(
+  layout: ChartLayout,
+  sectionIdx: number,
+  measureIdx: number,
+): ChartLayout {
+  const sec = layout.sections[sectionIdx];
+  if (!sec || measureIdx <= 0 || measureIdx >= sec.measures.length) return layout;
+
+  const before = sec.measures.slice(0, measureIdx);
+  const after = sec.measures.slice(measureIdx);
+
+  // Auto-assign label for the new section
+  const usedLabels = new Set(layout.sections.map(s => s.label));
+  let newLabel = '';
+  for (let i = 0; i < 26; i++) {
+    const candidate = String.fromCharCode(65 + i); // A-Z
+    if (!usedLabels.has(candidate)) { newLabel = candidate; break; }
+  }
+
+  // Original section keeps its label, repeat, endings
+  const sec1: ChartSection = { ...sec, measures: before };
+  const sec2: ChartSection = { label: newLabel, measures: after };
+
+  const sections = [
+    ...layout.sections.slice(0, sectionIdx),
+    sec1,
+    sec2,
+    ...layout.sections.slice(sectionIdx + 1),
+  ];
+  return { sections, barsPerRow: layout.barsPerRow };
+}
+
+/**
+ * Split a section at a measure inside an ending.
+ * Measures from endings[endingIdx][measureIdx..] onward become a new section.
+ * The original ending is truncated; empty endings are cleaned up.
+ */
+export function splitSectionAtEnding(
+  layout: ChartLayout,
+  sectionIdx: number,
+  endingIdx: number,
+  measureIdx: number,
+): ChartLayout {
+  const sec = layout.sections[sectionIdx];
+  if (!sec.endings || !sec.endings[endingIdx]) return layout;
+
+  const ending = sec.endings[endingIdx];
+  if (measureIdx <= 0 && endingIdx === 0) return layout; // can't split at the very start of endings
+
+  const kept = ending.slice(0, measureIdx);
+  const split = ending.slice(measureIdx);
+
+  // Rebuild endings: keep endings before endingIdx intact, truncate current, drop later
+  const newEndings: typeof sec.endings = [];
+  for (let i = 0; i < sec.endings.length; i++) {
+    if (i < endingIdx) {
+      newEndings.push(sec.endings[i]);
+    } else if (i === endingIdx && kept.length > 0) {
+      newEndings.push(kept);
+    }
+    // endings after endingIdx are dropped — they'll go into the new section or be lost
+  }
+
+  // Collect all measures that move to the new section:
+  // the split portion + any endings after endingIdx
+  const newSectionMeasures = [
+    ...split,
+    ...sec.endings.slice(endingIdx + 1).flat(),
+  ];
+
+  // Auto-assign label
+  const usedLabels = new Set(layout.sections.map(s => s.label));
+  let newLabel = '';
+  for (let i = 0; i < 26; i++) {
+    const candidate = String.fromCharCode(65 + i);
+    if (!usedLabels.has(candidate)) { newLabel = candidate; break; }
+  }
+
+  const sec1: ChartSection = {
+    ...sec,
+    ...(newEndings.length > 0 ? { endings: newEndings } : { endings: undefined }),
+  };
+  // Clean up: if no endings left, remove the property
+  if (!sec1.endings || sec1.endings.length === 0) {
+    delete sec1.endings;
+  }
+
+  const sec2: ChartSection = { label: newLabel, measures: newSectionMeasures };
+
+  const sections = [
+    ...layout.sections.slice(0, sectionIdx),
+    sec1,
+    sec2,
+    ...layout.sections.slice(sectionIdx + 1),
+  ];
+  return { sections, barsPerRow: layout.barsPerRow };
+}
+
+/**
+ * Merge section[sectionIdx] with section[sectionIdx + 1].
+ * The merged section keeps the first section's label and repeat settings.
+ */
+export function mergeSections(
+  layout: ChartLayout,
+  sectionIdx: number,
+): ChartLayout {
+  if (sectionIdx < 0 || sectionIdx >= layout.sections.length - 1) return layout;
+
+  const sec1 = layout.sections[sectionIdx];
+  const sec2 = layout.sections[sectionIdx + 1];
+
+  const merged: ChartSection = {
+    label: sec1.label || sec2.label,
+    measures: [...sec1.measures, ...sec2.measures],
+    ...(sec1.repeats != null ? { repeats: sec1.repeats } : {}),
+    ...(sec1.endings ? { endings: sec1.endings } : {}),
+  };
+
+  const sections = [
+    ...layout.sections.slice(0, sectionIdx),
+    merged,
+    ...layout.sections.slice(sectionIdx + 2),
+  ];
+  return { sections, barsPerRow: layout.barsPerRow };
+}
+
+/**
+ * Move measures [measureIdx..end] into volta ending 1 (endings[0]).
+ * Does NOT auto-create ending 2 — use adjustEndingSplit() to set the 2nd bracket.
+ * Also sets repeats=1 if not already set.
+ */
+export function splitEndings(
+  layout: ChartLayout,
+  sectionIdx: number,
+  measureIdx: number,
+): ChartLayout {
+  const sec = layout.sections[sectionIdx];
+  if (!sec || measureIdx <= 0 || measureIdx >= sec.measures.length) return layout;
+
+  const mainMeasures = sec.measures.slice(0, measureIdx);
+  const tailMeasures = sec.measures.slice(measureIdx);
+
+  const updated: ChartSection = {
+    ...sec,
+    measures: mainMeasures,
+    endings: [tailMeasures],
+    repeats: sec.repeats ?? 1,
+  };
+
+  const sections = layout.sections.map((s, i) => i === sectionIdx ? updated : s);
+  return { sections, barsPerRow: layout.barsPerRow };
+}
+
+/**
+ * Remove volta endings from a section, merging all ending measures back into main.
+ * endings[0] measures are appended first, then endings[1], etc.
+ */
+export function removeEndings(
+  layout: ChartLayout,
+  sectionIdx: number,
+): ChartLayout {
+  const sec = layout.sections[sectionIdx];
+  if (!sec || !sec.endings || sec.endings.length === 0) return layout;
+
+  const allEndingMeasures = sec.endings.flat();
+  const updated: ChartSection = {
+    label: sec.label,
+    measures: [...sec.measures, ...allEndingMeasures],
+    ...(sec.repeats != null ? { repeats: sec.repeats } : {}),
+  };
+
+  const sections = layout.sections.map((s, i) => i === sectionIdx ? updated : s);
+  return { sections, barsPerRow: layout.barsPerRow };
+}
+
+// --- Measure position lookup ---
+
+export interface ChordMeasureInfo {
+  sectionIdx: number;
+  measureIdx: number;
+  endingIdx?: number; // undefined = in main measures
+  /** Flat index across main + all endings within the section */
+  flatIdx: number;
+  /** Total measures in the section (main + all endings) */
+  totalMeasures: number;
+}
+
+/**
+ * Find which section/measure a chord belongs to.
+ */
+export function findChordMeasure(layout: ChartLayout, chordIdx: number): ChordMeasureInfo | null {
+  for (let si = 0; si < layout.sections.length; si++) {
+    const sec = layout.sections[si];
+    let flat = 0;
+    const total = sec.measures.length + (sec.endings?.flat().length ?? 0);
+
+    for (let mi = 0; mi < sec.measures.length; mi++) {
+      if (sec.measures[mi].chordIndices.includes(chordIdx)) {
+        return { sectionIdx: si, measureIdx: mi, flatIdx: flat, totalMeasures: total };
+      }
+      flat++;
+    }
+    if (sec.endings) {
+      for (let ei = 0; ei < sec.endings.length; ei++) {
+        for (let mi = 0; mi < sec.endings[ei].length; mi++) {
+          if (sec.endings[ei][mi].chordIndices.includes(chordIdx)) {
+            return { sectionIdx: si, measureIdx: mi, endingIdx: ei, flatIdx: flat, totalMeasures: total };
+          }
+          flat++;
+        }
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Adjust the split point between ending[0] and ending[1].
+ * `end2FlatIdx` is the index within the flat endings array (all endings concatenated)
+ * where ending[1] should start.
+ */
+export function adjustEndingSplit(
+  layout: ChartLayout,
+  sectionIdx: number,
+  end2FlatIdx: number,
+): ChartLayout {
+  const sec = layout.sections[sectionIdx];
+  if (!sec.endings || sec.endings.length === 0) return layout;
+
+  const allEndings = sec.endings.flat();
+  if (end2FlatIdx < 1 || end2FlatIdx >= allEndings.length) return layout;
+
+  const updated: ChartSection = {
+    ...sec,
+    endings: [allEndings.slice(0, end2FlatIdx), allEndings.slice(end2FlatIdx)],
+  };
+  const sections = layout.sections.map((s, i) => i === sectionIdx ? updated : s);
   return { sections, barsPerRow: layout.barsPerRow };
 }
 
