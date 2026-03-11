@@ -1233,9 +1233,9 @@ Footer</pre>
 <h4>練習モード (Practice Mode)</h4>
 <pre>ProgressionEditToolbar (コンパクト2行ツールバー, 編集時のみ)
 GlobalAudioControls (▶/■ + 音量ミキサー, メトロノーム, BPM, タップテンポ, スウィング)
-ProgressionPlayer (ChordChart + モード/ポジション選択 + VoicingGrid)
+ProgressionPlayer (ChordChart + モード/ポジション + VoicingGrid)
+LickPanel (チャート直下, 折りたたみ式, 検索付き)
 OptionBar (CT, ラベル, 記法, ガイドトーン, コードフォーム)
-LickControls (リック一覧 — フレーズ生成の唯一の手段)
 Fretboard (SVG + PhrasePath)
 モード説明セクション
 Footer</pre>
@@ -1508,7 +1508,11 @@ GeneratedPhrase
 
 <h3>UIコンポーネント</h3>
 <ul>
-  <li><strong>LickControls</strong> (<code>src/components/Controls/LickControls.tsx</code>): 練習モードの ChordChart 下にリスト表示。各行に番号・音数・拍数・ソース名を表示。max-height + スクロール。▶ Play / ■ Stop ボタン。練習モードでフレーズを生成する唯一の手段</li>
+  <li><strong>LickPanel</strong> (<code>src/components/Controls/LickPanel.tsx</code>): ChordChart 直下に折りたたみ式パネルとして配置。ヘッダークリックで展開/折りたたみ。各リックに安定ユニークID (例: D-3a7f, m-b2c1 — 署名ハッシュベース) + メロディックコンター SVG ポリライン (56x20px) + ソース名 + 音数/拍数を表示。選択中リックは左ボーダーでハイライト</li>
+  <li><strong>検索機能</strong>: テキスト入力でID・アーティスト名・音数等によるフィルタリング。フィルタ結果件数を表示</li>
+  <li><strong>安定ID</strong>: パーサー (<code>parse_licks.py</code>) がリック内容の SHA-256 ハッシュ先頭4文字 + タイププレフィックスで生成。MIDIの順番が変わっても同じリックには同じID</li>
+  <li><strong>コンタープレビュー</strong>: LickNote[] の pitch を SVG ポリラインで描画。フレーズカラー #FF6B9D、選択時は不透明、未選択時は半透明</li>
+  <li><strong>折りたたみ時</strong>: 選択中リックのID + ▶/■ + ✕ ボタンをインライン表示。未選択時は「クリックで展開」ヒント</li>
   <li>リック選択時に指板にフレーズ曲線を即時表示 + 自動再生</li>
   <li>分析パネル (PhraseAnalysisPanel) はそのまま動作（度数/インターバル/機能ラベル）</li>
 </ul>

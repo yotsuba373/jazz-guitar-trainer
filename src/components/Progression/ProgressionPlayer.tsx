@@ -27,6 +27,7 @@ interface ProgressionPlayerProps {
   onEmptyMeasureBeat?: (sectionIdx: number, measureIdx: number, endingIdx: number | undefined, beat: number) => void;
   onRemoveEmptyMeasure?: (sectionIdx: number, measureIdx: number, endingIdx: number | undefined) => void;
   selectedBeat?: SelectedBeatInfo | null;
+  belowChart?: React.ReactNode;
 }
 
 const btnBase = 'rounded cursor-pointer text-[10px] font-mono px-2 h-[24px] inline-flex items-center';
@@ -36,6 +37,7 @@ export function ProgressionPlayer({
   onChordSelect, onModeChange, onPosChange, onReset,
   selPosIds, availableVoicings, selectedVoicingIdx, onSelectVoicing,
   editing, onRemoveChord, onInsertAtBeat, onEmptyMeasureBeat, onRemoveEmptyMeasure, selectedBeat,
+  belowChart,
 }: ProgressionPlayerProps) {
   const chords = progression.chords;
   const activeChord = chords[activeChordIdx];
@@ -76,7 +78,7 @@ export function ProgressionPlayer({
     : [];
 
   return (
-    <div className="mb-3">
+    <div className="mb-1.5">
       {/* Chord chart grid */}
       <ChordChart
         progression={progression}
@@ -92,11 +94,13 @@ export function ProgressionPlayer({
         selectedBeat={selectedBeat}
       />
 
+      {belowChart}
+
       {/* Active chord controls */}
       {activeChord && QUALITY_TO_MODES[activeChord.quality] && (
         <>
           {/* Row 1: Mode selection */}
-          <div>
+          <div className="mt-1.5">
             <div className="text-[9px] text-text-dim mb-0.5">
               モード{!isModeConfirmed && ' — 自動提案中'}
             </div>
@@ -163,9 +167,8 @@ export function ProgressionPlayer({
         </>
       )}
 
-      {/* Keyboard hint + reset */}
+      {/* Reset button */}
       <div className="flex items-center gap-3 mt-2">
-        <span className="text-[9px] text-text-dim">← → ↑ ↓ キーでコード移動</span>
         {chords.some(c => c.posConfirmed || c.modeConfirmed) && (
           <button onClick={onReset} className={btnBase}
             style={{ border: '1px solid #666', background: '#1a1a1a', color: '#999' }}>
