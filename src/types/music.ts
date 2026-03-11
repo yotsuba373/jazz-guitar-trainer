@@ -306,6 +306,7 @@ export interface LickNote {
 
 /** A single lick entry from the lick database */
 export interface LickEntry {
+  id?: string;          // stable unique ID from parser (e.g. "D-3a7f", "m-b2c1")
   notes: LickNote[];
   noteCount: number;
   beats: number;        // total beats (4 or 8)

@@ -36,7 +36,17 @@ export {
   appendChordToLayout,
   computeInsertFlatIndex,
   insertChordAtBeat,
+  splitSection,
+  mergeSections,
+  splitEndings,
+  removeEndings,
+  renameSection,
+  findChordMeasure,
+  adjustEndingSplit,
+  splitSectionAtEnding,
+  insertEmptyMeasure,
 } from './chartLayout';
+export type { ChordMeasureInfo } from './chartLayout';
 export {
   getGuideTones,
   findNoteLocations,

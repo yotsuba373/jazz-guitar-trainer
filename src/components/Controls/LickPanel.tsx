@@ -1,0 +1,265 @@
+import { useState, useMemo, useRef, useEffect } from 'react';
+import type { LickEntry } from '../../types';
+import { SOURCE_DISPLAY_NAMES } from '../../utils';
+
+/** Tiny SVG contour preview of a lick's melody */
+function LickContourMini({ notes, selected }: { notes: LickEntry['notes']; selected: boolean }) {
+  const pitched = notes.filter(n => n.pitch != null && !n.rest);
+  if (pitched.length < 2) return <div className="w-14 h-5" />;
+
+  const pitches = pitched.map(n => n.pitch!);
+  const minP = Math.min(...pitches);
+  const maxP = Math.max(...pitches);
+  const range = maxP - minP || 1;
+
+  const W = 56, H = 20, PAD = 2;
+  const points = pitched.map((n, i) => {
+    const x = PAD + (i / (pitched.length - 1)) * (W - PAD * 2);
+    const y = H - PAD - ((n.pitch! - minP) / range) * (H - PAD * 2);
+    return `${x},${y}`;
+  }).join(' ');
+
+  return (
+    <svg width={W} height={H} className="flex-shrink-0">
+      <polyline
+        points={points}
+        fill="none"
+        stroke="#FF6B9D"
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        opacity={selected ? 1 : 0.5}
+      />
+    </svg>
+  );
+}
+
+interface LickPanelProps {
+  licks: LickEntry[];
+  selectedIdx: number | null;
+  onSelect: (idx: number) => void;
+  onPlay: () => void;
+  onStop: () => void;
+  isPlaying: boolean;
+  lickType: string;
+  onClear: () => void;
+}
+
+export function LickPanel({
+  licks, selectedIdx, onSelect, onPlay, onStop, isPlaying, lickType, onClear,
+}: LickPanelProps) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const hasSelection = selectedIdx != null;
+  const listRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to selected item
+  useEffect(() => {
+    if (!open || selectedIdx == null || !listRef.current) return;
+    const el = listRef.current.children[selectedIdx] as HTMLElement | undefined;
+    el?.scrollIntoView({ block: 'nearest' });
+  }, [selectedIdx, open]);
+
+  // Filter licks by search query (matches id, source display name)
+  const filtered = useMemo(() => {
+    if (!query.trim()) return licks.map((l, i) => ({ lick: l, origIdx: i }));
+    const q = query.trim().toLowerCase();
+    return licks.reduce<{ lick: LickEntry; origIdx: number }[]>((acc, lick, i) => {
+      const id = (lick.id ?? '').toLowerCase();
+      const src = lick.source
+        ? (SOURCE_DISPLAY_NAMES[lick.source] ?? lick.source).toLowerCase()
+        : '';
+      const meta = `${lick.noteCount}音 ${lick.beats}拍`;
+      if (id.includes(q) || src.includes(q) || meta.includes(q)) {
+        acc.push({ lick, origIdx: i });
+      }
+      return acc;
+    }, []);
+  }, [licks, query]);
+
+  // Header bar (always visible) — acts as toggle
+  const headerContent = (
+    <div
+      className="flex items-center gap-1.5 px-3 cursor-pointer select-none h-[31px]"
+      style={{
+        background: '#1a1a1a',
+        borderBottom: '1px solid #333',
+        fontSize: 11,
+      }}
+      onClick={() => setOpen(p => !p)}
+    >
+      <span style={{ color: '#FF6B9D' }} className="inline-flex items-center gap-1">
+        <svg width="8" height="8" viewBox="0 0 8 8" className="flex-shrink-0">
+          {open
+            ? <polygon points="0,2 8,2 4,7" fill="currentColor" />
+            : <polygon points="2,0 7,4 2,8" fill="currentColor" />
+          }
+        </svg>
+        フレーズ
+      </span>
+      <span className="px-1.5 py-0.5 rounded" style={{ background: '#2a2a3a', color: '#AAA' }}>{lickType}</span>
+      <span className="text-text-dim">{licks.length}件</span>
+
+      {/* Inline controls when collapsed & selected */}
+      {!open && hasSelection && (
+        <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
+          <svg width="1" height="16" className="flex-shrink-0"><line x1="0.5" y1="0" x2="0.5" y2="16" stroke="#333" strokeWidth="1" /></svg>
+          <span style={{ color: '#FF6B9D' }}>
+            {licks[selectedIdx]?.id ?? `#${selectedIdx + 1}`}
+          </span>
+          <button
+            onClick={isPlaying ? onStop : onPlay}
+            className="rounded cursor-pointer px-1.5 h-[24px] inline-flex items-center justify-center"
+            style={{
+              border: '1px solid #555',
+              background: isPlaying ? '#3a2020' : '#1a2a1a',
+              color: isPlaying ? '#F88' : '#8F8',
+            }}
+          >
+            <svg width="8" height="8" viewBox="0 0 8 8">
+              {isPlaying
+                ? <rect x="1" y="1" width="6" height="6" fill="currentColor" />
+                : <polygon points="1,0 8,4 1,8" fill="currentColor" />
+              }
+            </svg>
+          </button>
+          <button
+            onClick={() => { onClear(); onStop(); }}
+            className="rounded cursor-pointer px-1.5 h-[24px] inline-flex items-center justify-center"
+            style={{ border: '1px solid #444', background: '#1a1a1a', color: '#888' }}
+            title="フレーズ解除"
+          >
+            <svg width="8" height="8" viewBox="0 0 8 8">
+              <line x1="1" y1="1" x2="7" y2="7" stroke="currentColor" strokeWidth="1.5" />
+              <line x1="7" y1="1" x2="1" y2="7" stroke="currentColor" strokeWidth="1.5" />
+            </svg>
+          </button>
+        </div>
+      )}
+      {!open && !hasSelection && (
+        <span className="text-text-dim inline-flex items-center gap-1.5"><svg width="1" height="16" className="flex-shrink-0"><line x1="0.5" y1="0" x2="0.5" y2="16" stroke="#333" strokeWidth="1" /></svg>クリックで展開</span>
+      )}
+    </div>
+  );
+
+  return (
+    <div
+      className="overflow-hidden"
+      style={{
+        background: '#1a1a1a',
+        border: '1px solid #3a2a30',
+        borderRadius: 6,
+        fontSize: 10,
+      }}
+    >
+      {headerContent}
+
+      {open && (
+        <>
+          {/* Search + action bar */}
+          <div className="flex items-center gap-1.5 px-2 py-1" style={{ borderBottom: '1px solid #2a2a2a' }}>
+            <input
+              type="text"
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              placeholder="検索 (ID, アーティスト, 音数...)"
+              className="flex-1 text-[10px] rounded px-1.5 py-0.5 outline-none"
+              style={{
+                background: '#111',
+                border: '1px solid #333',
+                color: '#CCC',
+                minWidth: 0,
+              }}
+              onClick={e => e.stopPropagation()}
+            />
+            {hasSelection && (
+              <>
+                <button
+                  onClick={isPlaying ? onStop : onPlay}
+                  className="rounded cursor-pointer text-[10px] font-mono px-2 h-[24px] inline-flex items-center flex-shrink-0"
+                  style={{
+                    border: '1px solid #555',
+                    background: isPlaying ? '#3a2020' : '#1a2a1a',
+                    color: isPlaying ? '#F88' : '#8F8',
+                  }}
+                >
+                  {isPlaying ? '■ Stop' : '▶ Play'}
+                </button>
+                <button
+                  onClick={() => { onClear(); onStop(); }}
+                  className="rounded cursor-pointer text-[10px] font-mono px-1.5 h-[24px] inline-flex items-center flex-shrink-0"
+                  style={{ border: '1px solid #444', background: '#1a1a1a', color: '#888' }}
+                  title="フレーズ解除"
+                >
+                  ✕
+                </button>
+              </>
+            )}
+            <span className="text-[9px] text-text-dim flex-shrink-0">
+              {filtered.length !== licks.length ? `${filtered.length}/` : ''}{licks.length}
+            </span>
+          </div>
+
+          {/* List */}
+          {filtered.length === 0 ? (
+            <p className="text-[10px] text-text-dim px-2.5 py-2">
+              {licks.length === 0 ? 'このコード品質のフレーズがありません' : '一致するフレーズがありません'}
+            </p>
+          ) : (
+            <div
+              ref={listRef}
+              className="overflow-y-auto scrollbar-thin"
+              style={{ maxHeight: '160px' }}
+            >
+              {filtered.map(({ lick, origIdx }) => {
+                const isSelected = origIdx === selectedIdx;
+                const sourceName = lick.source
+                  ? (SOURCE_DISPLAY_NAMES[lick.source] ?? lick.source)
+                  : '';
+                return (
+                  <div
+                    key={origIdx}
+                    onClick={() => onSelect(origIdx)}
+                    className="cursor-pointer px-2 py-[3px] flex items-center gap-1.5"
+                    style={{
+                      background: isSelected ? '#2a2a3a' : 'transparent',
+                      borderLeft: isSelected ? '2px solid #FF6B9D' : '2px solid transparent',
+                    }}
+                  >
+                    <span
+                      className="text-[10px] font-mono flex-shrink-0"
+                      style={{
+                        color: isSelected ? '#FF6B9D' : '#666',
+                        width: '40px',
+                      }}
+                    >
+                      {lick.id ?? `#${origIdx + 1}`}
+                    </span>
+                    <LickContourMini notes={lick.notes} selected={isSelected} />
+                    <span
+                      className="text-[9px] flex-shrink-0"
+                      style={{ color: isSelected ? '#CCC' : '#888', width: '28px' }}
+                    >
+                      {lick.noteCount}音
+                    </span>
+                    <span className="text-[9px] text-text-dim flex-shrink-0" style={{ width: '24px' }}>
+                      {lick.beats}拍
+                    </span>
+                    {sourceName && (
+                      <span
+                        className="text-[9px] truncate min-w-0"
+                        style={{ color: isSelected ? '#CCC' : '#555' }}
+                      >
+                        {sourceName}
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}

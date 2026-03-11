@@ -92,7 +92,7 @@ src/
 │       └── lickEngine.test.ts       — 25 tests (リックDB読込・移調・指板マッピング・モード推定・ポジション選択・GeneratedPhrase変換)
 └── components/
     ├── Fretboard/                   — SVG指板描画 (Fretboard, FretboardNote, GhostNote, PhrasePath)
-    ├── Controls/                    — RootSelector, ModeSelector, PositionSelector, OptionBar, VoicingGrid, PhraseControls, PhraseAnalysisPanel, PianoRoll, GlobalAudioControls, LickControls
+    ├── Controls/                    — RootSelector, ModeSelector, PositionSelector, OptionBar, VoicingGrid, PhraseControls, PhraseAnalysisPanel, PianoRoll, GlobalAudioControls, LickPanel
     ├── Footer.tsx
     ├── PositionDetail.tsx           — (未使用: モード説明セクションに置換済み)
     ├── PositionGrid.tsx
@@ -446,9 +446,9 @@ Footer
 ### 練習モード
 ```
 GlobalAudioControls (コード編集 + ▶/■ + 音量ミキサー, メトロノーム, BPM, タップテンポ)
-LickControls (チャート直上)
 ProgressionEditToolbar (編集時: 曲一覧タブ + 名前/Key + コード入力/更新 + プリセット/インポート)
 ProgressionPlayer (ChordChart + モード選択 + ポジション選択 + VoicingGrid)
+LickPanel (チャート直下, 折りたたみ式, 検索付き)
 OptionBar (CT, ラベル, 記法, ガイドトーン, コードフォーム)
 Fretboard (SVG + PhrasePath)
 モード説明セクション
@@ -486,12 +486,12 @@ Footer
 - 楽器選択 (ギター/サックス): Web Audio API リアルタイム合成、フレーズ再生+指板クリック共通、localStorage 永続化
 - コードストラム: エレピ音 (Sine加算合成, 2nd/3rd倍音)
 - スウィングモード: 多次元スウィング (タイミング+ダイナミクス+アーティキュレーション)、0-100%連続制御、テンポ補正 (>200BPM)、PhrasePath/PianoRoll視覚同期、localStorage永続化
-- リック練習UI (練習モード): コード品質に合うリック一覧表示、選択→指板表示+自動再生、モード/ポジション自動推定、分析パネル対応
+- リック練習UI (練習モード): ChordChart直下の折りたたみパネル (LickPanel) にコード品質に合うリック一覧表示、安定ID(署名ハッシュ)+SVGコンター+ソース名、テキスト検索、選択→指板表示+自動再生、モード/ポジション自動推定、分析パネル対応
 - フレーズ生成UI: 非表示 (リック選択に一本化、コードは残存)
 
 ---
 
-## リック練習UI (`lickEngine.ts` + `LickControls.tsx`)
+## リック練習UI (`lickEngine.ts` + `LickPanel.tsx` サイドパネル)
 
 練習モード専用。コード品質に合うリックを一覧表示し、選択→指板表示→再生する練習機能。
 
@@ -520,10 +520,13 @@ GeneratedPhrase → PhrasePath / PianoRoll / PhraseAnalysisPanel
 
 ### UIフロー
 
-1. 進行モードでコード選択 → LickControls にリック一覧表示
-2. リッククリック → モード/ポジション自動推定 → 指板表示 + 自動再生
-3. Play/Stop ボタンで再生制御
-4. 分析パネルに度数/インターバル/機能ラベル表示
+1. 進行モードでコード選択 → ChordChart 直下の折りたたみパネル (LickPanel) にリック一覧表示
+2. 各リックに安定ID (D-3a7f等、署名ハッシュ) + SVGコンターライン + ソース名表示
+3. テキスト検索でID・アーティスト名・音数等でフィルタリング可能
+4. リッククリック → モード/ポジション自動推定 → 指板表示 + 自動再生
+5. Play/Stop ボタンで再生制御、✕ でクリア
+6. 折りたたみ時も選択中リックのID + 再生ボタンをインライン表示
+7. 編集モード → パネル非表示
 
 ### 通常モードの変更
 

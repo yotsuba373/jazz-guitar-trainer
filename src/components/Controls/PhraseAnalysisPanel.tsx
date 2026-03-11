@@ -145,15 +145,23 @@ export function PhraseAnalysisPanel({ phrase, mode, swingAmount, bpm }: PhraseAn
   const hasMultiSections = isSegmented;
 
   return (
-    <div className="mb-2" style={{ background: '#1a1a1a', border: `1px solid ${PHRASE_COLOR}30`, borderRadius: 6, fontSize: 10, fontFamily: 'monospace' }}>
+    <div className="mb-2" style={{ background: '#1a1a1a', border: `1px solid ${PHRASE_COLOR}30`, borderRadius: 6, fontSize: 10 }}>
       {/* Summary bar — Row 1: existing stats */}
       <button
         className="w-full flex flex-col gap-0 items-start px-3 py-[5px] cursor-pointer"
-        style={{ background: 'transparent', border: 'none', color: '#AAA' }}
+        style={{ background: 'transparent', border: 'none', color: '#AAA', fontSize: 11 }}
         onClick={() => setOpen(!open)}
       >
         <div className="flex gap-3 items-center w-full">
-          <span style={{ color: PHRASE_COLOR }}>{open ? '▼' : '▶'} 分析</span>
+          <span style={{ color: PHRASE_COLOR }} className="inline-flex items-center gap-1">
+            <svg width="8" height="8" viewBox="0 0 8 8" className="flex-shrink-0">
+              {open
+                ? <polygon points="0,2 8,2 4,7" fill="currentColor" />
+                : <polygon points="2,0 7,4 2,8" fill="currentColor" />
+              }
+            </svg>
+            分析
+          </span>
           <span title="フレーズ全体の音形パターン（アーチ＝上行→下行、逆アーチ＝下行→上行、下行、波形）">音形: <b style={{ color: '#DDD' }}>{summary.contourLabel}</b></span>
           <span title="最高音と最低音の距離（半音数）">音域: <b style={{ color: '#DDD' }}>{summary.rangeSemitones}半音</b></span>
           <span title="半音〜全音の順次進行（隣接音への移動）の割合。高いほど滑らかなライン">順次: <b style={{ color: '#DDD' }}>{summary.stepwisePct}%</b></span>

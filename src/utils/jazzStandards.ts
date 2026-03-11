@@ -6,12 +6,35 @@ const JSON_URL =
 
 let cachedSongs: RawJazzStandard[] | null = null;
 
+// --- Patch table for known broken entries in the external JSON ---
+
+type SongPatch = (song: RawJazzStandard) => RawJazzStandard;
+
+const SONG_PATCHES: Record<string, SongPatch> = {
+  // Confirmation: labels are swapped (B↔A), Repeats missing on A section, 3rd section unlabeled
+  'Confirmation': (song) => ({
+    ...song,
+    Sections: [
+      { ...song.Sections[0], Label: 'A', Repeats: 1 },  // A section (volta endings)
+      { ...song.Sections[1], Label: 'B' },               // Bridge
+      { ...song.Sections[2], Label: 'A' },                // Final A
+    ],
+  }),
+};
+
+function applyPatches(songs: RawJazzStandard[]): RawJazzStandard[] {
+  return songs.map(s => {
+    const patch = SONG_PATCHES[s.Title];
+    return patch ? patch(s) : s;
+  });
+}
+
 /** Fetch and cache the JazzStandards catalog (lazy, once per session). */
 export async function fetchJazzStandards(): Promise<RawJazzStandard[]> {
   if (cachedSongs) return cachedSongs;
   const res = await fetch(JSON_URL);
   if (!res.ok) throw new Error(`Failed to fetch: ${res.status}`);
-  cachedSongs = (await res.json()) as RawJazzStandard[];
+  cachedSongs = applyPatches((await res.json()) as RawJazzStandard[]);
   return cachedSongs;
 }
 

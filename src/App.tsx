@@ -15,7 +15,7 @@ import {
   lickToGeneratedPhrase,
 } from './utils';
 import { Fretboard } from './components/Fretboard';
-import { RootSelector, ModeSelector, PositionSelector, OptionBar, PhraseControls, PhraseAnalysisPanel, GlobalAudioControls, LickControls } from './components/Controls';
+import { RootSelector, ModeSelector, PositionSelector, OptionBar, PhraseControls, PhraseAnalysisPanel, GlobalAudioControls, LickPanel } from './components/Controls';
 import { PositionGrid } from './components/PositionGrid';
 import { ProgressionEditor, ProgressionPlayer } from './components/Progression';
 import { Footer } from './components/Footer';
@@ -930,7 +930,7 @@ export default function App() {
 
   return (
     <div className="bg-bg-root text-text-primary min-h-screen font-mono p-4">
-      <div className="max-w-[1040px] mx-auto">
+      <div className="max-w-[1040px] mx-auto" style={{ transform: 'translateZ(0)' }}>
         <h2 className="text-lg font-bold mb-0.5 tracking-wide">
           Berklee 7-Position System
         </h2>
@@ -1004,36 +1004,6 @@ export default function App() {
         {/* Practice mode */}
         {progMode && (
           <>
-            {/* Lick controls — above chart */}
-            {activeProg && activeProg.chords.length > 0 && lickDB && (
-              <div className="flex gap-1.5 mb-2 items-center">
-                <LickControls
-                  licks={filteredLicks.licks}
-                  selectedIdx={selectedLickIdx}
-                  onSelect={(idx) => {
-                    setSelectedLickIdx(idx);
-                    const chord = activeProg.chords[activeChordIdx];
-                    if (!chord) return;
-                    const lick = filteredLicks.licks[idx];
-                    if (!lick) return;
-                    const rootSemi = ROOTS.find(r => r.name === chord.rootName)?.semitone ?? 0;
-                    const ctx = buildLickContext(lick, chord.quality, chord.rootName, rootSemi);
-                    if (ctx) playPhraseAudio(ctx.phrase);
-                  }}
-                  onPlay={() => { if (activeLickPhrase) playPhraseAudio(activeLickPhrase); }}
-                  onStop={() => {
-                    manualPhraseRef.current?.stop();
-                    manualPhraseRef.current = null;
-                    if (manualPhraseTimer.current) clearTimeout(manualPhraseTimer.current);
-                    setIsPhraseAudioPlaying(false);
-                  }}
-                  onClear={() => setSelectedLickIdx(null)}
-                  isPlaying={isPhraseAudioPlaying}
-                  lickType={filteredLicks.lickType}
-                />
-              </div>
-            )}
-
             {editing ? (
               <ProgressionEditor
                 progressions={progressions}
@@ -1081,6 +1051,32 @@ export default function App() {
                 availableVoicings={showChordForms ? deduplicatedVoicings : undefined}
                 selectedVoicingIdx={effectiveVoicingIdx}
                 onSelectVoicing={handleSelectVoicing}
+                belowChart={lickDB && (
+                  <LickPanel
+                    licks={filteredLicks.licks}
+                    selectedIdx={selectedLickIdx}
+                    onSelect={(idx) => {
+                      setSelectedLickIdx(idx);
+                      const chord = activeProg.chords[activeChordIdx];
+                      if (!chord) return;
+                      const lick = filteredLicks.licks[idx];
+                      if (!lick) return;
+                      const rootSemi = ROOTS.find(r => r.name === chord.rootName)?.semitone ?? 0;
+                      const ctx = buildLickContext(lick, chord.quality, chord.rootName, rootSemi);
+                      if (ctx) playPhraseAudio(ctx.phrase);
+                    }}
+                    onPlay={() => { if (activeLickPhrase) playPhraseAudio(activeLickPhrase); }}
+                    onStop={() => {
+                      manualPhraseRef.current?.stop();
+                      manualPhraseRef.current = null;
+                      if (manualPhraseTimer.current) clearTimeout(manualPhraseTimer.current);
+                      setIsPhraseAudioPlaying(false);
+                    }}
+                    onClear={() => setSelectedLickIdx(null)}
+                    isPlaying={isPhraseAudioPlaying}
+                    lickType={filteredLicks.lickType}
+                  />
+                )}
               />
             ) : null}
 

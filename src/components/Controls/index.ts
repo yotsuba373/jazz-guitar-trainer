@@ -6,4 +6,4 @@ export { VoicingGrid } from './VoicingGrid';
 export { PhraseControls } from './PhraseControls';
 export { PhraseAnalysisPanel } from './PhraseAnalysisPanel';
 export { GlobalAudioControls } from './GlobalAudioControls';
-export { LickControls } from './LickControls';
+export { LickPanel } from './LickPanel';
