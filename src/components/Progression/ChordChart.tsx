@@ -4,6 +4,10 @@ import type { EffectiveChord } from '../../utils/progression';
 import { POS_COLORS } from '../../constants';
 import { QUALITY_TO_MODES, isDiatonic, displayChordName, getChartLayout } from '../../utils';
 
+export type SelectedBeatInfo =
+  | { type: 'chord'; chordIdx: number; beat: number }
+  | { type: 'empty'; sectionIdx: number; measureIdx: number; endingIdx?: number; beat: number };
+
 interface ChordChartProps {
   progression: Progression;
   activeChordIdx: number;
@@ -13,18 +17,25 @@ interface ChordChartProps {
   editing?: boolean;
   onRemoveChord?: (idx: number) => void;
   onInsertAtBeat?: (referenceIdx: number, beat: number) => void;
+  /** Callback for clicking a beat in an empty measure. Args: (sectionIdx, measureIdx, endingIdx | undefined, beat) */
+  onEmptyMeasureBeat?: (sectionIdx: number, measureIdx: number, endingIdx: number | undefined, beat: number) => void;
+  onRemoveEmptyMeasure?: (sectionIdx: number, measureIdx: number, endingIdx: number | undefined) => void;
+  selectedBeat?: SelectedBeatInfo | null;
 }
 
 export function ChordChart({
   progression, activeChordIdx, effectiveAll, chordPrefs, onChordSelect,
-  editing, onRemoveChord, onInsertAtBeat,
+  editing, onRemoveChord, onInsertAtBeat, onEmptyMeasureBeat, onRemoveEmptyMeasure, selectedBeat,
 }: ChordChartProps) {
   const layout = useMemo(() => getChartLayout(progression), [progression]);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const { sections, barsPerRow } = layout;
   const chords = progression.chords;
-  const hasLabels = sections.some(s => s.label || (s.endings && s.endings.length > 0));
+  // When editing, always show label column for section visibility
+  const hasLabels = editing
+    ? true
+    : sections.some(s => s.label || (s.endings && s.endings.length > 0));
 
   /** Render a single chord button */
   function renderChord(ci: number) {
@@ -79,6 +90,9 @@ export function ChordChart({
       repeatStart?: boolean;
       repeatEnd?: boolean;
       endingBracket?: boolean;
+      sectionIdx?: number;
+      endingIdx?: number;
+      measureOffset?: number; // offset within section for measure index
     } = {},
   ) {
     return (
@@ -126,6 +140,69 @@ export function ChordChart({
           if (editing && onInsertAtBeat) {
             const BEATS = 4;
             const n = measure.chordIndices.length;
+            const repeatStart = isFirstCell && opts.repeatStart;
+            const repeatEnd = isLastCell && opts.repeatEnd;
+
+            // Empty measure — "+" on beat 1, dashed lines on beats 2-4
+            if (n === 0) {
+              const absMi = (opts.measureOffset ?? 0) + mi;
+              const emptySelected = selectedBeat?.type === 'empty'
+                && selectedBeat.sectionIdx === (opts.sectionIdx ?? 0)
+                && selectedBeat.measureIdx === absMi
+                && selectedBeat.endingIdx === opts.endingIdx;
+              return (
+                <div
+                  key={mi}
+                  className="relative grid items-center min-h-[36px]"
+                  style={{
+                    gridTemplateColumns: `repeat(${BEATS}, 1fr)`,
+                    borderRight: '1px solid #333',
+                    borderBottom: borderStyles.borderBottom,
+                    borderTop: borderStyles.borderTop,
+                  }}
+                >
+                  {repeatStart && (
+                    <span className="absolute left-0.5 top-1/2 -translate-y-1/2 flex flex-col text-[8px] leading-[6px] text-[#888] z-10 pointer-events-none">
+                      <span>•</span><span>•</span>
+                    </span>
+                  )}
+                  {repeatEnd && (
+                    <span className="absolute right-0.5 top-1/2 -translate-y-1/2 flex flex-col text-[8px] leading-[6px] text-[#888] z-10 pointer-events-none">
+                      <span>•</span><span>•</span>
+                    </span>
+                  )}
+                  <div
+                    className="flex items-center justify-center cursor-pointer py-1.5"
+                    style={{ background: emptySelected ? '#27AE6020' : undefined }}
+                    onClick={() => onEmptyMeasureBeat?.(opts.sectionIdx ?? 0, absMi, opts.endingIdx, 1)}
+                    title="1拍目に挿入"
+                  >
+                    <span className="text-[13px] font-bold select-none"
+                      style={{ color: emptySelected ? '#27AE60' : '#555' }}>+</span>
+                  </div>
+                  {Array.from({ length: BEATS - 1 }, (_, i) => (
+                    <div key={i + 1} className="relative py-1.5">
+                      <div className="absolute left-0 top-[6px] bottom-[6px]"
+                        style={{ borderLeft: '1px dashed #2a2a2a' }} />
+                      <span className="invisible text-[13px]">+</span>
+                    </div>
+                  ))}
+                  {onRemoveEmptyMeasure && (
+                    <button
+                      onClick={e => { e.stopPropagation(); onRemoveEmptyMeasure(opts.sectionIdx ?? 0, absMi, opts.endingIdx); }}
+                      className="absolute right-[4px] top-1/2 -translate-y-1/2 w-[14px] h-[22px] rounded-sm text-[14px] font-black leading-none flex items-center justify-center cursor-pointer z-10"
+                      style={{ background: '#444', color: '#aaa', border: '1px solid #555' }}
+                      onMouseEnter={e => { e.currentTarget.style.background = '#E74C3C'; e.currentTarget.style.color = '#fff'; e.currentTarget.style.borderColor = '#E74C3C'; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = '#444'; e.currentTarget.style.color = '#aaa'; e.currentTarget.style.borderColor = '#555'; }}
+                      title="小節を削除"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+              );
+            }
+
             const bwSum = measure.beatWidths
               ? measure.beatWidths.reduce((a, b) => a + b, 0)
               : n;
@@ -142,9 +219,6 @@ export function ChordChart({
                 cells[b] = { ci, isStart: b === start };
               }
             }
-            // In editing mode, use uniform 1px borders + absolute repeat dots
-            const repeatStart = isFirstCell && opts.repeatStart;
-            const repeatEnd = isLastCell && opts.repeatEnd;
             return (
               <div
                 key={mi}
@@ -152,7 +226,6 @@ export function ChordChart({
                 style={{
                   gridTemplateColumns: `repeat(${BEATS}, 1fr)`,
                   borderRight: '1px solid #333',
-                  borderLeft: isFirstCell ? undefined : undefined,
                   borderBottom: borderStyles.borderBottom,
                   borderTop: borderStyles.borderTop,
                 }}
@@ -169,22 +242,32 @@ export function ChordChart({
                 )}
                 {cells.map((cell, b) => {
                   const dashLine = b > 0 && (
-                    <div className="absolute left-0 top-[6px] bottom-[6px] w-0"
+                    <div className="absolute left-0 top-[6px] bottom-[6px]"
                       style={{ borderLeft: '1px dashed #2a2a2a' }} />
                   );
-                  return cell.isStart ? (
-                    <div key={b} className="relative flex items-center justify-center min-w-0 py-1.5 px-0.5"
-                      onClick={() => { onChordSelect(cell.ci); onInsertAtBeat(cell.ci, 0); }}>
-                      {dashLine}
-                      {renderChord(cell.ci)}
-                    </div>
-                  ) : (
+                  if (cell.isStart) {
+                    const chordSel = selectedBeat?.type === 'chord'
+                      && selectedBeat.chordIdx === cell.ci && selectedBeat.beat === 0;
+                    return (
+                      <div key={b} className="relative flex items-center justify-center min-w-0 py-1.5 px-0.5"
+                        style={{ background: chordSel ? '#F1C40F18' : undefined }}
+                        onClick={() => { onChordSelect(cell.ci); onInsertAtBeat(cell.ci, 0); }}>
+                        {dashLine}
+                        {renderChord(cell.ci)}
+                      </div>
+                    );
+                  }
+                  const plusSel = selectedBeat?.type === 'chord'
+                    && selectedBeat.chordIdx === cell.ci && selectedBeat.beat === b + 1;
+                  return (
                     <div key={b}
-                      className="relative flex items-center justify-center cursor-pointer py-1.5 hover:bg-[#ffffff08]"
+                      className="relative flex items-center justify-center cursor-pointer py-1.5"
+                      style={{ background: plusSel ? '#27AE6020' : undefined }}
                       onClick={() => onInsertAtBeat(cell.ci, b + 1)}
                       title={`${b + 1}拍目に挿入`}>
                       {dashLine}
-                      <span className="text-[11px] text-[#444] hover:text-[#777] select-none">+</span>
+                      <span className="text-[13px] font-bold select-none"
+                        style={{ color: plusSel ? '#27AE60' : '#555' }}>+</span>
                     </div>
                   );
                 })}
@@ -269,6 +352,8 @@ export function ChordChart({
                 {
                   repeatStart: hasRepeat && isFirstRow,
                   repeatEnd: hasRepeat && isLastRow && !hasEndings,
+                  sectionIdx: si,
+                  measureOffset: ri * barsPerRow,
                 },
               );
             })}
@@ -283,7 +368,6 @@ export function ChordChart({
               return endingRows.map((rowMeasures, ri) => {
                 const isFirstEndingRow = ri === 0;
                 const isLastEndingRow = ri === endingRows.length - 1;
-                const isLastEnding = ei === section.endings!.length - 1;
                 const labelContent = isFirstEndingRow ? `${ei + 1}.` : '';
 
                 return renderMeasureRow(
@@ -292,7 +376,10 @@ export function ChordChart({
                   labelContent,
                   {
                     endingBracket: isFirstEndingRow,
-                    repeatEnd: hasRepeat && isLastEndingRow && isLastEnding,
+                    repeatEnd: hasRepeat && isLastEndingRow && ei === 0,
+                    sectionIdx: si,
+                    endingIdx: ei,
+                    measureOffset: ri * barsPerRow,
                   },
                 );
               });

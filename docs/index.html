@@ -414,7 +414,7 @@ Utils Layer (pure functions):
 │   ├── progression.ts            — parseChordSymbol(), rankPositionsByProximity(), presets
 │   ├── guideTones.ts             — getGuideTones(), findNoteLocations(), classifyResolution()
 │   ├── jazzStandards.ts          — fetchJazzStandards(), songToProgression()
-│   ├── chartLayout.ts            — deriveChartLayout(), getChartLayout(), buildChordRows(), appendChordToLayout(), removeChordFromLayout(), insertChordAtBeat(), computeInsertFlatIndex(), getMeasureBeatInfo()
+│   ├── chartLayout.ts            — deriveChartLayout(), getChartLayout(), buildChordRows(), appendChordToLayout(), removeChordFromLayout(), insertChordAtBeat(), computeInsertFlatIndex(), getMeasureBeatInfo(), splitSection(), mergeSections(), splitEndings(), removeEndings()
 │   ├── chordForms.ts             — findVoicingsInPosition(), VOICING_TEMPLATES(20)
 │   ├── skeleton.ts               — buildSkeleton(), chooseContour(), contourCurve() (スケルトン駆動)
 │   ├── bebopGenerator.ts         — generatePhraseRule(), ルールベース生成エントリ (~150行)
@@ -1140,9 +1140,14 @@ CSS Grid 描画</div>
 <p>以前はコードの追加・削除・編集時に <code>chartLayout</code> を破棄（<code>undefined</code> にセット）していたため、
 インポートした曲の小節構造が失われていた。現在は編集操作ごとに <code>chartLayout</code> を差分更新して構造を保持する。</p>
 <ul>
-  <li><strong>コード追加</strong>: <code>appendChordToLayout(layout, newIdx)</code> — 最終セクションの末尾に新しい1コード小節を追加。<code>beatWidths</code> は省略（デフォルト均等幅）</li>
-  <li><strong>コード削除</strong>: <code>removeChordFromLayout(layout, deletedIdx)</code> — 該当コードを小節から除去し、後続の全 <code>chordIndices</code> をデクリメント。小節が空になった場合は小節ごと削除</li>
+  <li><strong>小節追加</strong>: 「+ 小節」ボタンで空小節を追加し、即座にビートグリッドの挿入モードに入る。<code>insertEmptyMeasure(layout, afterChordIdx?)</code></li>
+  <li><strong>コード挿入</strong>: ビートグリッドの「+」をクリックして拍位置を選択 → コード名を入力 → Enter で挿入。<code>insertChordAtBeat()</code> / <code>fillEmptyMeasure()</code></li>
+  <li><strong>コード削除</strong>: <code>removeChordFromLayout(layout, deletedIdx)</code> — 該当コードを小節から除去し、後続の全 <code>chordIndices</code> をデクリメント。小節が空になっても小節は残る（空小節として表示）</li>
+  <li><strong>空小節削除</strong>: 空小節の右端に表示される縦長の × ボタンで明示的に削除</li>
   <li><strong>コード更新</strong>: インデックス不変のため <code>chartLayout</code> は変更不要</li>
+  <li><strong>セクション分割</strong>: <code>splitSection(layout, sectionIdx, measureIdx)</code> — 指定小節位置でセクションを2つに分割。新セクションには自動ラベル (A-Z) を付与</li>
+  <li><strong>セクション結合</strong>: <code>mergeSections(layout, sectionIdx)</code> — 隣接する2セクションを結合。最初のセクションのラベル・リピート設定を保持</li>
+  <li><strong>リピート設定</strong>: <code>section.repeats</code> を <code>undefined ↔ 1</code> でトグル。BPM再生時にセクション全体が2回演奏される</li>
 </ul>
 
 <h3>Beat-Position Chord Insertion</h3>
@@ -1159,6 +1164,21 @@ CSS Grid 描画</div>
   コードが占有する拍はコード名を表示し、空き拍には <code>+</code> ボタンを配置。
   <code>beatWidths</code> は常に合計4拍に正規化される。</p>
 </div>
+
+<h3>Section Structure — Symbol Buttons</h3>
+<p>編集モードでコードの1拍目をクリックすると、ツールバーに記号ボタン行が表示される。
+ボタンを押すとその小節にマーカーをスタンプし、必要に応じてセクション分割/結合が自動実行される。
+ChordChart 自体は表示専用（リピートドット・ボルタ括弧は自動描画）。</p>
+<p>セクション名入力 + 記号ボタン4種:</p>
+<ul>
+  <li><strong>Sec: (セクション名)</strong>: セクション先頭の小節ではラベルを直接編集。それ以外の小節でラベルを入力するとそこでセクションを自動分割し新セクション名を設定。先頭小節のラベルを空にすると前セクションに結合。<code>splitSection()</code> / <code>mergeSections()</code> / <code>renameSection()</code></li>
+  <li><strong>|: (リピート開始)</strong>: 選択小節がセクション先頭ならリピートをトグル。先頭でなければセクションを分割し新セクションにリピートを設定。<code>splitSection()</code></li>
+  <li><strong>:| (リピート終了)</strong>: 選択小節がセクション末尾ならリピートをトグル。末尾でなければセクションを分割し前半にリピートを設定。<code>splitSection()</code></li>
+  <li><strong>1. (1ボルタ)</strong>: リピートONのセクション内で、選択小節からボルタ1括弧を設定（残り小節は全て1括弧に入る）。2括弧は別途「2.」で設定。既に1ボルタ内の小節をクリックすると解除。<code>splitEndings()</code> / <code>removeEndings()</code></li>
+  <li><strong>2. (2ボルタ)</strong>: エンディング内の小節をクリックし、その小節から2番カッコを開始。1括弧のみの状態からでも分割可能。<code>adjustEndingSplit()</code></li>
+</ul>
+<p>ボタンの点灯状態: 選択中の小節に既にそのマーカーがある場合は色付き（|:/:| = <span style="color:#F1C40F">黄</span>, 1. = <span style="color:#3498DB">青</span>, 2. = <span style="color:#27AE60">緑</span>）。
+エンディング内の小節では |:/:| は無効。リピートなしでは 1. は無効。エンディングなしでは 2. は無効。</p>
 
 <h2 id="fretboard-svg">Fretboard SVG</h2>
 <p>SVG ベースの指板描画。6弦 × 22フレットのグリッド上にノート、ゴーストノート、ボイシング、
@@ -1222,10 +1242,14 @@ Footer</pre>
 <div class="callout">
   <div class="callout-label">練習モードの変更点</div>
   <ul style="margin:4px 0 0;padding-left:20px">
-    <li>ProgressionEditor が <strong>ProgressionEditToolbar</strong> にリデザイン — フルパネルからコンパクト2行ツールバーに変更:
+    <li>ProgressionEditor が <strong>ProgressionEditToolbar</strong> にリデザイン — フルパネルからコンパクト3行ツールバーに変更:
       <ul>
-        <li>Row 1: 進行ドロップダウン選択 + 名前入力 + キー選択</li>
-        <li>Row 2: コード入力 + 追加ボタン + プリセットドロップダウン + インポート + 保存/新規/削除</li>
+        <li>Row 1: 保存済み進行タブ</li>
+        <li>Row 2: 名前入力 + キー選択</li>
+        <li>Row 3: 「+ 小節」→ コード入力フィールド → 挿入/更新 → 取消 | プリセット + インポート | 保存/新規/削除</li>
+        <li>コード追加フロー: 「+ 小節」で空小節追加 → ビートグリッドの「+」で拍位置選択 → コード入力 → Enter</li>
+        <li>未選択時はコード入力・挿入/更新・取消ボタンがグレーアウト。グリッドクリックで有効化+オートフォーカス</li>
+        <li>選択中のビートセルは緑ハイライト（挿入）/黄ハイライト（編集）で表示</li>
       </ul>
     </li>
     <li>コードリストがエディタから削除 — ChordChart 内に × 削除ボタン付きで表示 (編集時)。4列ビートグリッドで拍位置にコード挿入可能</li>

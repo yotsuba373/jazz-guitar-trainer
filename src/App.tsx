@@ -1044,7 +1044,7 @@ export default function App() {
                 onSelectProg={(idx) => { setActiveProgIdx(idx); setActiveChordIdx(0); setIsPlaying(false); }}
                 onClose={() => setEditing(false)}
               >
-                {(editingChords, onRemoveChord, editChartLayout, onInsertAtBeat) => editingChords.length > 0 && (
+                {(editingChords, onRemoveChord, editChartLayout, onInsertAtBeat, onEmptyMeasureBeat, onRemoveEmptyMeasure, selectedBeat) => (editingChords.length > 0 || editChartLayout) && (
                   <ProgressionPlayer
                     progression={{ ...activeProg!, chords: editingChords, chartLayout: editChartLayout }}
                     activeChordIdx={activeChordIdx}
@@ -1061,6 +1061,9 @@ export default function App() {
                     editing={true}
                     onRemoveChord={onRemoveChord}
                     onInsertAtBeat={onInsertAtBeat}
+                    onEmptyMeasureBeat={onEmptyMeasureBeat}
+                    onRemoveEmptyMeasure={onRemoveEmptyMeasure}
+                    selectedBeat={selectedBeat}
                   />
                 )}
               </ProgressionEditor>
