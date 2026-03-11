@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, type ReactNode } from 'react';
 import type { Progression, ChordSlot, ChartLayout, RootName, SongKey, ChordNotationPrefs } from '../../types';
 import { ROOTS } from '../../constants';
 import { parseChordSymbol, buildChordSlot, suggestMode, displayChordName, PRESET_PROGRESSIONS } from '../../utils';
@@ -8,15 +8,18 @@ interface ProgressionEditorProps {
   progressions: Progression[];
   activeProgIdx: number;
   chordPrefs: ChordNotationPrefs;
+  activeChordIdx: number;
   onSave: (progs: Progression[]) => void;
   onSelectProg: (idx: number) => void;
   onClose: () => void;
+  children?: (editingChords: ChordSlot[], onRemoveChord: (idx: number) => void, chartLayout: ChartLayout | undefined) => ReactNode;
 }
 
 const btnBase = 'rounded cursor-pointer text-[10px] font-mono px-2.5 py-[5px]';
 
 export function ProgressionEditor({
-  progressions, activeProgIdx, chordPrefs, onSave, onSelectProg, onClose,
+  progressions, activeProgIdx, chordPrefs, activeChordIdx, onSave, onSelectProg,
+  children,
 }: ProgressionEditorProps) {
   const prog = progressions[activeProgIdx] ?? { name: '', chords: [] };
   const [name, setName] = useState(prog.name);
@@ -26,6 +29,26 @@ export function ProgressionEditor({
   const [input, setInput] = useState('');
   const [error, setError] = useState('');
   const [showImporter, setShowImporter] = useState(false);
+  // null = add mode, number = editing that chord index
+  const [editIdx, setEditIdx] = useState<number | null>(null);
+
+  // When activeChordIdx changes (user clicks chart), enter edit mode for that chord
+  useEffect(() => {
+    if (activeChordIdx >= 0 && activeChordIdx < chords.length) {
+      const c = chords[activeChordIdx];
+      setEditIdx(activeChordIdx);
+      setInput(displayChordName(c, chordPrefs));
+      setError('');
+    }
+  }, [activeChordIdx]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function handleSubmit() {
+    if (editIdx != null) {
+      updateChord();
+    } else {
+      addChord();
+    }
+  }
 
   function addChord() {
     const trimmed = input.trim();
@@ -38,22 +61,46 @@ export function ProgressionEditor({
     setError('');
     const prevPosId = chords.length > 0 ? chords[chords.length - 1].posId : 1;
     setChords([...chords, buildChordSlot(trimmed, parsed, prevPosId, songKey)]);
-    setChartLayout(undefined); // invalidate: chords changed
+    setChartLayout(undefined);
     setInput('');
+  }
+
+  function updateChord() {
+    if (editIdx == null) return;
+    const trimmed = input.trim();
+    if (!trimmed) return;
+    const parsed = parseChordSymbol(trimmed);
+    if (!parsed) {
+      setError(`"${trimmed}" は認識できないコードです`);
+      return;
+    }
+    setError('');
+    const old = chords[editIdx];
+    const updated = buildChordSlot(trimmed, parsed, old.posId, songKey);
+    // Preserve confirmed mode/pos if root+quality unchanged
+    if (old.rootName === updated.rootName && old.quality === updated.quality) {
+      updated.modeIdx = old.modeIdx;
+      updated.modeConfirmed = old.modeConfirmed;
+      updated.posId = old.posId;
+      updated.posConfirmed = old.posConfirmed;
+    }
+    const copy = [...chords];
+    copy[editIdx] = updated;
+    setChords(copy);
+    setChartLayout(undefined);
+  }
+
+  function cancelEdit() {
+    setEditIdx(null);
+    setInput('');
+    setError('');
   }
 
   function removeChord(idx: number) {
     setChords(chords.filter((_, i) => i !== idx));
     setChartLayout(undefined);
-  }
-
-  function moveChord(idx: number, dir: -1 | 1) {
-    const next = idx + dir;
-    if (next < 0 || next >= chords.length) return;
-    const copy = [...chords];
-    [copy[idx], copy[next]] = [copy[next], copy[idx]];
-    setChords(copy);
-    setChartLayout(undefined);
+    if (editIdx === idx) cancelEdit();
+    else if (editIdx != null && editIdx > idx) setEditIdx(editIdx - 1);
   }
 
   function handleSave() {
@@ -75,12 +122,12 @@ export function ProgressionEditor({
     setSongKey(undefined);
     setChords([]);
     setChartLayout(undefined);
+    cancelEdit();
   }
 
   function handleDelete() {
     const copy = progressions.filter((_, i) => i !== activeProgIdx);
     if (copy.length === 0) {
-      // Last one deleted → reset to empty new progression
       const fresh = [{ name: 'New', chords: [] as ChordSlot[] }];
       onSave(fresh);
       onSelectProg(0);
@@ -88,6 +135,7 @@ export function ProgressionEditor({
       setSongKey(undefined);
       setChords([]);
       setChartLayout(undefined);
+      cancelEdit();
       return;
     }
     const newIdx = Math.min(activeProgIdx, copy.length - 1);
@@ -97,6 +145,7 @@ export function ProgressionEditor({
     setSongKey(copy[newIdx].songKey);
     setChords([...copy[newIdx].chords]);
     setChartLayout(copy[newIdx].chartLayout);
+    cancelEdit();
   }
 
   function handleLoadPreset(preset: Progression) {
@@ -104,6 +153,7 @@ export function ProgressionEditor({
     setSongKey(preset.songKey);
     setChords([...preset.chords]);
     setChartLayout(preset.chartLayout);
+    cancelEdit();
   }
 
   function handleImport(imported: Progression) {
@@ -112,11 +162,11 @@ export function ProgressionEditor({
     setChords([...imported.chords]);
     setChartLayout(imported.chartLayout);
     setShowImporter(false);
+    cancelEdit();
   }
 
   function handleSongKeyChange(newKey: SongKey | undefined) {
     setSongKey(newKey);
-    // Re-suggest modes for unconfirmed chords
     setChords(chords.map(c => {
       if (c.modeConfirmed) return c;
       return { ...c, modeIdx: suggestMode(c.rootName, c.quality, newKey) };
@@ -124,7 +174,6 @@ export function ProgressionEditor({
   }
 
   function handleSelectProg(idx: number) {
-    // Save current first
     handleSave();
     onSelectProg(idx);
     const p = progressions[idx];
@@ -132,56 +181,150 @@ export function ProgressionEditor({
     setSongKey(p.songKey);
     setChords([...p.chords]);
     setChartLayout(p.chartLayout);
+    cancelEdit();
   }
 
-  return (
-    <div className="bg-[#1a1a1a] border border-[#444] rounded p-3 mb-3">
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-[11px] font-bold text-text-primary">進行エディタ</span>
-        <button onClick={onClose} className={btnBase}
-          style={{ border: '1px solid #666', background: '#1a1a1a', color: '#CCC' }}>
-          閉じる
-        </button>
-      </div>
+  const isEditing = editIdx != null;
 
-      {/* Progression selector */}
-      <div className="flex flex-wrap gap-1 mb-2">
-        {progressions.map((p, i) => (
-          <button key={i} onClick={() => handleSelectProg(i)}
+  return (
+    <div>
+      {/* Compact toolbar */}
+      <div className="bg-[#1a1a1a] border border-[#444] rounded p-2 mb-2">
+        {/* Saved progressions */}
+        <div className="flex gap-0.5 overflow-x-auto scrollbar-thin pb-0.5 mb-1.5">
+          {progressions.map((p, i) => (
+            <button key={i} onClick={() => handleSelectProg(i)}
+              className="rounded cursor-pointer text-[10px] font-mono px-2 h-[22px] inline-flex items-center whitespace-nowrap shrink-0"
+              style={{
+                border: `1px solid ${i === activeProgIdx ? '#FFF' : '#444'}`,
+                background: i === activeProgIdx ? '#3a3a3a' : '#1a1a1a',
+                color: i === activeProgIdx ? '#FFF' : '#888',
+                fontWeight: i === activeProgIdx ? 700 : 400,
+              }}>
+              {p.name}
+            </button>
+          ))}
+        </div>
+
+        {/* Name + Key */}
+        <div className="flex items-center gap-2 flex-wrap mb-1.5">
+          <input
+            type="text"
+            value={name}
+            onChange={e => setName(e.target.value)}
+            placeholder="進行名"
+            className="bg-[#111] border border-[#444] rounded text-[11px] text-text-primary font-mono px-2 py-1 w-36"
+          />
+          <span className="text-[9px] text-text-dim">Key:</span>
+          <select
+            value={songKey?.root ?? ''}
+            onChange={e => {
+              const root = e.target.value as RootName;
+              handleSongKeyChange(root ? { root, minor: songKey?.minor ?? false } : undefined);
+            }}
+            className="bg-[#111] border border-[#444] rounded text-[11px] text-text-primary font-mono px-1.5 py-1 cursor-pointer"
+          >
+            <option value="">未設定</option>
+            {ROOTS.map(r => (
+              <option key={r.name} value={r.name}>{r.name}</option>
+            ))}
+          </select>
+          {songKey && (
+            <>
+              <button onClick={() => handleSongKeyChange({ ...songKey, minor: false })}
+                className={btnBase}
+                style={{
+                  border: `1px solid ${!songKey.minor ? '#FFF' : '#444'}`,
+                  background: !songKey.minor ? '#3a3a3a' : '#1a1a1a',
+                  color: !songKey.minor ? '#FFF' : '#888',
+                  fontWeight: !songKey.minor ? 700 : 400,
+                }}>
+                Major
+              </button>
+              <button onClick={() => handleSongKeyChange({ ...songKey, minor: true })}
+                className={btnBase}
+                style={{
+                  border: `1px solid ${songKey.minor ? '#FFF' : '#444'}`,
+                  background: songKey.minor ? '#3a3a3a' : '#1a1a1a',
+                  color: songKey.minor ? '#FFF' : '#888',
+                  fontWeight: songKey.minor ? 700 : 400,
+                }}>
+                Minor
+              </button>
+            </>
+          )}
+        </div>
+
+        {/* Chord input + actions */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <input
+            type="text"
+            value={input}
+            onChange={e => { setInput(e.target.value); setError(''); }}
+            onKeyDown={e => { if (e.key === 'Enter') handleSubmit(); if (e.key === 'Escape') cancelEdit(); }}
+            placeholder={isEditing ? `コード #${editIdx + 1} を編集` : 'Dm7, G7, CM7...'}
+            className="bg-[#111] rounded text-[11px] text-text-primary font-mono px-2 py-1 w-32"
+            style={{
+              borderWidth: '1px',
+              borderStyle: 'solid',
+              borderColor: error ? '#E74C3C' : isEditing ? '#F1C40F' : '#444',
+            }}
+          />
+          {isEditing ? (
+            <>
+              <button onClick={updateChord} className={btnBase}
+                style={{ border: '1px solid #F1C40F', background: '#2a2a1a', color: '#F1C40F' }}>
+                更新
+              </button>
+              <button onClick={cancelEdit} className={btnBase}
+                style={{ border: '1px solid #666', background: '#1a1a1a', color: '#888' }}>
+                取消
+              </button>
+            </>
+          ) : (
+            <button onClick={addChord} className={btnBase}
+              style={{ border: '1px solid #27AE60', background: '#1a1a1a', color: '#27AE60' }}>
+              追加
+            </button>
+          )}
+          <span className="text-[9px] text-text-dim mx-0.5">|</span>
+          <select
+            onChange={e => {
+              const idx = Number(e.target.value);
+              if (idx >= 0) handleLoadPreset(PRESET_PROGRESSIONS[idx]);
+            }}
+            value=""
+            className="bg-[#111] border border-[#555] rounded text-[10px] text-[#AAA] font-mono px-1.5 py-1 cursor-pointer"
+          >
+            <option value="">プリセット</option>
+            {PRESET_PROGRESSIONS.map((preset, i) => (
+              <option key={i} value={i}>{preset.name}</option>
+            ))}
+          </select>
+          <button onClick={() => setShowImporter(!showImporter)}
             className={btnBase}
             style={{
-              border: `1px solid ${i === activeProgIdx ? '#FFF' : '#444'}`,
-              background: i === activeProgIdx ? '#3a3a3a' : '#1a1a1a',
-              color: i === activeProgIdx ? '#FFF' : '#888',
+              border: `1px solid ${showImporter ? '#FFF' : '#2980B9'}`,
+              background: showImporter ? '#1a2a3a' : '#1a1a1a',
+              color: '#2980B9',
             }}>
-            {p.name}
+            インポート
           </button>
-        ))}
-        <button onClick={handleNew} className={btnBase}
-          style={{ border: '1px solid #27AE60', background: '#1a1a1a', color: '#27AE60' }}>
-          + 新規
-        </button>
-      </div>
-
-      {/* Preset loader + import */}
-      <div className="flex flex-wrap gap-1 mb-2">
-        <span className="text-[9px] text-text-dim mr-1 self-center">プリセット:</span>
-        {PRESET_PROGRESSIONS.map((preset, i) => (
-          <button key={i} onClick={() => handleLoadPreset(preset)}
-            className={btnBase}
-            style={{ border: '1px solid #555', background: '#1a1a1a', color: '#AAA' }}>
-            {preset.name}
+          <span className="text-[9px] text-text-dim mx-0.5">|</span>
+          <button onClick={handleSave} className={btnBase}
+            style={{ border: '1px solid #2980B9', background: '#1a1a1a', color: '#2980B9' }}>
+            保存
           </button>
-        ))}
-        <button onClick={() => setShowImporter(!showImporter)}
-          className={btnBase}
-          style={{
-            border: `1px solid ${showImporter ? '#FFF' : '#2980B9'}`,
-            background: showImporter ? '#1a2a3a' : '#1a1a1a',
-            color: '#2980B9',
-          }}>
-          インポート
-        </button>
+          <button onClick={handleNew} className={btnBase}
+            style={{ border: '1px solid #27AE60', background: '#1a1a1a', color: '#27AE60' }}>
+            + 新規
+          </button>
+          <button onClick={handleDelete} className={btnBase}
+            style={{ border: '1px solid #E74C3C', background: '#1a1a1a', color: '#E74C3C' }}>
+            削除
+          </button>
+        </div>
+        {error && <p className="text-[9px] text-[#E74C3C] mt-0.5">{error}</p>}
       </div>
 
       {showImporter && (
@@ -191,95 +334,8 @@ export function ProgressionEditor({
         />
       )}
 
-      {/* Name + Key input */}
-      <div className="flex items-center gap-2 mb-2">
-        <input
-          type="text"
-          value={name}
-          onChange={e => setName(e.target.value)}
-          placeholder="進行名"
-          className="bg-[#111] border border-[#444] rounded text-[11px] text-text-primary font-mono px-2 py-1 w-48"
-        />
-        <span className="text-[9px] text-text-dim">Key:</span>
-        <select
-          value={songKey?.root ?? ''}
-          onChange={e => {
-            const root = e.target.value as RootName;
-            handleSongKeyChange(root ? { root, minor: songKey?.minor ?? false } : undefined);
-          }}
-          className="bg-[#111] border border-[#444] rounded text-[11px] text-text-primary font-mono px-1.5 py-1 cursor-pointer"
-        >
-          <option value="">未設定</option>
-          {ROOTS.map(r => (
-            <option key={r.name} value={r.name}>{r.name}</option>
-          ))}
-        </select>
-        {songKey && (
-          <>
-            <button onClick={() => handleSongKeyChange({ ...songKey, minor: false })}
-              className={btnBase}
-              style={{
-                border: `1px solid ${!songKey.minor ? '#FFF' : '#444'}`,
-                background: !songKey.minor ? '#3a3a3a' : '#1a1a1a',
-                color: !songKey.minor ? '#FFF' : '#888',
-                fontWeight: !songKey.minor ? 700 : 400,
-              }}>
-              Major
-            </button>
-            <button onClick={() => handleSongKeyChange({ ...songKey, minor: true })}
-              className={btnBase}
-              style={{
-                border: `1px solid ${songKey.minor ? '#FFF' : '#444'}`,
-                background: songKey.minor ? '#3a3a3a' : '#1a1a1a',
-                color: songKey.minor ? '#FFF' : '#888',
-                fontWeight: songKey.minor ? 700 : 400,
-              }}>
-              Minor
-            </button>
-          </>
-        )}
-      </div>
-
-      {/* Chord list */}
-      <div className="flex flex-wrap gap-1 mb-2 min-h-[28px]">
-        {chords.map((c, i) => (
-          <div key={i} className="flex items-center gap-0.5 bg-[#222] border border-[#444] rounded px-1.5 py-0.5">
-            <span className="text-[11px] text-text-primary font-mono">{displayChordName(c, chordPrefs)}</span>
-            <button onClick={() => moveChord(i, -1)} className="text-[9px] text-text-dim hover:text-white cursor-pointer px-0.5">◀</button>
-            <button onClick={() => moveChord(i, 1)} className="text-[9px] text-text-dim hover:text-white cursor-pointer px-0.5">▶</button>
-            <button onClick={() => removeChord(i)} className="text-[9px] text-[#E74C3C] hover:text-white cursor-pointer px-0.5">×</button>
-          </div>
-        ))}
-        {chords.length === 0 && (
-          <span className="text-[10px] text-text-dim self-center">コードを追加してください</span>
-        )}
-      </div>
-
-      {/* Add chord input */}
-      <div className="flex items-center gap-1.5 mb-1">
-        <input
-          type="text"
-          value={input}
-          onChange={e => { setInput(e.target.value); setError(''); }}
-          onKeyDown={e => { if (e.key === 'Enter') addChord(); }}
-          placeholder="Dm7, G7, CM7..."
-          className="bg-[#111] border border-[#444] rounded text-[11px] text-text-primary font-mono px-2 py-1 w-36"
-          style={error ? { borderColor: '#E74C3C' } : undefined}
-        />
-        <button onClick={addChord} className={btnBase}
-          style={{ border: '1px solid #27AE60', background: '#1a1a1a', color: '#27AE60' }}>
-          追加
-        </button>
-        <button onClick={handleSave} className={btnBase}
-          style={{ border: '1px solid #2980B9', background: '#1a1a1a', color: '#2980B9' }}>
-          保存
-        </button>
-        <button onClick={handleDelete} className={btnBase}
-          style={{ border: '1px solid #E74C3C', background: '#1a1a1a', color: '#E74C3C' }}>
-          削除
-        </button>
-      </div>
-      {error && <p className="text-[9px] text-[#E74C3C] mt-0.5">{error}</p>}
+      {/* Render chart via children slot with editing chords */}
+      {children?.(chords, removeChord, chartLayout)}
     </div>
   );
 }

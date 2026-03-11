@@ -16,9 +16,6 @@ interface OptionBarProps {
   canShowChordForms?: boolean;
   showChordForms?: boolean;
   onToggleChordForms?: (checked: boolean) => void;
-  canShowPhrase?: boolean;
-  showPhrase?: boolean;
-  onTogglePhrase?: (checked: boolean) => void;
 }
 
 const btnBase = 'rounded cursor-pointer font-mono';
@@ -28,7 +25,6 @@ export function OptionBar({
   onToggleCT, onSetLabelMode, onChordPrefsChange,
   progMode, showGT, onToggleGT,
   canShowChordForms, showChordForms, onToggleChordForms,
-  canShowPhrase, showPhrase, onTogglePhrase,
 }: OptionBarProps) {
   const [notationOpen, setNotationOpen] = useState(false);
 
@@ -53,7 +49,7 @@ export function OptionBar({
         {chordDisplay} コードトーン強調
       </label>
 
-      {progMode && onToggleGT && (
+      {onToggleGT && (
         <label className="text-[10px] text-text-muted cursor-pointer flex items-center gap-1">
           <input type="checkbox" checked={showGT ?? false} onChange={e => onToggleGT(e.target.checked)} />
           ガイドトーン (3度/7度)
@@ -64,13 +60,6 @@ export function OptionBar({
         <label className="text-[10px] text-text-muted cursor-pointer flex items-center gap-1">
           <input type="checkbox" checked={showChordForms ?? false} onChange={e => onToggleChordForms(e.target.checked)} />
           コードフォーム
-        </label>
-      )}
-
-      {canShowPhrase && onTogglePhrase && progMode && (
-        <label className="text-[10px] text-text-muted cursor-pointer flex items-center gap-1">
-          <input type="checkbox" checked={showPhrase ?? false} onChange={e => onTogglePhrase(e.target.checked)} />
-          フレーズ
         </label>
       )}
 
@@ -115,7 +104,7 @@ export function OptionBar({
         })}
       </div>
 
-      {(showCT || showGT || showChordForms || showPhrase) && (
+      {(showCT || showGT || showChordForms) && (
         <div className="flex gap-2.5 items-center text-[10px]">
           <span className="text-text-muted">|</span>
           {showCT && (
@@ -144,10 +133,12 @@ export function OptionBar({
                 <span className="inline-block w-[10px] h-[10px] bg-[#3498DB]" style={{ transform: 'rotate(45deg)' }} />
                 <span className="text-text-label">7th</span>
               </span>
-              <span className="inline-flex items-center gap-[3px]">
-                <span className="inline-block w-[11px] h-[11px] rounded-full border-2 border-dashed border-[#F1C40F]" />
-                <span className="text-text-muted">次3rd</span>
-              </span>
+              {progMode && (
+                <span className="inline-flex items-center gap-[3px]">
+                  <span className="inline-block w-[11px] h-[11px] rounded-full border-2 border-dashed border-[#F1C40F]" />
+                  <span className="text-text-muted">次3rd</span>
+                </span>
+              )}
             </>
           )}
           {showChordForms && (
@@ -155,13 +146,6 @@ export function OptionBar({
               <span className="inline-block w-[13px] h-[13px] rounded-sm border-2 border-[#00E5FF]"
                 style={{ background: 'rgba(0,229,255,0.15)' }} />
               <span className="text-text-label">Form</span>
-            </span>
-          )}
-          {showPhrase && (
-            <span className="inline-flex items-center gap-[3px]">
-              <span className="inline-block w-[13px] h-[2px] bg-[#FF6B9D]" />
-              <span className="inline-block w-[7px] h-[7px] rounded-full bg-[#FF6B9D]" />
-              <span className="text-text-label">Phrase</span>
             </span>
           )}
         </div>

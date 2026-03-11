@@ -10,10 +10,13 @@ interface ChordChartProps {
   effectiveAll: EffectiveChord[];
   chordPrefs: ChordNotationPrefs;
   onChordSelect: (idx: number) => void;
+  editing?: boolean;
+  onRemoveChord?: (idx: number) => void;
 }
 
 export function ChordChart({
   progression, activeChordIdx, effectiveAll, chordPrefs, onChordSelect,
+  editing, onRemoveChord,
 }: ChordChartProps) {
   const layout = useMemo(() => getChartLayout(progression), [progression]);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -34,22 +37,32 @@ export function ChordChart({
     const posColor = eff ? POS_COLORS[eff.posId - 1] : '#555';
 
     return (
-      <button
-        key={ci}
-        onClick={() => onChordSelect(ci)}
-        className="cursor-pointer font-mono text-[12px] font-bold px-1 py-0.5 rounded"
-        style={{
-          background: active ? posColor + '40' : 'transparent',
-          color: !supported ? '#555'
-            : !diatonic ? '#E67E22'
-            : active ? '#FFF'
-            : '#AAA',
-          outline: active ? `2px solid ${posColor}` : 'none',
-          outlineOffset: '1px',
-        }}
-      >
-        {displayChordName(c, chordPrefs)}
-      </button>
+      <span key={ci} className="relative inline-flex items-center">
+        <button
+          onClick={() => onChordSelect(ci)}
+          className="cursor-pointer font-mono text-[12px] font-bold px-1 py-0.5 rounded"
+          style={{
+            background: active ? posColor + '40' : 'transparent',
+            color: !supported ? '#555'
+              : !diatonic ? '#E67E22'
+              : active ? '#FFF'
+              : '#AAA',
+            outline: active ? `2px solid ${posColor}` : 'none',
+            outlineOffset: '1px',
+          }}
+        >
+          {displayChordName(c, chordPrefs)}
+        </button>
+        {editing && onRemoveChord && (
+          <button
+            onClick={e => { e.stopPropagation(); onRemoveChord(ci); }}
+            className="absolute -top-1.5 -right-1.5 w-[14px] h-[14px] rounded-full bg-[#E74C3C] text-white text-[8px] leading-none flex items-center justify-center cursor-pointer hover:bg-[#C0392B]"
+            title="削除"
+          >
+            ×
+          </button>
+        )}
+      </span>
     );
   }
 

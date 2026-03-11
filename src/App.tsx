@@ -9,7 +9,7 @@ import {
   getChartLayout, buildChordRows,
   getGuideTones, findNoteLocations, classifyResolution,
   findVoicingsInPosition,
-  playNote, playChordStrum, fretToFrequency,
+  playChordStrum,
   generatePhraseRule, buildNotePool, schedulePhrase,
   loadLickDB, QUALITY_TO_LICK_TYPE, buildLickContext, getTransposeSemitones,
   lickToGeneratedPhrase,
@@ -292,7 +292,18 @@ export default function App() {
   // Guide tone info for fretboard display
   // Derive mode/fretMap/positions directly from effectiveAll to avoid 1-frame lag
   const guideToneInfo = useMemo(() => {
-    if (!progMode || !showGT || !activeChord || isSkipped) return null;
+    if (!showGT) return null;
+
+    // Dictionary mode: show 3rd/7th for current mode only (no next chord)
+    if (!progMode) {
+      const isDim = mode.notes.length > 7;
+      if (isDim) return null;
+      const gt = getGuideTones(mode);
+      return { third: gt.third, seventh: gt.seventh, nextThird: null, nextThirdLocations: [] as { stringIdx: number; fret: number }[], resolution: null };
+    }
+
+    // Practice mode: full guide tone with next chord resolution
+    if (!activeChord || isSkipped) return null;
     const curEff = effectiveAll[activeChordIdx];
     if (!curEff || !QUALITY_TO_MODES[activeChord.quality]) return null;
 
@@ -342,7 +353,7 @@ export default function App() {
       ? classifyResolution(curMode.semi[curMode.notes.indexOf(currentGT.seventh)], nextThirdSemi)
       : null;
     return { third: gtThird, seventh: gtSeventh, nextThird: nextGT.third, nextThirdLocations, resolution };
-  }, [progMode, showGT, activeChordIdx, effectiveAll, activeProg, activeChord, isSkipped]);
+  }, [progMode, showGT, activeChordIdx, effectiveAll, activeProg, activeChord, isSkipped, mode, template]);
 
   useEffect(() => {
     if (!progMode || !activeChord || isSkipped) return;
@@ -865,10 +876,6 @@ export default function App() {
       }
       return;
     }
-    if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
-    const ctx = audioCtxRef.current;
-    if (ctx.state === 'suspended') ctx.resume();
-    playNote(ctx, fretToFrequency(stringIdx, fret), noteVolumeRef.current, ctx.currentTime, 2.0, instrumentRef.current);
   }, [goalSelectMode, canShowPhrase, selPos]);
 
   const handleGeneratePhrase = useCallback(() => {
@@ -935,68 +942,30 @@ export default function App() {
         <div className="flex gap-1 mb-3">
           <button
             onClick={() => { setProgMode(false); setEditing(false); setIsPlaying(false); }}
-            className="rounded cursor-pointer text-[10px] font-mono px-2.5 py-[5px]"
+            className="rounded cursor-pointer text-[10px] font-mono px-2.5 h-[24px] inline-flex items-center"
             style={{
               border: `1px solid ${!progMode ? '#FFF' : '#444'}`,
               background: !progMode ? '#3a3a3a' : '#1a1a1a',
               color: !progMode ? '#FFF' : '#888',
               fontWeight: !progMode ? 700 : 400,
             }}>
-            通常モード
+            辞典モード
           </button>
           <button
             onClick={() => { setProgMode(true); setActiveChordIdx(0); setIsPlaying(false); }}
-            className="rounded cursor-pointer text-[10px] font-mono px-2.5 py-[5px]"
+            className="rounded cursor-pointer text-[10px] font-mono px-2.5 h-[24px] inline-flex items-center"
             style={{
               border: `1px solid ${progMode ? '#FFF' : '#444'}`,
               background: progMode ? '#3a3a3a' : '#1a1a1a',
               color: progMode ? '#FFF' : '#888',
               fontWeight: progMode ? 700 : 400,
             }}>
-            進行モード
+            練習モード
           </button>
-          {progMode && (
-            <button
-              onClick={() => { setEditing(!editing); setIsPlaying(false); }}
-              className="rounded cursor-pointer text-[10px] font-mono px-2.5 py-[5px]"
-              style={{
-                border: `1px solid ${editing ? '#F1C40F' : '#666'}`,
-                background: editing ? '#2a2a1a' : '#1a1a1a',
-                color: editing ? '#F1C40F' : '#AAA',
-              }}>
-              {editing ? '編集中' : '編集'}
-            </button>
-          )}
-          {progMode && activeProg && activeProg.chords.length > 0 && lickDB && (
-            <LickControls
-              licks={filteredLicks.licks}
-              selectedIdx={selectedLickIdx}
-              onSelect={(idx) => {
-                setSelectedLickIdx(idx);
-                const chord = activeProg.chords[activeChordIdx];
-                if (!chord) return;
-                const lick = filteredLicks.licks[idx];
-                if (!lick) return;
-                const rootSemi = ROOTS.find(r => r.name === chord.rootName)?.semitone ?? 0;
-                const ctx = buildLickContext(lick, chord.quality, chord.rootName, rootSemi);
-                if (ctx) playPhraseAudio(ctx.phrase);
-              }}
-              onPlay={() => { if (activeLickPhrase) playPhraseAudio(activeLickPhrase); }}
-              onStop={() => {
-                manualPhraseRef.current?.stop();
-                manualPhraseRef.current = null;
-                if (manualPhraseTimer.current) clearTimeout(manualPhraseTimer.current);
-                setIsPhraseAudioPlaying(false);
-              }}
-              onClear={() => setSelectedLickIdx(null)}
-              isPlaying={isPhraseAudioPlaying}
-              lickType={filteredLicks.lickType}
-            />
-          )}
         </div>
 
-        {/* Global audio controls — always visible */}
-        <GlobalAudioControls
+        {/* Global audio controls — practice mode only */}
+        {progMode && <GlobalAudioControls
           bpm={bpm}
           onBpmChange={setBpm}
           isMetronomeOn={isMetronomeOn}
@@ -1017,24 +986,84 @@ export default function App() {
           onSwingAmountChange={setSwingAmount}
           isPlaying={isPlaying}
           onTogglePlay={() => setIsPlaying(p => !p)}
-          showPlayButton={progMode && !!activeProg && activeProg.chords.length > 0}
-        />
+          showPlayButton={!!activeProg && activeProg.chords.length > 0}
+          leadingSlot={
+            <button
+              onClick={() => { setEditing(!editing); setIsPlaying(false); }}
+              className="rounded cursor-pointer text-[10px] font-mono px-2.5 h-[24px] inline-flex items-center"
+              style={{
+                border: `1px solid ${editing ? '#F1C40F' : '#666'}`,
+                background: editing ? '#2a2a1a' : '#1a1a1a',
+                color: editing ? '#F1C40F' : '#AAA',
+              }}>
+              {editing ? 'コード編集中' : 'コード編集'}
+            </button>
+          }
+        />}
 
-        {/* Progression mode */}
+        {/* Practice mode */}
         {progMode && (
           <>
-            {editing && (
+            {/* Lick controls — above chart */}
+            {activeProg && activeProg.chords.length > 0 && lickDB && (
+              <div className="flex gap-1.5 mb-2 items-center">
+                <LickControls
+                  licks={filteredLicks.licks}
+                  selectedIdx={selectedLickIdx}
+                  onSelect={(idx) => {
+                    setSelectedLickIdx(idx);
+                    const chord = activeProg.chords[activeChordIdx];
+                    if (!chord) return;
+                    const lick = filteredLicks.licks[idx];
+                    if (!lick) return;
+                    const rootSemi = ROOTS.find(r => r.name === chord.rootName)?.semitone ?? 0;
+                    const ctx = buildLickContext(lick, chord.quality, chord.rootName, rootSemi);
+                    if (ctx) playPhraseAudio(ctx.phrase);
+                  }}
+                  onPlay={() => { if (activeLickPhrase) playPhraseAudio(activeLickPhrase); }}
+                  onStop={() => {
+                    manualPhraseRef.current?.stop();
+                    manualPhraseRef.current = null;
+                    if (manualPhraseTimer.current) clearTimeout(manualPhraseTimer.current);
+                    setIsPhraseAudioPlaying(false);
+                  }}
+                  onClear={() => setSelectedLickIdx(null)}
+                  isPlaying={isPhraseAudioPlaying}
+                  lickType={filteredLicks.lickType}
+                />
+              </div>
+            )}
+
+            {editing ? (
               <ProgressionEditor
                 progressions={progressions}
                 activeProgIdx={activeProgIdx}
                 chordPrefs={chordPrefs}
+                activeChordIdx={activeChordIdx}
                 onSave={handleSaveProgressions}
                 onSelectProg={(idx) => { setActiveProgIdx(idx); setActiveChordIdx(0); setIsPlaying(false); }}
                 onClose={() => setEditing(false)}
-              />
-            )}
-
-            {activeProg && activeProg.chords.length > 0 && (
+              >
+                {(editingChords, onRemoveChord, editChartLayout) => editingChords.length > 0 && (
+                  <ProgressionPlayer
+                    progression={{ ...activeProg!, chords: editingChords, chartLayout: editChartLayout }}
+                    activeChordIdx={activeChordIdx}
+                    allPos={allPos}
+                    chordPrefs={chordPrefs}
+                    onChordSelect={setActiveChordIdx}
+                    onModeChange={handleChordModeChange}
+                    onPosChange={handleChordPosChange}
+                    onReset={handleResetSelections}
+                    selPosIds={selPosIds}
+                    availableVoicings={showChordForms ? deduplicatedVoicings : undefined}
+                    selectedVoicingIdx={effectiveVoicingIdx}
+                    onSelectVoicing={handleSelectVoicing}
+                    editing={true}
+                    onRemoveChord={onRemoveChord}
+                  />
+                )}
+              </ProgressionEditor>
+            ) : activeProg && activeProg.chords.length > 0 ? (
               <ProgressionPlayer
                 progression={activeProg}
                 activeChordIdx={activeChordIdx}
@@ -1049,7 +1078,7 @@ export default function App() {
                 selectedVoicingIdx={effectiveVoicingIdx}
                 onSelectVoicing={handleSelectVoicing}
               />
-            )}
+            ) : null}
 
             {activeProg && activeProg.chords.length === 0 && !editing && (
               <p className="text-[10px] text-text-dim mb-3">
@@ -1102,12 +1131,9 @@ export default function App() {
           canShowChordForms={canShowChordForms}
           showChordForms={showChordForms}
           onToggleChordForms={setShowChordForms}
-          canShowPhrase={canShowPhrase}
-          showPhrase={showPhrase}
-          onTogglePhrase={setShowPhrase}
         />
 
-        {(showPhrase || phraseAutoPlay) && canShowPhrase && (
+        {false && (showPhrase || phraseAutoPlay) && canShowPhrase && (
           <PhraseControls
             approachTypes={phraseApproachTypes}
             onApproachTypesChange={setPhraseApproachTypes}
