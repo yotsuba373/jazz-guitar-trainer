@@ -67,7 +67,7 @@ export function OptionBar({
         </label>
       )}
 
-      {canShowPhrase && onTogglePhrase && (
+      {canShowPhrase && onTogglePhrase && progMode && (
         <label className="text-[10px] text-text-muted cursor-pointer flex items-center gap-1">
           <input type="checkbox" checked={showPhrase ?? false} onChange={e => onTogglePhrase(e.target.checked)} />
           フレーズ

@@ -58,3 +58,11 @@ export { pickWeighted } from './bebopTemplates';
 export { generatePhraseRule, buildNotePool, chooseGoalNote } from './bebopGenerator';
 export { analyzePhrase } from './phraseAnalysis';
 export { swingBeatStart, swingVolumeMult, swingDurMult } from './swing';
+export {
+  loadLickDB, clearLickDBCache, transposeLick,
+  QUALITY_TO_LICK_TYPE, SOURCE_DISPLAY_NAMES,
+  inferModeFromLick, findBestPositionForLick,
+  lickToGeneratedPhrase, mapLickToFretboard,
+  getTransposeSemitones, buildLickContext,
+  inferRhythmType,
+} from './lickEngine';

@@ -294,6 +294,28 @@ export interface GeneratedPhrase {
   };
 }
 
+// --- Lick DB Types ---
+
+/** A single note in a lick (from MIDI parser output) */
+export interface LickNote {
+  pitch?: number;       // MIDI pitch (C4=60, normalized near C4)
+  rest?: boolean;       // true for rest notes
+  beatStart: number;    // beat position (0-based, fractional)
+  duration: number;     // duration in beats
+}
+
+/** A single lick entry from the lick database */
+export interface LickEntry {
+  notes: LickNote[];
+  noteCount: number;
+  beats: number;        // total beats (4 or 8)
+  source?: string;      // artist identifier (e.g. "cannonball", "parker")
+  anacrusis?: number;   // anacrusis beats (pickup measure)
+}
+
+/** Lick database: keyed by lick type (dom7, min7, maj7, m7b5, etc.) */
+export type LickDB = Record<string, LickEntry[]>;
+
 // --- Phrase Analysis Types ---
 
 /** Per-note analysis result (computed post-hoc) */

@@ -309,6 +309,7 @@
     <a href="#constants" class="nav-link">Constants</a>
     <a href="#jazz-standards" class="nav-link">Jazz Standards (1382)</a>
     <a href="#lick-parser" class="nav-link">Lick Parser (MIDI)</a>
+    <a href="#lick-practice-ui" class="nav-link">Lick Practice UI</a>
   </div>
 
   <div class="nav-group">
@@ -1395,9 +1396,75 @@ python scripts/parse_licks.py scripts/data/midi/</code></pre>
 <h3>依存関係</h3>
 <pre><code>pip install pretty_midi</code></pre>
 
+<!-- ==================== LICK PRACTICE UI ==================== -->
+<h2 id="lick-practice-ui">Lick Practice UI</h2>
+<p>進行モードで、コード品質に合うリックを一覧表示し、選択・再生・指板表示する練習機能。</p>
+
+<h3>データフロー</h3>
+<pre><code>public/licks.json (fetch)
+    ↓ loadLickDB()
+LickDB: Record&lt;string, LickEntry[]&gt;
+    ↓ QUALITY_TO_LICK_TYPE[chord.quality]
+filteredLicks: LickEntry[]
+    ↓ buildLickContext() or lickToGeneratedPhrase()
+GeneratedPhrase
+    ↓ PhrasePath / PianoRoll / PhraseAnalysisPanel
+指板表示 + 分析パネル</code></pre>
+
+<h3>コード品質 → リックタイプ マッピング</h3>
+<table>
+  <tr><th>コード品質</th><th>リックタイプ</th></tr>
+  <tr><td>7, 7alt, 7b9, 7#11, 7b13</td><td>dom7</td></tr>
+  <tr><td>m7</td><td>min7</td></tr>
+  <tr><td>maj7</td><td>maj7</td></tr>
+  <tr><td>m7♭5</td><td>m7b5</td></tr>
+  <tr><td>mMaj7</td><td>min7 (fallback)</td></tr>
+  <tr><td>aug</td><td>maj7 (fallback)</td></tr>
+  <tr><td>dim</td><td>dom7 (fallback)</td></tr>
+</table>
+
+<h3>ピッチ→指板マッピング</h3>
+<ol>
+  <li>PoolNote[] を absolutePitch (OPEN_MIDI[s] + fret) でインデックス化</li>
+  <li>リックの各ピッチに移調オフセットを加算</li>
+  <li>PoolNote から一致するピッチを検索 → 前ノートからの弦距離最小を選択</li>
+  <li>候補なし（ポジション外）→ 全弦で fret を計算し最近弦を選択</li>
+</ol>
+
+<h3>モード/ポジション自動推定</h3>
+<ul>
+  <li><strong>inferModeFromLick()</strong>: リックのピッチクラスを各候補モードのスケール音と照合し、一致率最大のモードを選択</li>
+  <li><strong>findBestPositionForLick()</strong>: 各ポジションの absolutePitch セットとリックのピッチを照合し、含有率最大のポジションを選択</li>
+  <li>ユーザーは既存のモード/ポジション選択UIで手動変更可能（自動推定を上書き）</li>
+</ul>
+
+<h3>UIコンポーネント</h3>
+<ul>
+  <li><strong>LickControls</strong> (<code>src/components/Controls/LickControls.tsx</code>): 進行モードの ChordChart 下にリスト表示。各行に番号・音数・拍数・ソース名を表示。max-height + スクロール。▶ Play / ■ Stop ボタン</li>
+  <li>リック選択時に指板にフレーズ曲線を即時表示 + 自動再生</li>
+  <li>分析パネル (PhraseAnalysisPanel) はそのまま動作（度数/インターバル/機能ラベル）</li>
+</ul>
+
+<h3>リックエンジン (<code>src/utils/lickEngine.ts</code>)</h3>
+<table>
+  <tr><th>関数</th><th>責務</th></tr>
+  <tr><td>loadLickDB()</td><td>fetch('/licks.json') + キャッシュ</td></tr>
+  <tr><td>transposeLick()</td><td>ピッチ値を移調</td></tr>
+  <tr><td>mapLickToFretboard()</td><td>MIDI pitch → (stringIdx, fret) マッピング</td></tr>
+  <tr><td>lickToGeneratedPhrase()</td><td>LickEntry → GeneratedPhrase 変換</td></tr>
+  <tr><td>inferModeFromLick()</td><td>ピッチクラスからモード推定</td></tr>
+  <tr><td>findBestPositionForLick()</td><td>最適ポジション選択</td></tr>
+  <tr><td>buildLickContext()</td><td>全パイプライン一括実行</td></tr>
+  <tr><td>getTransposeSemitones()</td><td>移調量計算</td></tr>
+</table>
+
+<h3>通常モードの変更</h3>
+<p>通常モードではフレーズ生成UIを非表示に（OptionBar の「フレーズ」チェックボックスを進行モード限定に変更）。
+通常モードは辞典モード（モード/ポジション閲覧専用）として機能。</p>
+
 <!-- ==================== TESTING ==================== -->
 <h2 id="testing">Test Suite</h2>
-<p><code>npm test</code> — Vitest による <strong>811テスト</strong>。</p>
+<p><code>npm test</code> — Vitest による <strong>861テスト</strong>。</p>
 
 <table>
   <tr><th>Test File</th><th>Tests</th><th>Coverage</th></tr>
@@ -1414,6 +1481,7 @@ python scripts/parse_licks.py scripts/data/midi/</code></pre>
   <tr><td>bebopTemplates.test.ts</td><td>15</td><td>テンプレート構造、品質フィルタ、コンター親和、拍配分(allocateEighths/allocateBeats)</td></tr>
   <tr><td>bebopGenerator.test.ts</td><td>25</td><td>ルールベース生成 (全7モード+LydDom+Alt対応、CT表拍率、音域、跳躍制限、メタデータ、可変リズム、planSegmentRhythms、スケルトン駆動生成)</td></tr>
   <tr><td>swing.test.ts</td><td>25</td><td>スウィングタイミング, ダイナミクス倍率, アーティキュレーション倍率, 4分/3連符非適用, テンポ補正</td></tr>
+  <tr><td>lickEngine.test.ts</td><td>25</td><td>リックDB読込, 品質マッピング, 移調, 指板マッピング, モード推定, ポジション選択, GeneratedPhrase変換</td></tr>
 </table>
 
 <div class="callout warn">

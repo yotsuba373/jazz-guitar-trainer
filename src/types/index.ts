@@ -35,4 +35,7 @@ export type {
   RhythmType,
   PoolNote,
   InstrumentType,
+  LickNote,
+  LickEntry,
+  LickDB,
 } from './music';

@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import type { LabelMode, RootName, Progression, ChordNotationPrefs, ChartLayout, SongKey, ChordSlot, ApproachType, GeneratedPhrase, PhraseConfig, PhraseNote, PhraseContour, InstrumentType, PoolNote } from './types';
+import type { LabelMode, RootName, Progression, ChordNotationPrefs, ChartLayout, SongKey, ChordSlot, ApproachType, GeneratedPhrase, PhraseConfig, PhraseNote, PhraseContour, InstrumentType, PoolNote, LickDB, LickEntry } from './types';
 import { MODE_TEMPLATES, ROOTS, MODE_COLORS, OPEN_STRINGS } from './constants';
 import {
   buildFretMap, generatePositions, generateDimPositions, resolveMode,
@@ -11,9 +11,11 @@ import {
   findVoicingsInPosition,
   playNote, playChordStrum, fretToFrequency,
   generatePhraseRule, buildNotePool, schedulePhrase,
+  loadLickDB, QUALITY_TO_LICK_TYPE, buildLickContext, getTransposeSemitones,
+  lickToGeneratedPhrase,
 } from './utils';
 import { Fretboard } from './components/Fretboard';
-import { RootSelector, ModeSelector, PositionSelector, OptionBar, PhraseControls, PhraseAnalysisPanel, GlobalAudioControls } from './components/Controls';
+import { RootSelector, ModeSelector, PositionSelector, OptionBar, PhraseControls, PhraseAnalysisPanel, GlobalAudioControls, LickControls } from './components/Controls';
 import { PositionGrid } from './components/PositionGrid';
 import { ProgressionEditor, ProgressionPlayer } from './components/Progression';
 import { Footer } from './components/Footer';
@@ -183,6 +185,9 @@ export default function App() {
   const phraseAutoPlayRef = useRef(phraseAutoPlay);
   const activePhraseStopRef = useRef<{ stop: () => void } | null>(null);
   const [autoPlayPhrase, setAutoPlayPhrase] = useState<GeneratedPhrase | null>(null);
+  // Lick practice state
+  const [lickDB, setLickDB] = useState<LickDB | null>(null);
+  const [selectedLickIdx, setSelectedLickIdx] = useState<number | null>(null);
   // Refs for on-the-fly phrase chaining across chords
   const prevLastNoteRef = useRef<PhraseNote | undefined>(undefined);
   const prevContourRef = useRef<PhraseContour | undefined>(undefined);
@@ -237,21 +242,16 @@ export default function App() {
   // Reset voicing index when position/mode/root changes
   useEffect(() => { setSelectedVoicingIdx(0); }, [selPosIds, modeIdx, rootName]);
 
+  // Load lick DB on mount
+  useEffect(() => {
+    loadLickDB().then(db => setLickDB(db)).catch(() => setLickDB(null));
+  }, []);
+
   // Clear phrase history when context changes
   useEffect(() => {
     setPhraseHistory([]);
     setActivePhraseIdx(0);
   }, [rootName, modeIdx, selPosIds, activeChordIdx]);
-
-  const activePhrase = useMemo(() => {
-    // During auto-play in progression mode, show the on-the-fly generated phrase
-    if (phraseAutoPlay && progMode && autoPlayPhrase)
-      return autoPlayPhrase;
-    // Normal manual mode
-    if (showPhrase && phraseHistory.length > 0)
-      return phraseHistory[activePhraseIdx] ?? null;
-    return null;
-  }, [phraseAutoPlay, progMode, autoPlayPhrase, showPhrase, phraseHistory, activePhraseIdx]);
 
   const deg = mode.degrees;
   const rootNote = mode.notes[0];
@@ -353,6 +353,69 @@ export default function App() {
     setSelPosIds([eff.posId]);
     setOverlay(false);
   }, [progMode, activeChordIdx, effectiveAll, activeChord, isSkipped]);
+
+  // Filtered licks for the active chord in progression mode
+  const filteredLicks = useMemo((): { licks: LickEntry[]; lickType: string } => {
+    if (!lickDB || !progMode || !activeProg) return { licks: [], lickType: '' };
+    const chord = activeProg.chords[activeChordIdx];
+    if (!chord) return { licks: [], lickType: '' };
+    const lickType = QUALITY_TO_LICK_TYPE[chord.quality];
+    if (!lickType) return { licks: [], lickType: chord.quality };
+    return { licks: lickDB[lickType] ?? [], lickType };
+  }, [lickDB, progMode, activeProg, activeChordIdx]);
+
+  // Reset lick selection when chord changes
+  useEffect(() => {
+    setSelectedLickIdx(null);
+  }, [activeChordIdx]);
+
+  // Build GeneratedPhrase from selected lick
+  const activeLickPhrase = useMemo((): GeneratedPhrase | null => {
+    if (selectedLickIdx == null || !filteredLicks.licks[selectedLickIdx]) return null;
+    if (!progMode || !activeProg) return null;
+    const chord = activeProg.chords[activeChordIdx];
+    if (!chord) return null;
+
+    const lick = filteredLicks.licks[selectedLickIdx];
+    const rootSemi = ROOTS.find(r => r.name === chord.rootName)?.semitone ?? 0;
+    const ctx = buildLickContext(lick, chord.quality, chord.rootName, rootSemi);
+    if (!ctx) return null;
+
+    // If user has changed mode/position, rebuild with current selections
+    const eff = effectiveAll[activeChordIdx];
+    if (eff) {
+      const userModeIdx = eff.modeIdx;
+      const userPosId = eff.posId;
+      const userTemplate = MODE_TEMPLATES[userModeIdx];
+      const userMode = resolveMode(chord.rootName, userTemplate);
+      if (userMode.notes.length <= 7) {
+        const userFretMap = buildFretMap(userMode.semi, userMode.notes);
+        const userPositions = generatePositions(userFretMap, userMode.notes);
+        const userPos = userPositions.find(p => p.id === userPosId);
+        if (userPos) {
+          const userPool = buildNotePool(userPos, userMode, userFretMap, true);
+          const transposeSemitones = getTransposeSemitones(chord.quality, rootSemi);
+          return lickToGeneratedPhrase(
+            lick, userPosId, userTemplate.key, chord.rootName, userPool, transposeSemitones,
+          );
+        }
+      }
+    }
+
+    return ctx.phrase;
+  }, [selectedLickIdx, filteredLicks.licks, progMode, activeProg, activeChordIdx, effectiveAll]);
+
+  const activePhrase = useMemo(() => {
+    // Lick phrase takes priority in progression mode
+    if (activeLickPhrase) return activeLickPhrase;
+    // During auto-play in progression mode, show the on-the-fly generated phrase
+    if (phraseAutoPlay && progMode && autoPlayPhrase)
+      return autoPlayPhrase;
+    // Normal manual mode
+    if (showPhrase && phraseHistory.length > 0)
+      return phraseHistory[activePhraseIdx] ?? null;
+    return null;
+  }, [activeLickPhrase, phraseAutoPlay, progMode, autoPlayPhrase, showPhrase, phraseHistory, activePhraseIdx]);
 
   // Keyboard navigation for progression mode
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
@@ -959,6 +1022,33 @@ export default function App() {
                 availableVoicings={showChordForms ? deduplicatedVoicings : undefined}
                 selectedVoicingIdx={effectiveVoicingIdx}
                 onSelectVoicing={handleSelectVoicing}
+              />
+            )}
+
+            {activeProg && activeProg.chords.length > 0 && lickDB && (
+              <LickControls
+                licks={filteredLicks.licks}
+                selectedIdx={selectedLickIdx}
+                onSelect={(idx) => {
+                  setSelectedLickIdx(idx);
+                  // Auto-play lick on select
+                  const chord = activeProg.chords[activeChordIdx];
+                  if (!chord) return;
+                  const lick = filteredLicks.licks[idx];
+                  if (!lick) return;
+                  const rootSemi = ROOTS.find(r => r.name === chord.rootName)?.semitone ?? 0;
+                  const ctx = buildLickContext(lick, chord.quality, chord.rootName, rootSemi);
+                  if (ctx) playPhraseAudio(ctx.phrase);
+                }}
+                onPlay={() => { if (activeLickPhrase) playPhraseAudio(activeLickPhrase); }}
+                onStop={() => {
+                  manualPhraseRef.current?.stop();
+                  manualPhraseRef.current = null;
+                  if (manualPhraseTimer.current) clearTimeout(manualPhraseTimer.current);
+                  setIsPhraseAudioPlaying(false);
+                }}
+                isPlaying={isPhraseAudioPlaying}
+                lickType={filteredLicks.lickType}
               />
             )}
 
