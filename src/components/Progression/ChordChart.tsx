@@ -12,11 +12,12 @@ interface ChordChartProps {
   onChordSelect: (idx: number) => void;
   editing?: boolean;
   onRemoveChord?: (idx: number) => void;
+  onInsertAtBeat?: (referenceIdx: number, beat: number) => void;
 }
 
 export function ChordChart({
   progression, activeChordIdx, effectiveAll, chordPrefs, onChordSelect,
-  editing, onRemoveChord,
+  editing, onRemoveChord, onInsertAtBeat,
 }: ChordChartProps) {
   const layout = useMemo(() => getChartLayout(progression), [progression]);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -105,23 +106,94 @@ export function ChordChart({
         {measures.map((measure, mi) => {
           const isFirstCell = mi === 0;
           const isLastCell = mi === measures.length - 1;
+          const borderStyles: React.CSSProperties = {
+            borderRight: isLastCell && opts.repeatEnd
+              ? '4px double #888'
+              : '1px solid #333',
+            borderLeft: isFirstCell && opts.repeatStart
+              ? '4px double #888'
+              : undefined,
+            borderBottom: '1px solid #222',
+            borderTop: isFirstCell && opts.endingBracket
+              ? '1px solid #666'
+              : undefined,
+          };
 
+          // --- Editing mode: beat grid (always 4 columns for 4/4) ---
+          if (editing && onInsertAtBeat) {
+            const BEATS = 4;
+            const n = measure.chordIndices.length;
+            const bwSum = measure.beatWidths
+              ? measure.beatWidths.reduce((a, b) => a + b, 0)
+              : n;
+            type BeatCell = { ci: number; isStart: boolean };
+            const cells: BeatCell[] = [];
+            let acc = 0;
+            for (let i = 0; i < n; i++) {
+              const ci = measure.chordIndices[i];
+              const bw = measure.beatWidths?.[i] ?? 1;
+              const start = Math.round(acc / bwSum * BEATS);
+              acc += bw;
+              const end = Math.round(acc / bwSum * BEATS);
+              for (let b = start; b < end; b++) {
+                cells[b] = { ci, isStart: b === start };
+              }
+            }
+            // In editing mode, use uniform 1px borders + absolute repeat dots
+            const repeatStart = isFirstCell && opts.repeatStart;
+            const repeatEnd = isLastCell && opts.repeatEnd;
+            return (
+              <div
+                key={mi}
+                className="relative grid items-center min-h-[36px]"
+                style={{
+                  gridTemplateColumns: `repeat(${BEATS}, 1fr)`,
+                  borderRight: '1px solid #333',
+                  borderLeft: isFirstCell ? undefined : undefined,
+                  borderBottom: borderStyles.borderBottom,
+                  borderTop: borderStyles.borderTop,
+                }}
+              >
+                {repeatStart && (
+                  <span className="absolute left-0.5 top-1/2 -translate-y-1/2 flex flex-col text-[8px] leading-[6px] text-[#888] z-10 pointer-events-none">
+                    <span>•</span><span>•</span>
+                  </span>
+                )}
+                {repeatEnd && (
+                  <span className="absolute right-0.5 top-1/2 -translate-y-1/2 flex flex-col text-[8px] leading-[6px] text-[#888] z-10 pointer-events-none">
+                    <span>•</span><span>•</span>
+                  </span>
+                )}
+                {cells.map((cell, b) => {
+                  const dashLine = b > 0 && (
+                    <div className="absolute left-0 top-[6px] bottom-[6px] w-0"
+                      style={{ borderLeft: '1px dashed #2a2a2a' }} />
+                  );
+                  return cell.isStart ? (
+                    <div key={b} className="relative flex items-center justify-center min-w-0 py-1.5 px-0.5">
+                      {dashLine}
+                      {renderChord(cell.ci)}
+                    </div>
+                  ) : (
+                    <div key={b}
+                      className="relative flex items-center justify-center cursor-pointer py-1.5 hover:bg-[#ffffff08]"
+                      onClick={() => onInsertAtBeat(cell.ci, b + 1)}
+                      title={`${b + 1}拍目に挿入`}>
+                      {dashLine}
+                      <span className="text-[11px] text-[#444] hover:text-[#777] select-none">+</span>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          }
+
+          // --- Normal mode: flex layout ---
           return (
             <div
               key={mi}
               className="flex items-center gap-1 px-2 py-1.5 min-h-[36px]"
-              style={{
-                borderRight: isLastCell && opts.repeatEnd
-                  ? '4px double #888'
-                  : '1px solid #333',
-                borderLeft: isFirstCell && opts.repeatStart
-                  ? '4px double #888'
-                  : undefined,
-                borderBottom: '1px solid #222',
-                borderTop: isFirstCell && opts.endingBracket
-                  ? '1px solid #666'
-                  : undefined,
-              }}
+              style={borderStyles}
             >
               {isFirstCell && opts.repeatStart && (
                 <span className="flex flex-col text-[8px] leading-[6px] text-[#888] -ml-1 mr-0.5">

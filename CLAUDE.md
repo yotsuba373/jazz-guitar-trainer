@@ -64,7 +64,7 @@ src/
 │   ├── progression.ts               — parseChordSymbol(), rankPositionsByProximity(), QUALITY_TO_MODES, PRESET_PROGRESSIONS
 │   ├── guideTones.ts                — getGuideTones(), findNoteLocations(), classifyResolution()
 │   ├── jazzStandards.ts             — fetchJazzStandards(), extractStructuredChords(), songToProgression()
-│   ├── chartLayout.ts               — deriveChartLayout(), getChartLayout(), buildChordRows()
+│   ├── chartLayout.ts               — deriveChartLayout(), getChartLayout(), buildChordRows(), appendChordToLayout(), removeChordFromLayout(), insertChordAtBeat(), computeInsertFlatIndex(), getMeasureBeatInfo()
 │   ├── chordForms.ts                — findVoicingsInPosition(), VOICING_TEMPLATES, formatVoicingLabel()
 │   ├── bebopGenerator.ts            — generatePhraseRule(), buildNotePool(), chooseGoalNote()
 │   ├── bebopScheduler.ts            — buildPhrase(), fillSkeleton(), planSegmentRhythms(), absolutePitch(), pickRandom()
@@ -307,7 +307,12 @@ CSS Grid 描画
 - `chords: ChordSlot[]` フラット配列が全ロジックのソース (指板同期、ナビ等)
 - `chartLayout?: ChartLayout` は表示用メタデータ (chords[] へのインデックス参照)
 - ユーザー作成の進行 (chartLayout なし) → `deriveChartLayout()` で1コード/小節に自動生成
-- `ProgressionEditor` が chartLayout を state で保持、コード追加/削除時に invalidate
+- `ProgressionEditor` が chartLayout を state で保持、差分更新で構造を維持
+  - コード追加: `appendChordToLayout()` で末尾に新小節追加
+  - コード削除: `removeChordFromLayout()` でインデックス調整
+  - コード更新: chartLayout そのまま保持 (同じインデックス)
+  - 小節内挿入: `insertChordAtBeat()` で拍位置指定挿入 (beatWidths は比率→4拍正規化)
+- 編集モード時、ChordChart が4列ビートグリッド表示 (`+` マークで空き拍クリック→挿入)
 
 ### beatWidths の扱い
 
@@ -465,7 +470,7 @@ Footer
 - ラベル切替（音名/度数）、コード記法プリファレンス (M7/maj7/△7 等)
 - モード説明セクション: スケール音・コード構成音・フレーバーテキスト（常時表示、Fretboard 下）
 - 2モード: 辞典モード (スケール/ポジション閲覧) + 練習モード (コード進行+リック練習)
-- コード進行: 作成・編集・保存 (localStorage)、近接ポジション提案、キーボードナビ、コードインライン編集
+- コード進行: 作成・編集・保存 (localStorage)、近接ポジション提案、キーボードナビ、コードインライン編集、chartLayout差分更新保持、拍位置指定コード挿入 (ビートグリッドUI)
 - ガイドトーン (3rd/7th) 表示: 辞典モード (現モードのみ) + 練習モード (次コード3rd+解決分類)
 - JazzStandards インポート (1382曲)
 - iReal Pro 風譜面: セクションラベル、エンディング、リピート、ビート比例幅
