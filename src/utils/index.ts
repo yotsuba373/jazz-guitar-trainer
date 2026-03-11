@@ -32,6 +32,10 @@ export {
   deriveChartLayout,
   getChartLayout,
   buildChordRows,
+  removeChordFromLayout,
+  appendChordToLayout,
+  computeInsertFlatIndex,
+  insertChordAtBeat,
 } from './chartLayout';
 export {
   getGuideTones,

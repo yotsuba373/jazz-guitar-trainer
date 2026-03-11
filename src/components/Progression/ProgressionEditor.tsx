@@ -1,7 +1,7 @@
 import { useState, useEffect, type ReactNode } from 'react';
 import type { Progression, ChordSlot, ChartLayout, RootName, SongKey, ChordNotationPrefs } from '../../types';
 import { ROOTS } from '../../constants';
-import { parseChordSymbol, buildChordSlot, suggestMode, displayChordName, PRESET_PROGRESSIONS } from '../../utils';
+import { parseChordSymbol, buildChordSlot, suggestMode, displayChordName, PRESET_PROGRESSIONS, appendChordToLayout, removeChordFromLayout, computeInsertFlatIndex, insertChordAtBeat, deriveChartLayout } from '../../utils';
 import { SongImporter } from './SongImporter';
 
 interface ProgressionEditorProps {
@@ -12,7 +12,7 @@ interface ProgressionEditorProps {
   onSave: (progs: Progression[]) => void;
   onSelectProg: (idx: number) => void;
   onClose: () => void;
-  children?: (editingChords: ChordSlot[], onRemoveChord: (idx: number) => void, chartLayout: ChartLayout | undefined) => ReactNode;
+  children?: (editingChords: ChordSlot[], onRemoveChord: (idx: number) => void, chartLayout: ChartLayout | undefined, onInsertAtBeat: (referenceIdx: number, beat: number) => void) => ReactNode;
 }
 
 const btnBase = 'rounded cursor-pointer text-[10px] font-mono px-2.5 py-[5px]';
@@ -31,19 +31,24 @@ export function ProgressionEditor({
   const [showImporter, setShowImporter] = useState(false);
   // null = add mode, number = editing that chord index
   const [editIdx, setEditIdx] = useState<number | null>(null);
+  // When set, we're inserting a new chord at this beat (in the measure containing editIdx)
+  const [insertBeat, setInsertBeat] = useState<number | null>(null);
 
   // When activeChordIdx changes (user clicks chart), enter edit mode for that chord
   useEffect(() => {
     if (activeChordIdx >= 0 && activeChordIdx < chords.length) {
       const c = chords[activeChordIdx];
       setEditIdx(activeChordIdx);
+      setInsertBeat(null);
       setInput(displayChordName(c, chordPrefs));
       setError('');
     }
   }, [activeChordIdx]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleSubmit() {
-    if (editIdx != null) {
+    if (editIdx != null && insertBeat != null) {
+      insertAtBeat(insertBeat);
+    } else if (editIdx != null) {
       updateChord();
     } else {
       addChord();
@@ -60,8 +65,9 @@ export function ProgressionEditor({
     }
     setError('');
     const prevPosId = chords.length > 0 ? chords[chords.length - 1].posId : 1;
+    const newIdx = chords.length;
     setChords([...chords, buildChordSlot(trimmed, parsed, prevPosId, songKey)]);
-    setChartLayout(undefined);
+    setChartLayout(prev => prev ? appendChordToLayout(prev, newIdx) : undefined);
     setInput('');
   }
 
@@ -87,18 +93,49 @@ export function ProgressionEditor({
     const copy = [...chords];
     copy[editIdx] = updated;
     setChords(copy);
-    setChartLayout(undefined);
+    // chartLayout is unchanged — chord index stays the same
+  }
+
+  function handleBeatClick(referenceIdx: number, beat: number) {
+    setEditIdx(referenceIdx);
+    setInsertBeat(beat);
+    setInput('');
+    setError('');
+  }
+
+  function insertAtBeat(beat: number) {
+    if (editIdx == null) return;
+    const trimmed = input.trim();
+    if (!trimmed) return;
+    const parsed = parseChordSymbol(trimmed);
+    if (!parsed) {
+      setError(`"${trimmed}" は認識できないコードです`);
+      return;
+    }
+    setError('');
+    const layout = chartLayout ?? deriveChartLayout(chords);
+    const flatIdx = computeInsertFlatIndex(layout, editIdx, beat);
+    if (flatIdx == null) return;
+    const prevPosId = chords[editIdx]?.posId ?? 1;
+    const newChord = buildChordSlot(trimmed, parsed, prevPosId, songKey);
+    const newChords = [...chords];
+    newChords.splice(flatIdx, 0, newChord);
+    setChords(newChords);
+    setChartLayout(insertChordAtBeat(layout, editIdx, beat, flatIdx));
+    setInput('');
+    setEditIdx(null);
   }
 
   function cancelEdit() {
     setEditIdx(null);
+    setInsertBeat(null);
     setInput('');
     setError('');
   }
 
   function removeChord(idx: number) {
     setChords(chords.filter((_, i) => i !== idx));
-    setChartLayout(undefined);
+    setChartLayout(prev => prev ? removeChordFromLayout(prev, idx) : undefined);
     if (editIdx === idx) cancelEdit();
     else if (editIdx != null && editIdx > idx) setEditIdx(editIdx - 1);
   }
@@ -262,20 +299,27 @@ export function ProgressionEditor({
             value={input}
             onChange={e => { setInput(e.target.value); setError(''); }}
             onKeyDown={e => { if (e.key === 'Enter') handleSubmit(); if (e.key === 'Escape') cancelEdit(); }}
-            placeholder={isEditing ? `コード #${editIdx + 1} を編集` : 'Dm7, G7, CM7...'}
+            placeholder={insertBeat != null ? `${insertBeat}拍目に挿入` : isEditing ? `コード #${editIdx + 1} を編集` : 'Dm7, G7, CM7...'}
             className="bg-[#111] rounded text-[11px] text-text-primary font-mono px-2 py-1 w-32"
             style={{
               borderWidth: '1px',
               borderStyle: 'solid',
-              borderColor: error ? '#E74C3C' : isEditing ? '#F1C40F' : '#444',
+              borderColor: error ? '#E74C3C' : insertBeat != null ? '#27AE60' : isEditing ? '#F1C40F' : '#444',
             }}
           />
           {isEditing ? (
             <>
-              <button onClick={updateChord} className={btnBase}
-                style={{ border: '1px solid #F1C40F', background: '#2a2a1a', color: '#F1C40F' }}>
-                更新
-              </button>
+              {insertBeat != null ? (
+                <button onClick={() => insertAtBeat(insertBeat)} className={btnBase}
+                  style={{ border: '1px solid #27AE60', background: '#1a2a1a', color: '#27AE60' }}>
+                  挿入
+                </button>
+              ) : (
+                <button onClick={updateChord} className={btnBase}
+                  style={{ border: '1px solid #F1C40F', background: '#2a2a1a', color: '#F1C40F' }}>
+                  更新
+                </button>
+              )}
               <button onClick={cancelEdit} className={btnBase}
                 style={{ border: '1px solid #666', background: '#1a1a1a', color: '#888' }}>
                 取消
@@ -335,7 +379,7 @@ export function ProgressionEditor({
       )}
 
       {/* Render chart via children slot with editing chords */}
-      {children?.(chords, removeChord, chartLayout)}
+      {children?.(chords, removeChord, chartLayout, handleBeatClick)}
     </div>
   );
 }
