@@ -37,7 +37,7 @@ export function LickControls({
       {/* Toggle button */}
       <button
         onClick={() => setOpen(p => !p)}
-        className="rounded cursor-pointer text-[10px] font-mono px-2.5 py-[4px]"
+        className="rounded cursor-pointer text-[10px] font-mono px-2.5 h-[24px] inline-flex items-center"
         style={{
           border: `1px solid ${open ? '#FFF' : hasSelection ? '#8F8' : '#555'}`,
           background: open ? '#2a2a3a' : hasSelection ? '#1a2a1a' : '#1a1a1a',
@@ -54,7 +54,7 @@ export function LickControls({
         <>
           <button
             onClick={isPlaying ? onStop : onPlay}
-            className="rounded cursor-pointer text-[10px] font-mono px-2 py-[4px]"
+            className="rounded cursor-pointer text-[10px] font-mono px-2 h-[24px] inline-flex items-center"
             style={{
               border: '1px solid #555',
               background: isPlaying ? '#3a2020' : '#1a2a1a',
@@ -65,7 +65,7 @@ export function LickControls({
           </button>
           <button
             onClick={() => { onClear(); onStop(); }}
-            className="rounded cursor-pointer text-[10px] font-mono px-1.5 py-[4px]"
+            className="rounded cursor-pointer text-[10px] font-mono px-1.5 h-[24px] inline-flex items-center"
             style={{ border: '1px solid #444', background: '#1a1a1a', color: '#888' }}
             title="リック解除"
           >

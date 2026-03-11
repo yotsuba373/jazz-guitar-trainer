@@ -21,6 +21,8 @@ interface ProgressionPlayerProps {
   availableVoicings?: FoundVoicing[];
   selectedVoicingIdx?: number;
   onSelectVoicing?: (idx: number) => void;
+  editing?: boolean;
+  onRemoveChord?: (idx: number) => void;
 }
 
 const btnBase = 'rounded cursor-pointer text-[10px] font-mono px-2 h-[24px] inline-flex items-center';
@@ -29,6 +31,7 @@ export function ProgressionPlayer({
   progression, activeChordIdx, allPos, chordPrefs,
   onChordSelect, onModeChange, onPosChange, onReset,
   selPosIds, availableVoicings, selectedVoicingIdx, onSelectVoicing,
+  editing, onRemoveChord,
 }: ProgressionPlayerProps) {
   const chords = progression.chords;
   const activeChord = chords[activeChordIdx];
@@ -77,6 +80,8 @@ export function ProgressionPlayer({
         effectiveAll={effectiveAll}
         chordPrefs={chordPrefs}
         onChordSelect={onChordSelect}
+        editing={editing}
+        onRemoveChord={onRemoveChord}
       />
 
       {/* Active chord controls */}

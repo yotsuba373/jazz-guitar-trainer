@@ -23,6 +23,8 @@ interface GlobalAudioControlsProps {
   isPlaying?: boolean;
   onTogglePlay?: () => void;
   showPlayButton?: boolean;
+  /** Slot for leading elements (e.g. chord edit button) before play/audio controls */
+  leadingSlot?: React.ReactNode;
 }
 
 const btnBase = 'rounded cursor-pointer text-[10px] font-mono px-2 h-[24px] inline-flex items-center';
@@ -64,6 +66,7 @@ export function GlobalAudioControls({
   instrument, onInstrumentChange,
   swingEnabled, onToggleSwing, swingAmount, onSwingAmountChange,
   isPlaying, onTogglePlay, showPlayButton,
+  leadingSlot,
 }: GlobalAudioControlsProps) {
   const [bpmStr, setBpmStr] = useState(String(bpm));
   useEffect(() => setBpmStr(String(bpm)), [bpm]);
@@ -130,6 +133,7 @@ export function GlobalAudioControls({
 
   return (
     <div className="flex items-center gap-2 mb-3">
+      {leadingSlot}
       {showPlayButton && onTogglePlay && (
         <button
           onClick={onTogglePlay}

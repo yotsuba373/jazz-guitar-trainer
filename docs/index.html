@@ -347,7 +347,7 @@
   <ul>
     <li><strong>18モード対応</strong> — Diatonic 7 + Melodic Minor 7 + Harmonic Minor 2 + Diminished 2</li>
     <li><strong>7ポジション生成</strong> — 12キー × 18モード = 216パターンの指板マッピング</li>
-    <li><strong>コード進行モード</strong> — 1382曲のJazz Standards インポート、iReal Pro風譜面</li>
+    <li><strong>練習モード</strong> — 1382曲のJazz Standards インポート、iReal Pro風譜面</li>
     <li><strong>ビバップフレーズ自動生成</strong> — ルールベースエンジンによるビバップフレーズ生成</li>
     <li><strong>Drop 2/3 ボイシング</strong> — 20テンプレートによるコードフォーム表示</li>
     <li><strong>ガイドトーン表示</strong> — 3rd/7th のボイスリーディング可視化</li>
@@ -388,7 +388,7 @@ npm run lint      # ESLint</pre>
 │    ▼            ▼              ▼                     │
 │ Controls/   Fretboard/    Progression/               │
 │ ├ Root      ├ Fretboard   ├ ChordChart               │
-│ ├ Mode      ├ FretNote    ├ ProgressionEditor        │
+│ ├ Mode      ├ FretNote    ├ ProgressionEditToolbar   │
 │ ├ Position  ├ GhostNote   ├ ProgressionPlayer        │
 │ ├ OptionBar ├ PhrasePath  ├ GuideToneLine            │
 │ ├ Voicing   │             └ SongImporter             │
@@ -405,7 +405,7 @@ Utils Layer (pure functions):
 
 <h2 id="file-structure">File Structure</h2>
 <pre>src/
-├── App.tsx                       — 状態管理ハブ (通常モード + 進行モード + BPM自動再生)
+├── App.tsx                       — 状態管理ハブ (辞典モード + 練習モード + BPM自動再生)
 ├── types/music.ts                — 全型定義 (30+ types)
 ├── constants/music.ts            — MODE_TEMPLATES(18), ROOTS(12), STRING_DEG_OFFSETS, 色定義
 ├── utils/
@@ -427,7 +427,7 @@ Utils Layer (pure functions):
 ├── components/
 │   ├── Fretboard/                — SVG指板 (Fretboard, FretboardNote, GhostNote, PhrasePath)
 │   ├── Controls/                 — 全コントロールUI
-│   └── Progression/              — 進行関連 (ChordChart, Editor, Player, SongImporter)</pre>
+│   └── Progression/              — 進行関連 (ChordChart, EditToolbar, Player, SongImporter)</pre>
 
 <!-- ==================== CORE ALGORITHMS ==================== -->
 <h2 id="position-gen">Position Generation (7-Note Scales)</h2>
@@ -529,7 +529,7 @@ degree ラベル、フレーバーテキストを持ちます。</p>
 <ul>
   <li><strong>ルールベース生成</strong>: 11種のテンプレートと9種のセグメント関数でフレーズを構築</li>
   <li><strong>可変リズム</strong>: 4分音符(q)、3連符(t)、8分音符(e)、16分音符(s)の混合に対応</li>
-  <li><strong>拍数選択</strong>: 通常モードで2/3/4拍のフレーズ長を選択可能</li>
+  <li><strong>拍数選択</strong>: 辞典モードで2/3/4拍のフレーズ長を選択可能</li>
   <li><strong>ゴールノート選択</strong>: 指板クリックでゴール音を指定し、フレーズの到達点を制御</li>
   <li><strong>ピアノロール</strong>: PhraseAnalysisPanel に時間×ピッチのSVG可視化を追加</li>
   <li><strong>セグメント境界表示</strong>: フレーズ内の各セグメント境界を分析テーブルに表示。ピアノロールにも境界の垂直破線を描画</li>
@@ -647,9 +647,9 @@ degree ラベル、フレーバーテキストを持ちます。</p>
 │
 ├─ Step 3: chooseGoalNote()
 │   ├─ goalNoteOverride → ユーザー指定ゴール (最優先)
-│   ├─ 進行モード: nextChordContext → 7th→3rd 半音解決 (確定的)
+│   ├─ 練習モード: nextChordContext → 7th→3rd 半音解決 (確定的)
 │   ├─ nextChordPool あり → resolvedNextStart を確定 (次コードの解決先PoolNote)
-│   └─ 通常モード: STRONG_RESOLUTION_DEGREE_IDX で推定
+│   └─ 辞典モード: STRONG_RESOLUTION_DEGREE_IDX で推定
 │
 ├─ Step 4: resolvedStart 処理 + Start Note (GT優先)
 │   ├─ resolvedStart (inPosition=true): そのまま startNote に使用
@@ -790,13 +790,13 @@ degree ラベル、フレーバーテキストを持ちます。</p>
   <ul style="margin:4px 0 0;padding-left:20px">
     <li><strong>70% の理由</strong>: パーカーの実際のソロでは ii-V-I フレーズ境界で 60-80% 程度の 7th→3rd 半音解決が観察される。100% だとフレーズが画一化するため 30% の変化余地を残す。</li>
     <li><strong>半音（1 semitone）のみ</strong>: <code>diff === 1 || diff === 11</code> で厳密に半音差のみチェック。全音は含まない。ii→V、V→I のような典型進行でのみ発動し、半音解決がない進行ではフォールバックが機能する。</li>
-    <li><strong>通常モードのゴール音</strong>: 次コードの 3rd そのものではなく、<code>STRONG_RESOLUTION_DEGREE_IDX</code> で推定した解決先の度数に最も近い<strong>現コードの CT</strong>（特に 3rd/7th）をゴールにする。ビバップでは現コード内で解決方向を示唆するのが定石。</li>
+    <li><strong>辞典モードのゴール音</strong>: 次コードの 3rd そのものではなく、<code>STRONG_RESOLUTION_DEGREE_IDX</code> で推定した解決先の度数に最も近い<strong>現コードの CT</strong>（特に 3rd/7th）をゴールにする。ビバップでは現コード内で解決方向を示唆するのが定石。</li>
   </ul>
 </div>
 
 <h4><code>chooseGoalNote()</code> の決定ロジック</h4>
 <div class="card">
-  <div class="card-title">進行モード（nextChordContext + nextChordPool あり）</div>
+  <div class="card-title">練習モード（nextChordContext + nextChordPool あり）</div>
   <ol>
     <li>現コードの7thが次コードの3rdに半音で解決する場合 → <strong>70%の確率</strong>で現コードの7thをゴールに</li>
     <li>次コードの3rdと1半音差のCTを優先検索</li>
@@ -818,7 +818,7 @@ degree ラベル、フレーバーテキストを持ちます。</p>
 </div>
 
 <div class="card">
-  <div class="card-title">通常モード</div>
+  <div class="card-title">辞典モード</div>
   <p><code>STRONG_RESOLUTION_DEGREE_IDX</code> で「このモードが解決する先のコードの3rd」を推定。実際のゴール音は<strong>現コードのCT</strong>から選択:</p>
   <table>
     <tr><th>Mode</th><th>Resolution</th><th>Target</th></tr>
@@ -931,7 +931,7 @@ degree ラベル、フレーバーテキストを持ちます。</p>
 
 <h4>Debug Copy</h4>
 <p>テンプレート情報の右端の <strong>[📋 Debug]</strong> ボタンで、フレーズ再現に必要な全情報をクリップボードにコピー。
-コピーされるJSONには root, mode, posId, templateId, contour, goalReason, beatCount, nextChord (進行モード時),
+コピーされるJSONには root, mode, posId, templateId, contour, goalReason, beatCount, nextChord (練習モード時),
 goalOverride, notes (コンパクト形式: n=音名, s=弦, f=フレット, ct=CT, ap=アプローチ, seg=セグメント, beat=拍位置, dur=音価) が含まれます。</p>
 
 <!-- ==================== HARMONY ==================== -->
@@ -1074,11 +1074,11 @@ actualBeats = (beatWidth / sumOfBeatWidths) * 4</pre>
   <tr><td>Instrument</td><td><code>phraseInstrument</code></td><td>'guitar'</td><td>楽器選択 (guitar/saxophone)</td></tr>
 </table>
 <p>全て localStorage に永続化。<code>useRef</code> 経由でコールバック内から参照（再レンダリング回避）。
-<code>GlobalAudioControls</code> コンポーネントで両モード共通の UI を提供。
+<code>GlobalAudioControls</code> コンポーネントで練習モードの UI を提供（辞典モードでは非表示）。
 各チャンネルにミュートボタン付き（メトロノーム/コード/単音）。タップテンポ対応（TAPボタン連続タップでBPM設定）。</p>
 
 <h2 id="swing">Swing Mode</h2>
-<p>単一スライダー (0-100%) で制御する多次元スウィング。<code>GlobalAudioControls</code> ドロップダウンパネル内に配置。
+<p>単一スライダー (0-100%) で制御する多次元スウィング。<code>GlobalAudioControls</code> ドロップダウンパネル内に配置（練習モードのみ表示）。
 タイミング・ダイナミクス・アーティキュレーションの3軸を連動させ、自然なジャズフィールを実現。</p>
 
 <h3>3次元パラメータ</h3>
@@ -1167,27 +1167,47 @@ CSS Grid 描画</div>
 
 <h2 id="ui-layout">UI Layout</h2>
 
-<h4>Normal Mode</h4>
+<h4>辞典モード (Dictionary Mode)</h4>
 <pre>RootSelector (12キー)
 ModeSelector (18モード)
-GlobalAudioControls (音量ミキサー, メトロノーム, BPM, タップテンポ, スウィング)
 PositionSelector (Pos 1-7 + 全表示 + 重ねる) ＋ VoicingGrid
-OptionBar (CT, ラベル, 記法, ガイドトーン, コードフォーム, フレーズ)
-PhraseControls (フレーズON時)
-Fretboard (SVG + PhrasePath)
+OptionBar (CT, ラベル, 記法, ガイドトーン, コードフォーム)
+Fretboard (SVG) — クリック音なし、ガイドトーン表示 (現モードの3rd/7th)
 モード説明セクション
 PositionGrid (ポジション一覧カード)
 Footer</pre>
+<div class="callout">
+  <div class="callout-label">辞典モードの変更点</div>
+  <ul style="margin:4px 0 0;padding-left:20px">
+    <li>指板クリック音が無効化 (playNote 非発火)</li>
+    <li>GlobalAudioControls (再生バー) が非表示</li>
+    <li>ガイドトーンが常時表示 (現モードの 3rd/7th を指板上に表示。次コード情報はなし)</li>
+    <li>フレーズ生成UIが非表示 (OptionBar の「フレーズ」チェックボックス削除、PhraseControls 無効)</li>
+  </ul>
+</div>
 
-<h4>Progression Mode</h4>
-<pre>ProgressionEditor (編集時のみ)
+<h4>練習モード (Practice Mode)</h4>
+<pre>ProgressionEditToolbar (コンパクト2行ツールバー, 編集時のみ)
 GlobalAudioControls (▶/■ + 音量ミキサー, メトロノーム, BPM, タップテンポ, スウィング)
 ProgressionPlayer (ChordChart + モード/ポジション選択 + VoicingGrid)
-OptionBar (フレーズ含む)
-PhraseControls (フレーズON時)
+OptionBar (CT, ラベル, 記法, ガイドトーン, コードフォーム)
+LickControls (リック一覧 — フレーズ生成の唯一の手段)
 Fretboard (SVG + PhrasePath)
 モード説明セクション
 Footer</pre>
+<div class="callout">
+  <div class="callout-label">練習モードの変更点</div>
+  <ul style="margin:4px 0 0;padding-left:20px">
+    <li>ProgressionEditor が <strong>ProgressionEditToolbar</strong> にリデザイン — フルパネルからコンパクト2行ツールバーに変更:
+      <ul>
+        <li>Row 1: 進行ドロップダウン選択 + 名前入力 + キー選択</li>
+        <li>Row 2: コード入力 + 追加ボタン + プリセットドロップダウン + インポート + 保存/新規/削除</li>
+      </ul>
+    </li>
+    <li>コードリストがエディタから削除 — ChordChart 内に × 削除ボタン付きで表示 (編集時)</li>
+    <li>フレーズ生成UI非表示 (OptionBar の「フレーズ」チェックボックス削除、PhraseControls 無効)。リック選択がフレーズ生成の唯一の手段</li>
+  </ul>
+</div>
 
 <h2 id="color-system">Color System</h2>
 <table>
@@ -1398,7 +1418,7 @@ python scripts/parse_licks.py scripts/data/midi/</code></pre>
 
 <!-- ==================== LICK PRACTICE UI ==================== -->
 <h2 id="lick-practice-ui">Lick Practice UI</h2>
-<p>進行モードで、コード品質に合うリックを一覧表示し、選択・再生・指板表示する練習機能。</p>
+<p>練習モードで、コード品質に合うリックを一覧表示し、選択・再生・指板表示する練習機能。</p>
 
 <h3>データフロー</h3>
 <pre><code>public/licks.json (fetch)
@@ -1440,7 +1460,7 @@ GeneratedPhrase
 
 <h3>UIコンポーネント</h3>
 <ul>
-  <li><strong>LickControls</strong> (<code>src/components/Controls/LickControls.tsx</code>): 進行モードの ChordChart 下にリスト表示。各行に番号・音数・拍数・ソース名を表示。max-height + スクロール。▶ Play / ■ Stop ボタン</li>
+  <li><strong>LickControls</strong> (<code>src/components/Controls/LickControls.tsx</code>): 練習モードの ChordChart 下にリスト表示。各行に番号・音数・拍数・ソース名を表示。max-height + スクロール。▶ Play / ■ Stop ボタン。練習モードでフレーズを生成する唯一の手段</li>
   <li>リック選択時に指板にフレーズ曲線を即時表示 + 自動再生</li>
   <li>分析パネル (PhraseAnalysisPanel) はそのまま動作（度数/インターバル/機能ラベル）</li>
 </ul>
@@ -1458,9 +1478,10 @@ GeneratedPhrase
   <tr><td>getTransposeSemitones()</td><td>移調量計算</td></tr>
 </table>
 
-<h3>通常モードの変更</h3>
-<p>通常モードではフレーズ生成UIを非表示に（OptionBar の「フレーズ」チェックボックスを進行モード限定に変更）。
-通常モードは辞典モード（モード/ポジション閲覧専用）として機能。</p>
+<h3>辞典モードの変更</h3>
+<p>辞典モードではフレーズ生成UIを完全に非表示（OptionBar の「フレーズ」チェックボックス削除、PhraseControls 無効）。
+辞典モードはモード/ポジション閲覧専用として機能。指板クリック音も無効化され、GlobalAudioControls（再生バー）も非表示。
+ガイドトーンは辞典モードで常時表示され、現モードの 3rd/7th を指板上に表示（次コード情報はなし）。</p>
 
 <!-- ==================== TESTING ==================== -->
 <h2 id="testing">Test Suite</h2>
