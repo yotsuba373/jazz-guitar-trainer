@@ -97,6 +97,17 @@ export function ProgressionEditor({
   }
 
   function handleBeatClick(referenceIdx: number, beat: number) {
+    if (beat === 0) {
+      // Chord cell clicked in beat grid — switch to edit mode
+      setEditIdx(referenceIdx);
+      setInsertBeat(null);
+      if (referenceIdx < chords.length) {
+        setInput(displayChordName(chords[referenceIdx], chordPrefs));
+      }
+      setError('');
+      return;
+    }
+    // Empty beat clicked — switch to insert mode
     setEditIdx(referenceIdx);
     setInsertBeat(beat);
     setInput('');

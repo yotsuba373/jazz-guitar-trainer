@@ -57,7 +57,10 @@ export function ChordChart({
         {editing && onRemoveChord && (
           <button
             onClick={e => { e.stopPropagation(); onRemoveChord(ci); }}
-            className="absolute -top-1.5 -right-1.5 w-[14px] h-[14px] rounded-full bg-[#E74C3C] text-white text-[8px] leading-none flex items-center justify-center cursor-pointer hover:bg-[#C0392B]"
+            className="absolute -top-1.5 -right-2 w-[14px] h-[14px] rounded-full text-[12px] font-black leading-none flex items-center justify-center cursor-pointer"
+            style={{ background: '#444', color: '#aaa' }}
+            onMouseEnter={e => { e.currentTarget.style.background = '#E74C3C'; e.currentTarget.style.color = '#fff'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = '#444'; e.currentTarget.style.color = '#aaa'; }}
             title="削除"
           >
             ×
@@ -170,7 +173,8 @@ export function ChordChart({
                       style={{ borderLeft: '1px dashed #2a2a2a' }} />
                   );
                   return cell.isStart ? (
-                    <div key={b} className="relative flex items-center justify-center min-w-0 py-1.5 px-0.5">
+                    <div key={b} className="relative flex items-center justify-center min-w-0 py-1.5 px-0.5"
+                      onClick={() => { onChordSelect(cell.ci); onInsertAtBeat(cell.ci, 0); }}>
                       {dashLine}
                       {renderChord(cell.ci)}
                     </div>
