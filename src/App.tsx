@@ -967,6 +967,32 @@ export default function App() {
               {editing ? '編集中' : '編集'}
             </button>
           )}
+          {progMode && activeProg && activeProg.chords.length > 0 && lickDB && (
+            <LickControls
+              licks={filteredLicks.licks}
+              selectedIdx={selectedLickIdx}
+              onSelect={(idx) => {
+                setSelectedLickIdx(idx);
+                const chord = activeProg.chords[activeChordIdx];
+                if (!chord) return;
+                const lick = filteredLicks.licks[idx];
+                if (!lick) return;
+                const rootSemi = ROOTS.find(r => r.name === chord.rootName)?.semitone ?? 0;
+                const ctx = buildLickContext(lick, chord.quality, chord.rootName, rootSemi);
+                if (ctx) playPhraseAudio(ctx.phrase);
+              }}
+              onPlay={() => { if (activeLickPhrase) playPhraseAudio(activeLickPhrase); }}
+              onStop={() => {
+                manualPhraseRef.current?.stop();
+                manualPhraseRef.current = null;
+                if (manualPhraseTimer.current) clearTimeout(manualPhraseTimer.current);
+                setIsPhraseAudioPlaying(false);
+              }}
+              onClear={() => setSelectedLickIdx(null)}
+              isPlaying={isPhraseAudioPlaying}
+              lickType={filteredLicks.lickType}
+            />
+          )}
         </div>
 
         {/* Global audio controls — always visible */}
@@ -1022,33 +1048,6 @@ export default function App() {
                 availableVoicings={showChordForms ? deduplicatedVoicings : undefined}
                 selectedVoicingIdx={effectiveVoicingIdx}
                 onSelectVoicing={handleSelectVoicing}
-              />
-            )}
-
-            {activeProg && activeProg.chords.length > 0 && lickDB && (
-              <LickControls
-                licks={filteredLicks.licks}
-                selectedIdx={selectedLickIdx}
-                onSelect={(idx) => {
-                  setSelectedLickIdx(idx);
-                  // Auto-play lick on select
-                  const chord = activeProg.chords[activeChordIdx];
-                  if (!chord) return;
-                  const lick = filteredLicks.licks[idx];
-                  if (!lick) return;
-                  const rootSemi = ROOTS.find(r => r.name === chord.rootName)?.semitone ?? 0;
-                  const ctx = buildLickContext(lick, chord.quality, chord.rootName, rootSemi);
-                  if (ctx) playPhraseAudio(ctx.phrase);
-                }}
-                onPlay={() => { if (activeLickPhrase) playPhraseAudio(activeLickPhrase); }}
-                onStop={() => {
-                  manualPhraseRef.current?.stop();
-                  manualPhraseRef.current = null;
-                  if (manualPhraseTimer.current) clearTimeout(manualPhraseTimer.current);
-                  setIsPhraseAudioPlaying(false);
-                }}
-                isPlaying={isPhraseAudioPlaying}
-                lickType={filteredLicks.lickType}
               />
             )}
 
