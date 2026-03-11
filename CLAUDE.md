@@ -68,7 +68,7 @@ src/
 │   ├── chordForms.ts                — findVoicingsInPosition(), VOICING_TEMPLATES, formatVoicingLabel()
 │   ├── bebopGenerator.ts            — generatePhraseRule(), buildNotePool(), chooseGoalNote()
 │   ├── bebopScheduler.ts            — buildPhrase(), fillSkeleton(), planSegmentRhythms(), absolutePitch(), pickRandom()
-│   ├── lickEngine.ts                — loadLickDB(), transposeLick(), mapLickToFretboard(), lickToGeneratedPhrase(), inferModeFromLick(), findBestPositionForLick()
+│   ├── lickEngine.ts                — loadLickDB(), transposeLick(), mapLickToFretboard(), lickToGeneratedPhrase(), inferModeFromLick(), inferModeCandidates(), findBestPositionForLick()
 │   ├── bebopSegments.ts             — セグメント関数9種 (Arp, ScaleRun, Enclosure, OctaveDisp等) — exitAnchor/interiorAnchors対応
 │   ├── bebopTemplates.ts            — テンプレート定義11種 (日本語label+description) + 選択ロジック + pickWeighted()
 │   ├── skeleton.ts                  — buildSkeleton(), SkeletonSlot, PhraseSkeleton, コンター曲線ヘルパー
@@ -486,7 +486,7 @@ Footer
 - 楽器選択 (ギター/サックス): Web Audio API リアルタイム合成、フレーズ再生+指板クリック共通、localStorage 永続化
 - コードストラム: エレピ音 (Sine加算合成, 2nd/3rd倍音)
 - スウィングモード: 多次元スウィング (タイミング+ダイナミクス+アーティキュレーション)、0-100%連続制御、テンポ補正 (>200BPM)、PhrasePath/PianoRoll視覚同期、localStorage永続化
-- リック練習UI (練習モード): ChordChart直下の折りたたみパネル (LickPanel) にコード品質に合うリック一覧表示、安定ID(署名ハッシュ)+SVGコンター+ソース名、テキスト検索、選択→指板表示+自動再生、モード/ポジション自動推定、分析パネル対応
+- リック練習UI (練習モード): ChordChart直下の折りたたみパネル (LickPanel) にコード品質に合うリック一覧表示、安定ID(署名ハッシュ)+SVGコンター+音数/拍数+開始・終了度数&実音名+ソース名+モード候補(最大3, MODE_COLORSカラー)、テキスト検索(モード名・度数も対象)、選択→指板表示+自動再生、モード/ポジション自動推定、分析パネル対応
 - フレーズ生成UI: 非表示 (リック選択に一本化、コードは残存)
 
 ---
@@ -515,6 +515,7 @@ GeneratedPhrase → PhrasePath / PianoRoll / PhraseAnalysisPanel
 ### 自動推定
 
 - **モード推定**: `inferModeFromLick()` — リックのピッチクラスを候補モードのスケール音と照合、一致率最大を選択
+- **モード候補**: `inferModeCandidates()` — 重み付きスコアリング (表拍×2, 長音×2) で最大3件のモード候補を返す (LickPanel 表示用)
 - **ポジション選択**: `findBestPositionForLick()` — 各ポジションの absolutePitch セットとリックのピッチを照合、含有率最大を選択
 - ユーザーは既存UIで手動変更可能
 

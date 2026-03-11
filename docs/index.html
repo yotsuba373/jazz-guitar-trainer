@@ -1502,14 +1502,16 @@ GeneratedPhrase
 <h3>モード/ポジション自動推定</h3>
 <ul>
   <li><strong>inferModeFromLick()</strong>: リックのピッチクラスを各候補モードのスケール音と照合し、一致率最大のモードを選択</li>
+  <li><strong>inferModeCandidates()</strong>: 重み付きスコアリング (表拍×2, 長音×2) で最大3件のモード候補を返す。LickPanel のリスト表示に使用</li>
   <li><strong>findBestPositionForLick()</strong>: 各ポジションの absolutePitch セットとリックのピッチを照合し、含有率最大のポジションを選択</li>
   <li>ユーザーは既存のモード/ポジション選択UIで手動変更可能（自動推定を上書き）</li>
 </ul>
 
 <h3>UIコンポーネント</h3>
 <ul>
-  <li><strong>LickPanel</strong> (<code>src/components/Controls/LickPanel.tsx</code>): ChordChart 直下に折りたたみ式パネルとして配置。ヘッダークリックで展開/折りたたみ。各リックに安定ユニークID (例: D-3a7f, m-b2c1 — 署名ハッシュベース) + メロディックコンター SVG ポリライン (56x20px) + ソース名 + 音数/拍数を表示。選択中リックは左ボーダーでハイライト</li>
-  <li><strong>検索機能</strong>: テキスト入力でID・アーティスト名・音数等によるフィルタリング。フィルタ結果件数を表示</li>
+  <li><strong>LickPanel</strong> (<code>src/components/Controls/LickPanel.tsx</code>): ChordChart 直下に折りたたみ式パネルとして配置。ヘッダークリックで展開/折りたたみ。各リックに安定ユニークID + コンターSVG + 音数/拍数 + 開始・終了度数&実音名 + ソース名 + モード候補 (最大3, MODE_COLORS カラー) を表示。選択中リックは左ボーダーでハイライト</li>
+  <li><strong>検索機能</strong>: テキスト入力でID・アーティスト名・音数・モード名・度数等によるフィルタリング。フィルタ結果件数を表示</li>
+
   <li><strong>安定ID</strong>: パーサー (<code>parse_licks.py</code>) がリック内容の SHA-256 ハッシュ先頭4文字 + タイププレフィックスで生成。MIDIの順番が変わっても同じリックには同じID</li>
   <li><strong>コンタープレビュー</strong>: LickNote[] の pitch を SVG ポリラインで描画。フレーズカラー #FF6B9D、選択時は不透明、未選択時は半透明</li>
   <li><strong>折りたたみ時</strong>: 選択中リックのID + ▶/■ + ✕ ボタンをインライン表示。未選択時は「クリックで展開」ヒント</li>
@@ -1524,7 +1526,8 @@ GeneratedPhrase
   <tr><td>transposeLick()</td><td>ピッチ値を移調</td></tr>
   <tr><td>mapLickToFretboard()</td><td>MIDI pitch → (stringIdx, fret) マッピング</td></tr>
   <tr><td>lickToGeneratedPhrase()</td><td>LickEntry → GeneratedPhrase 変換</td></tr>
-  <tr><td>inferModeFromLick()</td><td>ピッチクラスからモード推定</td></tr>
+  <tr><td>inferModeFromLick()</td><td>ピッチクラスからモード推定 (単一ベスト)</td></tr>
+  <tr><td>inferModeCandidates()</td><td>重み付きスコアで最大3モード候補を返す</td></tr>
   <tr><td>findBestPositionForLick()</td><td>最適ポジション選択</td></tr>
   <tr><td>buildLickContext()</td><td>全パイプライン一括実行</td></tr>
   <tr><td>getTransposeSemitones()</td><td>移調量計算</td></tr>

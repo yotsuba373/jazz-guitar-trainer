@@ -75,7 +75,7 @@ export { swingBeatStart, swingVolumeMult, swingDurMult } from './swing';
 export {
   loadLickDB, clearLickDBCache, transposeLick,
   QUALITY_TO_LICK_TYPE, SOURCE_DISPLAY_NAMES,
-  inferModeFromLick, findBestPositionForLick,
+  inferModeFromLick, inferModeCandidates, findBestPositionForLick,
   lickToGeneratedPhrase, mapLickToFretboard,
   getTransposeSemitones, buildLickContext,
   inferRhythmType,

@@ -221,6 +221,56 @@ export function inferModeFromLick(
   return bestIdx;
 }
 
+/** Infer top mode candidates (up to 3) with weighted scoring.
+ *  On-beat and long notes contribute more to the score. */
+export function inferModeCandidates(
+  lick: LickEntry,
+  quality: string,
+  targetRootSemitone: number,
+): { modeIdx: number; score: number; total: number }[] {
+  const candidates = QUALITY_TO_MODES[quality];
+  if (!candidates || candidates.length === 0) return [];
+
+  const lickType = QUALITY_TO_LICK_TYPE[quality] ?? quality;
+  const storedRootSemitone = TYPE_ROOT_SEMITONE[lickType] ?? 0;
+  const transposeSemitones = targetRootSemitone - storedRootSemitone;
+
+  // Compute average duration for weighting
+  const pitched = lick.notes.filter(n => !n.rest && n.pitch != null);
+  if (pitched.length === 0) return candidates.slice(0, 3).map(m => ({ modeIdx: m, score: 0, total: 0 }));
+  const avgDur = pitched.reduce((s, n) => s + n.duration, 0) / pitched.length;
+
+  // Precompute per-note weight and pitch class
+  const noteData = pitched.map(n => {
+    const pc = ((n.pitch! + transposeSemitones) % 12 + 12) % 12;
+    const onBeat = Number.isInteger(n.beatStart);
+    const longNote = n.duration >= avgDur;
+    const w = (onBeat ? 2 : 1) * (longNote ? 2 : 1);
+    return { pc, w };
+  });
+  const totalWeight = noteData.reduce((s, d) => s + d.w, 0);
+
+  const CHROMATIC_NAMES = ['C', 'D♭', 'D', 'E♭', 'E', 'F', 'G♭', 'G', 'A♭', 'A', 'B♭', 'B'];
+  const rootName = CHROMATIC_NAMES[targetRootSemitone % 12];
+  const ROOTS_MAP: Record<string, number> = {
+    'C': 0, 'D♭': 1, 'D': 2, 'E♭': 3, 'E': 4, 'F': 5,
+    'G♭': 6, 'G': 7, 'A♭': 8, 'A': 9, 'B♭': 10, 'B': 11,
+  };
+  const rootOffset = ROOTS_MAP[rootName] ?? 0;
+
+  const scored = candidates.map(modeIdx => {
+    const scaleSemis = new Set(MODE_TEMPLATES[modeIdx].semi.map(s => (s + rootOffset) % 12));
+    let score = 0;
+    for (const d of noteData) {
+      if (scaleSemis.has(d.pc)) score += d.w;
+    }
+    return { modeIdx, score, total: totalWeight };
+  });
+
+  scored.sort((a, b) => b.score - a.score);
+  return scored.filter(s => s.score > 0).slice(0, 3);
+}
+
 // ---------------------------------------------------------------------------
 // Position selection
 // ---------------------------------------------------------------------------

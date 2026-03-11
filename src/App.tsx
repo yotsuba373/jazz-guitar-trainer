@@ -1075,6 +1075,8 @@ export default function App() {
                     onClear={() => setSelectedLickIdx(null)}
                     isPlaying={isPhraseAudioPlaying}
                     lickType={filteredLicks.lickType}
+                    quality={activeProg.chords[activeChordIdx]?.quality ?? ''}
+                    rootSemitone={ROOTS.find(r => r.name === activeProg.chords[activeChordIdx]?.rootName)?.semitone ?? 0}
                   />
                 )}
               />

@@ -1,6 +1,7 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import type { LickEntry } from '../../types';
-import { SOURCE_DISPLAY_NAMES } from '../../utils';
+import { SOURCE_DISPLAY_NAMES, inferModeCandidates, QUALITY_TO_LICK_TYPE } from '../../utils';
+import { MODE_TEMPLATES, MODE_COLORS } from '../../constants';
 
 /** Tiny SVG contour preview of a lick's melody */
 function LickContourMini({ notes, selected }: { notes: LickEntry['notes']; selected: boolean }) {
@@ -34,6 +35,17 @@ function LickContourMini({ notes, selected }: { notes: LickEntry['notes']; selec
   );
 }
 
+/** Root semitone values for each lick type (what key licks are stored in) */
+const TYPE_ROOT_SEMITONE: Record<string, number> = {
+  'dom7': 7, 'min7': 2, 'maj7': 0, 'm7b5': 2,
+};
+
+const CHROMATIC_DEGREE: Record<number, string> = {
+  0: 'R', 1: '♭2', 2: '2', 3: '♭3', 4: '3', 5: '4',
+  6: '♭5', 7: '5', 8: '♭6', 9: '6', 10: '♭7', 11: '7',
+};
+const CHROMATIC_NAMES = ['C','D♭','D','E♭','E','F','G♭','G','A♭','A','B♭','B'];
+
 interface LickPanelProps {
   licks: LickEntry[];
   selectedIdx: number | null;
@@ -43,10 +55,13 @@ interface LickPanelProps {
   isPlaying: boolean;
   lickType: string;
   onClear: () => void;
+  quality: string;
+  rootSemitone: number;
 }
 
 export function LickPanel({
   licks, selectedIdx, onSelect, onPlay, onStop, isPlaying, lickType, onClear,
+  quality, rootSemitone,
 }: LickPanelProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -60,7 +75,35 @@ export function LickPanel({
     el?.scrollIntoView({ block: 'nearest' });
   }, [selectedIdx, open]);
 
-  // Filter licks by search query (matches id, source display name)
+  // Precompute mode candidates + start/end note info for each lick
+  const lickMeta = useMemo(() => {
+    const lt = QUALITY_TO_LICK_TYPE[quality] ?? quality;
+    const storedRoot = TYPE_ROOT_SEMITONE[lt] ?? 0;
+    const transpose = rootSemitone - storedRoot;
+
+    return licks.map(lick => {
+      const modes = inferModeCandidates(lick, quality, rootSemitone);
+      const modeNames = modes.map(m => MODE_TEMPLATES[m.modeIdx].name);
+      const modeKeys = modes.map(m => MODE_TEMPLATES[m.modeIdx].key);
+
+      const pitched = lick.notes.filter(n => !n.rest && n.pitch != null);
+      let startDeg = '', endDeg = '', startNote = '', endNote = '';
+      if (pitched.length > 0) {
+        const info = (p: number) => {
+          const real = ((p + transpose) % 12 + 12) % 12;
+          const deg = ((p + transpose - rootSemitone) % 12 + 12) % 12;
+          return { note: CHROMATIC_NAMES[real], deg: CHROMATIC_DEGREE[deg] };
+        };
+        const s = info(pitched[0].pitch!);
+        const e = info(pitched[pitched.length - 1].pitch!);
+        startDeg = s.deg; startNote = s.note;
+        endDeg = e.deg; endNote = e.note;
+      }
+      return { modes, modeNames, modeKeys, startDeg, endDeg, startNote, endNote };
+    });
+  }, [licks, quality, rootSemitone]);
+
+  // Filter licks by search query (matches id, source display name, mode names, degrees)
   const filtered = useMemo(() => {
     if (!query.trim()) return licks.map((l, i) => ({ lick: l, origIdx: i }));
     const q = query.trim().toLowerCase();
@@ -70,12 +113,15 @@ export function LickPanel({
         ? (SOURCE_DISPLAY_NAMES[lick.source] ?? lick.source).toLowerCase()
         : '';
       const meta = `${lick.noteCount}音 ${lick.beats}拍`;
-      if (id.includes(q) || src.includes(q) || meta.includes(q)) {
+      const m = lickMeta[i];
+      const modeStr = m ? m.modeNames.join(' ').toLowerCase() : '';
+      const noteStr = m ? `${m.startDeg} ${m.endDeg} ${m.startNote} ${m.endNote}`.toLowerCase() : '';
+      if (id.includes(q) || src.includes(q) || meta.includes(q) || modeStr.includes(q) || noteStr.includes(q)) {
         acc.push({ lick, origIdx: i });
       }
       return acc;
     }, []);
-  }, [licks, query]);
+  }, [licks, query, lickMeta]);
 
   // Header bar (always visible) — acts as toggle
   const headerContent = (
@@ -216,6 +262,7 @@ export function LickPanel({
                 const sourceName = lick.source
                   ? (SOURCE_DISPLAY_NAMES[lick.source] ?? lick.source)
                   : '';
+                const meta = lickMeta[origIdx];
                 return (
                   <div
                     key={origIdx}
@@ -242,15 +289,45 @@ export function LickPanel({
                     >
                       {lick.noteCount}音
                     </span>
-                    <span className="text-[9px] text-text-dim flex-shrink-0" style={{ width: '24px' }}>
+                    <span className="text-[9px] flex-shrink-0" style={{ color: isSelected ? '#CCC' : '#999', width: '24px' }}>
                       {lick.beats}拍
                     </span>
-                    {sourceName && (
+                    {meta && meta.startDeg && (
                       <span
-                        className="text-[9px] truncate min-w-0"
-                        style={{ color: isSelected ? '#CCC' : '#555' }}
+                        className="text-[9px] font-mono flex-shrink-0 inline-flex items-center"
+                        style={{ color: isSelected ? '#CCC' : '#999', width: '42px', marginLeft: '4px' }}
                       >
-                        {sourceName}
+                        <span style={{ width: '16px', textAlign: 'center' }}>{meta.startDeg}</span>
+                        <span style={{ width: '10px', textAlign: 'center', color: isSelected ? '#888' : '#666' }}>→</span>
+                        <span style={{ width: '16px', textAlign: 'center' }}>{meta.endDeg}</span>
+                      </span>
+                    )}
+                    {meta && meta.startNote && (
+                      <span
+                        className="text-[9px] font-mono flex-shrink-0 inline-flex items-center"
+                        style={{ color: isSelected ? '#BBB' : '#888', width: '42px', marginLeft: '4px' }}
+                      >
+                        <span style={{ width: '16px', textAlign: 'center' }}>{meta.startNote}</span>
+                        <span style={{ width: '10px', textAlign: 'center', color: isSelected ? '#999' : '#666' }}>→</span>
+                        <span style={{ width: '16px', textAlign: 'center' }}>{meta.endNote}</span>
+                      </span>
+                    )}
+                    <span
+                      className="text-[9px] flex-shrink-0"
+                      style={{ color: isSelected ? '#CCC' : '#999', width: '130px', marginLeft: '4px' }}
+                    >
+                      {sourceName || '\u00A0'}
+                    </span>
+                    {meta && meta.modes.length > 0 && (
+                      <span className="text-[9px] truncate min-w-0">
+                        {meta.modes.map((m, mi) => (
+                          <span key={m.modeIdx}>
+                            {mi > 0 && <span style={{ color: '#666' }}>, </span>}
+                            <span style={{ color: MODE_COLORS[meta.modeKeys[mi]] ?? '#888' }}>
+                              {meta.modeNames[mi]}
+                            </span>
+                          </span>
+                        ))}
                       </span>
                     )}
                   </div>
