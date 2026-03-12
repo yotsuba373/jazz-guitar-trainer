@@ -67,7 +67,7 @@ export {
   playNote,
   schedulePhrase,
 } from './audioEngine';
-export { absolutePitch, buildNotePool } from './lickEngine';
+export { absolutePitch, buildNotePool, hasAlternateOctave } from './lickEngine';
 export { analyzePhrase } from './phraseAnalysis';
 export { swingBeatStart, swingVolumeMult, swingDurMult } from './swing';
 export {

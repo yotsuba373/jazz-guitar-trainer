@@ -780,7 +780,7 @@ CSS Grid 描画</div>
   <li><code>chartLayout?: ChartLayout</code> = 表示用メタデータ（chords[] へのインデックス参照）</li>
   <li>ユーザー作成進行（layoutなし）→ <code>deriveChartLayout()</code> で1コード/小節に自動生成</li>
   <li><code>beatWidths</code>: フレックス比率 — ChordChart で <code>flex: beats</code>, BPM 再生で <code>(bw/bwSum)*4</code></li>
-  <li><code>ChordSlot.lickId</code> / <code>lickHighOctave</code>: リック選択と8vaトグルをコードごとに永続化。コード切替時に自動復元、リセットで全クリア</li>
+  <li><code>ChordSlot.lickId</code> / <code>lickHighOctave</code> / <code>lickHighInstance</code>: リック選択・8va（同一インスタンス内オクターブ上）・Hi（ハイポジションインスタンス切替）をコードごとに独立永続化。コード切替時に自動復元、リセットで全クリア。8vaは音域が広すぎてプールに収まらない場合、Hiはインスタンスが1つしかないポジションでは自動disabled</li>
 </ul>
 
 <h3>chartLayout Preservation on Edit</h3>
@@ -982,7 +982,8 @@ interface ChordSlot {
   modeConfirmed?: boolean
   voicingKey?: string     // "drop2-0-5,4,3,2"
   lickId?: string         // 安定リックID (例: "D-3a7f")
-  lickHighOctave?: boolean // 8va トグル状態
+  lickHighOctave?: boolean  // 8va: 同一インスタンス内+12半音シフト
+  lickHighInstance?: boolean // Hi: ハイポジションインスタンス切替
 }
 
 // コード進行
@@ -1151,7 +1152,9 @@ GeneratedPhrase
 
   <li><strong>安定ID</strong>: パーサー (<code>parse_licks.py</code>) がリック内容の SHA-256 ハッシュ先頭4文字 + タイププレフィックスで生成。MIDIの順番が変わっても同じリックには同じID</li>
   <li><strong>コンタープレビュー</strong>: LickNote[] の pitch を SVG ポリラインで描画。フレーズカラー #FF6B9D、選択時は不透明、未選択時は半透明</li>
-  <li><strong>折りたたみ時</strong>: 選択中リックのID + ▶/■ + ✕ ボタンをインライン表示。未選択時は「クリックで展開」ヒント</li>
+  <li><strong>折りたたみ時</strong>: 選択中リックのID + ▶/■ + 8va + Hi + ✕ ボタンをインライン表示。未選択時は「クリックで展開」ヒント</li>
+  <li><strong>8va ボタン</strong>: 同一インスタンス内でオクターブ上に移動。音域が広いフレーズでプール内に収まらない場合は disabled</li>
+  <li><strong>Hi ボタン</strong>: ハイポジションインスタンスに切替。インスタンスが1つしかないポジションでは disabled。8va と独立動作（最大4通りの位置）</li>
   <li>リック選択時に指板にフレーズ曲線を即時表示 + 自動再生</li>
   <li>分析パネル (PhraseAnalysisPanel) はそのまま動作（度数/インターバル/機能ラベル）</li>
 </ul>
