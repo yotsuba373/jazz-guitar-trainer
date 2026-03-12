@@ -146,7 +146,7 @@ export default function App() {
   const [metSyncKey, setMetSyncKey] = useState(0);
   const metVolumeRef = useRef(metVolume);
   // Chord audio state
-  const [chordAudioOn, setChordAudioOn] = useState(false);
+  const [chordAudioOn, setChordAudioOn] = useState(() => localStorage.getItem('chordAudioOn') === 'true');
   const [chordVolume, setChordVolume] = useState<number>(() => {
     const saved = parseFloat(localStorage.getItem('chordVolume') ?? '');
     return isNaN(saved) ? 0.5 : saved;
@@ -493,7 +493,7 @@ export default function App() {
     chordVolumeRef.current = chordVolume;
     localStorage.setItem('chordVolume', String(chordVolume));
   }, [chordVolume]);
-  useEffect(() => { chordAudioOnRef.current = chordAudioOn; }, [chordAudioOn]);
+  useEffect(() => { chordAudioOnRef.current = chordAudioOn; localStorage.setItem('chordAudioOn', String(chordAudioOn)); }, [chordAudioOn]);
 
   // Note volume ref + persistence (covers fretboard clicks + phrase playback)
   useEffect(() => { noteVolumeRef.current = noteVolume; localStorage.setItem('noteVolume', String(noteVolume)); }, [noteVolume]);
