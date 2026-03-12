@@ -1,13 +1,69 @@
 import type {
   LickDB, LickEntry, LickNote, PoolNote, PhraseNote,
-  GeneratedPhrase, PhraseConfig, RhythmType, Mode, Position, FretMap,
+  GeneratedPhrase, RhythmType, Mode, Position, FretMap,
 } from '../types';
-import { MODE_TEMPLATES } from '../constants';
+import { MODE_TEMPLATES, OPEN_STRINGS } from '../constants';
 import { QUALITY_TO_MODES } from './progression';
 import { resolveMode } from './noteSpelling';
 import { buildFretMap, generatePositions, generateDimPositions } from './fretboard';
-import { absolutePitch } from './bebopScheduler';
-import { buildNotePool } from './bebopGenerator';
+
+// ---------------------------------------------------------------------------
+// Shared helpers (moved from bebopScheduler / bebopGenerator)
+// ---------------------------------------------------------------------------
+
+/** Absolute pitch (semitone + octave info) for interval comparison.
+ *  Uses fret as a proxy for octave height since we're on a guitar. */
+export function absolutePitch(note: { stringIdx: number; fret: number }): number {
+  const OPEN_MIDI_ABS = [64, 59, 55, 50, 45, 40]; // 1E=E4, B=B3, G=G3, D=D3, A=A2, 6E=E2
+  return OPEN_MIDI_ABS[note.stringIdx] + note.fret;
+}
+
+/** Build note pool for a position (scale + optional chromatic approach notes). */
+export function buildNotePool(
+  position: Position,
+  mode: Mode,
+  _fretMap: FretMap,
+  includeChromatic: boolean,
+): PoolNote[] {
+  const ctSet = new Set(mode.chordTones);
+  const pool: PoolNote[] = [];
+  const seen = new Set<string>();
+
+  for (const inst of position.instances) {
+    for (let s = 0; s < 6; s++) {
+      const notes = inst.strings[s];
+      if (!notes) continue;
+      for (const [noteName, fret, semi] of notes) {
+        const key = `${s}:${fret}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        pool.push({ noteName, stringIdx: s, fret, semitone: semi, isChordTone: ctSet.has(noteName), isApproach: false });
+      }
+    }
+
+    if (includeChromatic) {
+      for (let s = 0; s < 6; s++) {
+        const strNotes = inst.strings[s];
+        if (!strNotes) continue;
+        const minFret = Math.max(0, inst.fretMin - 1);
+        const maxFret = inst.fretMax + 1;
+        for (let fret = minFret; fret <= maxFret; fret++) {
+          const key = `${s}:${fret}`;
+          if (seen.has(key)) continue;
+          const semi = (OPEN_STRINGS[s] + fret) % 12;
+          const allScaleSemis = new Set(mode.semi);
+          if (!allScaleSemis.has(semi)) {
+            seen.add(key);
+            const CHROMATIC_NAMES = ['C', 'D♭', 'D', 'E♭', 'E', 'F', 'G♭', 'G', 'A♭', 'A', 'B♭', 'B'];
+            pool.push({ noteName: CHROMATIC_NAMES[semi], stringIdx: s, fret, semitone: semi, isChordTone: false, isApproach: true });
+          }
+        }
+      }
+    }
+  }
+
+  return pool;
+}
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -398,7 +454,6 @@ export function lickToGeneratedPhrase(
         isStrong: n.beatStart % 1 === 0 && (Math.floor(n.beatStart) % 2 === 0),
         duration: inferRhythmType(n.duration),
         beatStart: n.beatStart,
-        segmentIdx: 0,
       };
     }
 
@@ -414,20 +469,14 @@ export function lickToGeneratedPhrase(
       isStrong: n.beatStart % 1 === 0 && (Math.floor(n.beatStart) % 2 === 0),
       duration: inferRhythmType(n.duration),
       beatStart: n.beatStart,
-      segmentIdx: 0,
     };
   });
-
-  const config: PhraseConfig = {
-    approachTypes: [],
-  };
 
   return {
     notes,
     posId,
     modeKey,
     rootName,
-    config,
     totalBeats: lick.beats,
   };
 }

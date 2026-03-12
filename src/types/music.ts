@@ -169,30 +169,7 @@ export interface PoolNote {
   isApproach: boolean;  // chromatic note outside the scale
 }
 
-// --- Phrase Generator Metadata Types ---
-
-/** Metadata about the harmonic skeleton chosen during phrase generation */
-export interface SkeletonMeta {
-  patternLabel: string;     // "R→3→5→7"
-  direction: 'asc' | 'desc' | 'mixed';
-  continuityCtIdx?: number;  // startHintから決定されたbeat1 CT index
-  slots?: Array<{
-    beatPos: number;
-    noteName: string;
-    role: 'start' | 'downbeat-ct' | 'strong-gt' | 'target';
-    ctLabel?: string;  // e.g. 'R', '3rd', '5th', '7th'
-  }>;
-  contour?: string;  // e.g. 'ascending', 'descending', 'arch', etc.
-}
-
-/** Tag identifying a digital pattern applied to a note */
-export interface DigitalPatternTag {
-  name: string;             // "1-2-3-5"
-  position: number;         // 0-based index within the pattern (0 = first generated note after start)
-  size: number;             // total notes in the pattern (steps.length)
-}
-
-// --- Phrase Generator Types ---
+// --- Phrase / Lick Shared Types ---
 
 /** Approach group metadata — attached to notes from committed approach patterns */
 export interface ApproachGroupInfo {
@@ -211,18 +188,12 @@ export interface PhraseNote {
   semitone: number;        // absolute (0-11)
   isChordTone: boolean;
   isApproach: boolean;
-  isExtension?: boolean;   // true for 9th/13th extension tones on strong beats
   beatPosition: number;    // 1-8 (eighth note position)
   isStrong: boolean;       // true = 強拍 (metrically strong: beat 1, 3)
   approachGroup?: ApproachGroupInfo;
-  digitalPattern?: DigitalPatternTag;   // present if this note belongs to a digital pattern
-  isDim7Tone?: boolean;                 // true if part of dim7 arpeggio (e.g. ♭9 in dim7-from-3rd)
-  isBebopPassing?: boolean;             // true if bebop-scale passing tone (e.g. nat7 in Mixolydian)
-  isSkeletonBeat?: boolean;             // true if this note was a skeleton target (beats 1,3,5,goal)
   isRest?: boolean;                      // true for rest (no sound, gap in phrase path)
   duration?: RhythmType;                // note duration (default 'e' = eighth note)
   beatStart?: number;                   // absolute beat position (0-based, fractional)
-  segmentIdx?: number;                  // segment index within rule-based template
 }
 
 /** Approach note types */
@@ -236,64 +207,14 @@ export type ApproachType =
   | 'parker-enclosure'   // [CT+1] → [CT-2] → [CT-1] → CT
   | 'b9-arpeggio';       // b9→3→5→b7 (Dom7 only)
 
-/** Phrase contour shape */
-export type PhraseContour = 'arch' | 'reverse-arch' | 'descending' | 'wave' | 'ascending';
-
-/** Generation configuration */
-export interface PhraseConfig {
-  approachTypes: ApproachType[];
-  contour?: PhraseContour;       // undefined = random
-  /** Last note of the previous phrase — beat 1 will start near this position */
-  startHint?: { noteName: string; stringIdx: number; fret: number; semitone: number };
-  /** Number of eighth notes to generate (4 | 6 | 8, default: 8) */
-  phraseLength?: number;
-  /** Previous phrase's contour — used for macro-contour coherence */
-  prevContour?: PhraseContour;
-  /** Next chord context — for inter-chord voice leading (WP3) */
-  nextChordContext?: {
-    thirdNote: string;    // next chord's 3rd
-    seventhNote: string;  // next chord's 7th
-    rootNote: string;     // next chord's root
-    quality: string;      // next chord's quality
-  };
-  /** Pre-resolved start note from previous chord's VL — takes priority over startHint.
-   *  If inPosition=false, this note is played as a pickup then followed by a rest. */
-  resolvedStart?: {
-    note: PoolNote;
-    inPosition: boolean;
-  };
-  /** Previous phrase's motivic pattern — signed interval sequence (WP6) */
-  prevMotif?: number[];
-  /** Beat count for normal mode (2/3/4 beats, default 4) */
-  beatCount?: 2 | 3 | 4;
-  /** User-specified goal note override (from fretboard click) */
-  goalNoteOverride?: {
-    noteName: string; stringIdx: number; fret: number; semitone: number;
-  };
-}
-
-/** A fully generated phrase */
+/** A phrase (lick or generated) ready for display and playback */
 export interface GeneratedPhrase {
   notes: PhraseNote[];
   posId: number;
   modeKey: string;
   rootName: string;
-  config: PhraseConfig;
-  /** Intervallic motif extracted from opening notes (WP6) */
-  motif?: number[];
-  /** Harmonic skeleton pattern used during generation */
-  skeleton?: SkeletonMeta;
-  /** Reason for goal note selection */
-  goalReason?: string;
-  /** Template ID for rule-based generation */
-  templateId?: string;
   /** Total number of beats in the phrase */
   totalBeats: number;
-  /** Resolved start for the next chord's phrase (from next chord's pool) */
-  resolvedGoalForNext?: {
-    note: PoolNote;
-    inPosition: boolean;
-  };
 }
 
 // --- Lick DB Types ---
@@ -331,11 +252,6 @@ export interface NoteAnalysis {
   intervalLabel: string;        // e.g. "↑m2", "↓M3", "—"
   functionLabel: string;        // e.g. "CT (Root)", "Encl. above", "Scale tone"
   approachGroup?: ApproachGroupInfo;
-  digitalPattern?: DigitalPatternTag;
-  isDim7Tone?: boolean;
-  isBebopPassing?: boolean;
-  isExtension?: boolean;
-  isSkeletonBeat?: boolean;
 }
 
 /** Overall phrase analysis summary */
@@ -351,17 +267,7 @@ export interface PhraseAnalysisSummary {
   chordToneCount: number;
   approachNoteCount: number;
   scaleNoteCount: number;
-  skeletonLabel?: string;        // e.g. "R→3→5→7 ↑"
-  skeletonStartCtLabel?: string; // e.g. "3rd" — CT label of the starting note
-  skeletonContour?: string;      // e.g. "ascending" — contour from skeleton meta
-  skeletonHasStrongGT?: boolean; // true if any strong-gt slots exist
-  digitalPatternUsed?: string;   // e.g. "1-2-3-5"
-  digitalPatternBeats?: string;  // e.g. "3-6"
-  goalReason?: string;
-  motifLabel?: string;           // e.g. "+3, -2"
-  bebopPassingCount?: number;
   extensionCount?: number;
-  templateLabel?: string;           // rule-based engine: template name (e.g. "Arp↑+Scale↓")
 }
 
 /** Complete analysis result */

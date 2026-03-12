@@ -269,12 +269,8 @@
   </div>
 
   <div class="nav-group">
-    <div class="nav-group-title">Phrase Generator</div>
-    <a href="#phrase-overview" class="nav-link">Overview &amp; Architecture</a>
-    <a href="#phrase-skeleton" class="nav-link">Skeleton Builder</a>
-    <a href="#phrase-notepool" class="nav-link">Note Pool</a>
-    <a href="#phrase-goal" class="nav-link">Goal Note Selection</a>
-    <a href="#phrase-segments" class="nav-link">Segments &amp; Scheduler</a>
+    <div class="nav-group-title">Phrase / Lick</div>
+    <a href="#phrase-overview" class="nav-link">Phrase Generator (Legacy)</a>
     <a href="#phrase-analysis" class="nav-link">Analysis</a>
   </div>
 
@@ -325,7 +321,7 @@
 <div class="hero">
   <h1>Jazz Guitar Trainer <span>Documentation</span></h1>
   <p>Berklee 7-Position System に基づくインタラクティブなギター指板ビジュアライザー。<br>
-    ビバップフレーズの自動生成、コード進行の分析、ガイドトーンのボイスリーディングまでカバー。</p>
+    リック練習、コード進行の分析、ガイドトーンのボイスリーディングまでカバー。</p>
   <div>
     <span class="badge badge-blue">React 19</span>
     <span class="badge badge-green">TypeScript 5</span>
@@ -348,7 +344,7 @@
     <li><strong>18モード対応</strong> — Diatonic 7 + Melodic Minor 7 + Harmonic Minor 2 + Diminished 2</li>
     <li><strong>7ポジション生成</strong> — 12キー × 18モード = 216パターンの指板マッピング</li>
     <li><strong>練習モード</strong> — 1382曲のJazz Standards インポート、iReal Pro風譜面</li>
-    <li><strong>ビバップフレーズ自動生成</strong> — ルールベースエンジンによるビバップフレーズ生成</li>
+    <li><strong>リック練習</strong> — リックDB (MIDI録音) からコード品質に合うリックを選択・再生・練習</li>
     <li><strong>Drop 2/3 ボイシング</strong> — 20テンプレートによるコードフォーム表示</li>
     <li><strong>ガイドトーン表示</strong> — 3rd/7th のボイスリーディング可視化</li>
     <li><strong>BPM自動再生</strong> — メトロノーム、コード音声、フレーズ再生 (両モード共通)</li>
@@ -371,7 +367,7 @@
 <pre>npm install       # 依存インストール
 npm run dev       # 開発サーバー → http://localhost:5173
 npm run build     # tsc + vite build
-npm test          # vitest run (811 tests)
+npm test          # vitest run (701 tests)
 npm run lint      # ESLint</pre>
 
 <h2 id="architecture">Architecture</h2>
@@ -392,15 +388,15 @@ npm run lint      # ESLint</pre>
 │ ├ Position  ├ GhostNote   ├ ProgressionPlayer        │
 │ ├ OptionBar ├ PhrasePath  ├ GuideToneLine            │
 │ ├ Voicing   │             └ SongImporter             │
-│ ├ Phrase    │                                        │
+│ ├ Lick      │                                        │
 │ └ Analysis  │                                        │
 └─────────────────────────────────────────────────────┘
 
 Utils Layer (pure functions):
 ┌──────────┬──────────┬───────────┬─────────────┐
-│fretboard │guideTones│chordForms │skeleton     │
-│noteSpell │progress  │chartLayout│bebopGen     │
-│          │          │           │phraseAnalyse│
+│fretboard │guideTones│chordForms │lickEngine   │
+│noteSpell │progress  │chartLayout│phraseAnalyse│
+│          │          │           │swing        │
 └──────────┴──────────┴───────────┴─────────────┘</div>
 
 <h2 id="file-structure">File Structure</h2>
@@ -416,14 +412,10 @@ Utils Layer (pure functions):
 │   ├── jazzStandards.ts          — fetchJazzStandards(), songToProgression()
 │   ├── chartLayout.ts            — deriveChartLayout(), getChartLayout(), buildChordRows(), appendChordToLayout(), removeChordFromLayout(), insertChordAtBeat(), computeInsertFlatIndex(), getMeasureBeatInfo(), splitSection(), mergeSections(), splitEndings(), removeEndings()
 │   ├── chordForms.ts             — findVoicingsInPosition(), VOICING_TEMPLATES(20)
-│   ├── skeleton.ts               — buildSkeleton(), chooseContour(), contourCurve() (スケルトン駆動)
-│   ├── bebopGenerator.ts         — generatePhraseRule(), ルールベース生成エントリ (~150行)
-│   ├── bebopScheduler.ts         — fillSkeleton(), buildPhrase(legacy), planSegmentRhythms() (~350行)
-│   ├── bebopSegments.ts          — セグメント関数9種 (exitAnchor/interiorAnchors対応)
-│   ├── bebopTemplates.ts         — テンプレート定義11種 + 選択ロジック
+│   ├── lickEngine.ts             — absolutePitch(), buildNotePool(), loadLickDB(), transposeLick(), mapLickToFretboard(), buildLickContext()
 │   ├── phraseAnalysis.ts         — analyzePhrase(), computeSummary()
 │   ├── swing.ts                  — swingBeatStart(), swingVolumeMult(), swingDurMult()
-│   └── __tests__/                — 811 テスト
+│   └── __tests__/                — 701 テスト
 ├── components/
 │   ├── Fretboard/                — SVG指板 (Fretboard, FretboardNote, GhostNote, PhrasePath)
 │   ├── Controls/                 — 全コントロールUI
@@ -515,255 +507,38 @@ degree ラベル、フレーバーテキストを持ちます。</p>
   <tr><td>17</td><td>Diminished H-W</td><td>7</td><td>[0,1,3,4,6,7,9,10]</td></tr>
 </table>
 
-<!-- ==================== PHRASE GENERATOR ==================== -->
-<h2 id="phrase-overview">Phrase Generator — Overview</h2>
-<p>
-  フレーズジェネレーターは、<strong>スケルトン駆動アーキテクチャ</strong>でビバップフレーズを生成します。
-  <code>buildSkeleton()</code> が表拍にCT、強拍にGT (3rd/7th) を事前配置し、コンター曲線に沿った構造的骨格を構築。
-  その骨格をテンプレートとセグメント関数で肉付けする2段階方式により、
-  §1ルール (CT表拍配置、GT強拍配置) が構造的に保証されます。
-  ビバップスケール、Musical Forces スコアリングとの組み合わせで、音楽理論に基づいた自然なビバップラインを生成します。
-  生成失敗時は旧 <code>buildPhrase()</code> フォールバック → 最終フォールバック (ScaleRun) の段階的退避を行います。
-</p>
-<h4>機能</h4>
-<ul>
-  <li><strong>ルールベース生成</strong>: 11種のテンプレートと9種のセグメント関数でフレーズを構築</li>
-  <li><strong>可変リズム</strong>: 4分音符(q)、3連符(t)、8分音符(e)、16分音符(s)の混合に対応</li>
-  <li><strong>拍数選択</strong>: 辞典モードで2/3/4拍のフレーズ長を選択可能</li>
-  <li><strong>ゴールノート選択</strong>: 指板クリックでゴール音を指定し、フレーズの到達点を制御</li>
-  <li><strong>ピアノロール</strong>: PhraseAnalysisPanel に時間×ピッチのSVG可視化を追加</li>
-  <li><strong>セグメント境界表示</strong>: フレーズ内の各セグメント境界を分析テーブルに表示。ピアノロールにも境界の垂直破線を描画</li>
-</ul>
+<!-- ==================== PHRASE GENERATOR (LEGACY) ==================== -->
+<h2 id="phrase-overview">Phrase Generator (Legacy — Removed)</h2>
 
-<div class="callout success">
-  <div class="callout-label">設計哲学</div>
-  ビバップ構造ルール (David Baker, Hal Galper, Anton Schwartz 等の教育的コンセンサス) に基づき、
-  テンプレートとセグメント関数の組み合わせで音楽的なフレーズを構築。
-  Musical Forces (Steve Larson) による重力・磁力・慣性のスコアリングで自然な音選択を実現。
+<div class="callout warn">
+  <div class="callout-label">削除済み</div>
+  ルールベースのフレーズ自動生成エンジンは、リック練習システムへの方針転換に伴い削除されました。
+  以下のファイルが削除されています:
+  <ul style="margin:8px 0 0;padding-left:20px">
+    <li><code>skeleton.ts</code> — スケルトンビルダー (buildSkeleton, contourCurve 等)</li>
+    <li><code>bebopSegments.ts</code> — 9種のセグメント関数 (Arp, ScaleRun, Enclosure 等)</li>
+    <li><code>bebopTemplates.ts</code> — 11種のテンプレート定義 + 選択ロジック</li>
+    <li><code>bebopScales.ts</code> — ビバップスケール定義 + モードマッピング</li>
+    <li><code>PhraseControls.tsx</code> — フレーズ生成UI (Generate/履歴ボタン)</li>
+    <li>関連テストファイル (phraseQualityAudit, bebopSegments, bebopTemplates, bebopGenerator, skeleton, phraseAnalysis)</li>
+  </ul>
 </div>
 
-<h3>アーキテクチャ</h3>
-<ul>
-  <li><strong>スケルトンビルダー</strong> (<code>skeleton.ts</code>): <code>buildSkeleton()</code> が表拍にCT、強拍にGT (3rd/7th) を配置するスケルトン (PhraseSkeleton) を構築。
-    <code>chooseContour()</code> でstart/goalのピッチ関係からコンターを動的に導出。
-    <code>contourCurve()</code> で各拍位置のターゲットピッチを計算し、最も近いCT/GTをアンカーとして配置。
-    SkeletonSlot のロール: <code>start</code> (開始音), <code>downbeat-ct</code> (表拍CT), <code>strong-gt</code> (強拍GT), <code>target</code> (ゴール音)。
-    ビバップパッシングトーン排除 + 演奏可能性 (ピッチ距離≤12半音, 弦距離≤3) を構築段階で検証。
-    §1ルール (CT表拍配置 + GT強拍配置) が構造的に保証される</li>
-  <li><strong>ビバップスケール</strong> (<code>bebopScales.ts</code>): Dominant / Major / Dorian / Harmonic Minor の4種。モード→ビバップスケールマッピング。Diatonic 7 + Lydian Dom + Altered の9モード対応</li>
-  <li><strong>セグメント関数</strong> (<code>bebopSegments.ts</code>): Arpeggio, ScaleRun (表拍GT優先, ウェイポイントキュー方式), Enclosure (4タイプ+Delayed Resolution), 1-2-3-5, dim7From3rd, UpperStructure, ApproachCT (6タイプ+Musical Forces), Chromatic, OctaveDisp (Honeysuckle Rose) の9種。全て PoolNote[] → PoolNote[] で指板空間内動作。
-    <code>SegmentOpts</code> に <code>exitAnchor</code> (セグメント出口アンカー), <code>interiorAnchors</code> (中間アンカー), <code>beatPhase</code> (0-3の4位相) を新設。
-    ScaleRun: interiorAnchors → exitAnchor のウェイポイントキューを構築し、各ウェイポイントに接近時にsnap+方向更新。
-    スケルトンのアンカーに向かってノートを生成することで、骨格との整合性を維持</li>
-  <li><strong>テンプレート</strong> (<code>bebopTemplates.ts</code>): 11個のフレーズ構造テンプレート (Arp↑+Scale↓, Scale↓, Honeysuckle 等)。品質フィルタ・コンター親和 (+8)・重み付きランダム選択</li>
-  <li><strong>スケジューラー</strong> (<code>bebopScheduler.ts</code>):
-    <ul>
-      <li><code>fillSkeleton()</code>: スケルトン駆動でセグメントを実行するメイン関数</li>
-      <li><code>distributeAnchors()</code>: スケルトンの内部スロットを各セグメントに割当 (exit / interior)</li>
-      <li><code>planSegmentRhythms()</code>: セグメント生成前にリズムを決定</li>
-      <li>エンクロージャーセグメントは16分圧縮しない (強拍アラインメント保持)</li>
-      <li>スケルトン整合性チェック (required=trueスロットの検証) + 安全弁チェック (音域/跳躍/方向転換) を適用</li>
-      <li>テンション終止はゴールノート選択段階に移動 (<code>fillSkeleton</code> 内では処理しない)</li>
-      <li><code>assignRhythms()</code> は削除済み (deprecated → removed)</li>
-      <li>旧 <code>buildPhrase()</code> はフォールバック用に残存</li>
-    </ul>
-  </li>
-  <li><strong>Musical Forces</strong> (§9 Steve Larson): bestCandidate() に重力 (+5/-3)・磁力 (+5)・慣性 (+3) のスコアリングを加算。±4スコアジッター (stepwise/approach選択時のみ) でピッチ列多様性を確保</li>
-  <li><strong>エントリポイント</strong> (<code>bebopGenerator.ts</code>): generatePhraseRule() — buildNotePool → ゴール選択 → テンション終止判定 (26%, goalIsVL時は抑制) → <strong>スケルトン構築 (2回リトライ)</strong> → テンプレート選択 → fillSkeleton → 成功 or 旧buildPhraseフォールバック (3回リトライ) → 最終フォールバック (ScaleRun↓)。
-    SkeletonMeta に実データ (noteName, role, beatPos, ctLabel) を格納。goalReason に次コード情報を enriched</li>
-</ul>
-
-<h4>テンプレート一覧</h4>
-<table>
-  <thead><tr><th>ID</th><th>構成</th><th>コンター</th><th>重み</th><th>品質制限</th></tr></thead>
-  <tbody>
-    <tr><td>arp-up-scale-down</td><td>Arp↑ + Scale↓</td><td>arch</td><td>30</td><td>—</td></tr>
-    <tr><td>scale-down</td><td>Scale↓</td><td>descending</td><td>20</td><td>—</td></tr>
-    <tr><td>encl-arp</td><td>Encl. + Arp↑</td><td>arch</td><td>15</td><td>—</td></tr>
-    <tr><td>1235-scale-down</td><td>1235 + Scale↓</td><td>arch</td><td>15</td><td>—</td></tr>
-    <tr><td>scale-up-arp-down</td><td>Scale↑ + Arp↓</td><td>arch</td><td>10</td><td>—</td></tr>
-    <tr><td>approach-ct-chain</td><td>Approach→CT</td><td>wave</td><td>10</td><td>—</td></tr>
-    <tr><td>dim7-from-3rd</td><td>dim7 from 3rd + Scale↓</td><td>arch</td><td>15</td><td>dom7</td></tr>
-    <tr><td>upper-structure</td><td>Upper Structure + Scale↓</td><td>arch</td><td>10</td><td>m7, maj7</td></tr>
-    <tr><td>encl-scale-down</td><td>Encl. + Scale↓</td><td>descending</td><td>10</td><td>—</td></tr>
-    <tr><td>chromatic-arp-scale</td><td>Chr. + Arp↑ + Scale↓</td><td>arch</td><td>8</td><td>—</td></tr>
-    <tr><td>honeysuckle</td><td>OctaveDisp + Scale↑</td><td>ascending</td><td>8</td><td>—</td></tr>
-  </tbody>
-</table>
-
-<h4>bebop-construction-rules.md 準拠改善</h4>
-<ul>
-  <li><strong>アプローチノート多様化 (§3)</strong>: segApproachCT が6タイプのアプローチを WJD 統計ベースの重みで選択。
-    chrom-below (w=22), diatonic-above (w=25), chrom-above (w=16), diatonic-below (w=12),
-    dbl-chrom-below (w=8), dbl-chrom-above (w=7)。§3 (Anton Schwartz): 上方アプローチはdiatonic優先、chromatic は慎重に使用。Musical Forces (重力/磁力/慣性) でCTターゲット選択を最適化。</li>
-  <li><strong>エンクロージャーリライト (§4)</strong>: <code>segEnclosure</code> を <code>buildEncl()</code> ヘルパー + フォールバックチェーンで再構築。
-    Mixed (w=55), Diatonic (w=25), Chromatic (w=20), 3-note (w=15) の重み付き選択。
-    <code>synthChromNote()</code> でプール外のクロマチックアプローチ音を合成 (fretはプール範囲にクランプ)。
-    Mixed エンクロージャー: プールに上行スケール音がない場合はdiatonicを合成。下方クロマチックはスケール外を検証。
-    <code>beatPhase</code> パラメータで強拍アウェア・パディング (4位相対応)。
-    Delayed Resolution (30%) でターゲットを裏拍にずらすバリエーションも生成。
-    <strong>fillSkeleton内ではエンクロージャーの16分圧縮を行わない</strong> (スケルトンの強拍アラインメントを保持)。</li>
-  <li><strong>CT終止 → テンション終止 (§6)</strong>: テンション終止判定をスケジューラーのポスト処理から<strong>ゴールノート選択段階</strong>に移動。
-    <code>goalIsVL=true</code> (ボイスリーディング解決ゴール) 時はテンション終止を抑制し、解決の正確性を維持。
-    CT終止の26%を隣接非CTスケール音にスワップ (テンション終止) し、CT終止率~70%を実現 (WJD 63.7%に近接)。
-    fillSkeleton内でのCT終止スワップは廃止 (スケルトンのターゲットスロットが正確な音を保持)。</li>
-  <li><strong>休符/ブレス挿入 (§10)</strong>: 多セグメントテンプレートのセグメント接合部で15%確率で8分/4分休符を挿入。
-    休符後の次セグメント開始は70%裏拍/30%表拍 (フレーズ開始と同じ確率)。全フレーズの約11%に休符が出現。
-    オーディオ・SVG・ピアノロール・フレーズ分析すべてで休符に対応。</li>
-  <li><strong>開始拍分布 (§6)</strong>: startHint なし (単体生成) 時に 70% で裏拍 (beatOffset=0.5) 開始。
-    接続フレーズ (startHint あり) ではギャップなし (beatOffset=0)。
-    beatParity をセグメント関数に伝播し、ScaleRun/Enclosure のビバップパッシングトーン/CT 表拍判定を正確化。</li>
-  <li><strong>強拍ガイドトーン優先 (§1)</strong>: 開始音は 3rd/7th に2倍の重み。スケールラン中も表拍でGT候補があれば優先選択。品質チェックで強拍 (beat 1, 3) が2つ以上ある場合にGTゼロならソフト reject。</li>
-  <li><strong>方向転換強拍チェック (§9)</strong>: 方向転換の60%超が強拍 (beat 1, 3) に集中するフレーズを reject。Barry Harris / Jens Larsen ルール準拠。</li>
-  <li><strong>コンター選択 (§5)</strong>: スケルトン構築時にstart/goalのピッチ関係から動的に導出。下行時は descending(40)/arch(35) 優先、上行時は ascending(35)/reverse-arch(30) 優先。前フレーズと同コンター連続時は-50%減衰。旧固定重み (arch33/desc28) からピッチ関係ベースに変更。</li>
-</ul>
-
-<h3>生成フロー (スケルトン駆動)</h3>
-<div class="flow">
-  <span class="flow-step highlight">1. Note Pool</span>
-  <span class="flow-arrow">→</span>
-  <span class="flow-step highlight">2. Instance Scope</span>
-  <span class="flow-arrow">→</span>
-  <span class="flow-step highlight">3. Goal Note</span>
-  <span class="flow-arrow">→</span>
-  <span class="flow-step highlight">4. Start Note</span>
-  <span class="flow-arrow">→</span>
-  <span class="flow-step highlight">5. Skeleton</span>
-  <span class="flow-arrow">→</span>
-  <span class="flow-step highlight">6. Template</span>
-  <span class="flow-arrow">→</span>
-  <span class="flow-step highlight">7. fillSkeleton</span>
-  <span class="flow-arrow">→</span>
-  <span class="flow-step">8. Safety Check</span>
-</div>
-
-<div class="diagram">generatePhraseRule(position, mode, fretMap, config, targetThirdNote?) → GeneratedPhrase | null
-│
-├─ Step 1: buildNotePool()
-│   └─ スケール音 + クロマチックアプローチ音を全インスタンスから収集
-│
-├─ Step 2: Instance Scope Restriction
-│   └─ 第1インスタンスの fretMin-1 ~ fretMax+1 に制限
-│
-├─ Step 3: chooseGoalNote()
-│   ├─ goalNoteOverride → ユーザー指定ゴール (最優先)
-│   ├─ 練習モード: nextChordContext → 7th→3rd 半音解決 (確定的)
-│   ├─ nextChordPool あり → resolvedNextStart を確定 (次コードの解決先PoolNote)
-│   └─ 辞典モード: STRONG_RESOLUTION_DEGREE_IDX で推定
-│
-├─ Step 4: resolvedStart 処理 + Start Note (GT優先)
-│   ├─ resolvedStart (inPosition=true): そのまま startNote に使用
-│   ├─ resolvedStart (inPosition=false): 解決音(8分)+休符(8分)→ポジション内本体
-│   └─ なし: 3rd/7th に2倍の重み付きランダム選択, 70%裏拍開始
-│
-├─ Step 5: buildSkeleton() ★スケルトン構築★
-│   ├─ コンター選択: start/goalのピッチ関係から導出 (下行バイアス§2準拠)
-│   ├─ ビートグリッド計算 (表拍/強拍の位置)
-│   ├─ 表拍CTアンカー配置: コンター曲線に沿ってCTを配置
-│   ├─ 強拍GTバイアス: 強拍 (beat 1,3) にGT (3rd/7th) を優先配置
-│   ├─ ビバップパッシングトーン排除: スケルトン上にパッシングトーン禁止
-│   └─ 演奏可能性検証: ピッチ距離≤12半音, 弦距離≤3
-│
-├─ Step 6: Template Selection
-│   ├─ 品質フィルタ + スケルトンコンター親和重み (+8)
-│   └─ 重み付きランダム選択
-│
-├─ Step 7: fillSkeleton() ★スケルトン肉付け★
-│   ├─ distributeAnchors(): スケルトンスロットを各セグメントに割当
-│   ├─ 各セグメントに exitAnchor / interiorAnchors を渡して実行
-│   ├─ セグメント接合部の重複除去・休符挿入 (15%)
-│   ├─ リズム決定: planSegmentRhythms() + ポスト圧縮
-│   ├─ スケルトン整合性チェック (required=trueスロット検証)
-│   ├─ CT終止試行 + テンション終止 (26%)
-│   └─ ビート予算トリミング
-│
-├─ Step 8: Safety Check (安全弁のみ)
-│   ├─ ビバップパッシングトーン表拍修正
-│   ├─ 音域 4-15半音, 跳躍 ≤ 9半音
-│   └─ 方向転換強拍チェック (&gt;60%強拍→reject)
-│
-├─ スケルトンパス (2回) 失敗 → 旧buildPhraseフォールバック (3回)
-└─ 全失敗 → 最終フォールバック (ScaleRun↓)</div>
-
-<h2 id="phrase-skeleton">Skeleton Builder</h2>
 <p>
-  <code>skeleton.ts</code> はフレーズ生成の核となるスケルトン構築モジュールです。
-  セグメント実行の<strong>前に</strong>、表拍にコードトーン (CT)、強拍にガイドトーン (GT = 3rd/7th) を配置する骨格を構築します。
-  これにより、§1ルール (CT表拍配置 + GT強拍配置) が構造的に保証されます。
+  現在のフレーズ表示・再生は、リック練習システム (<a href="#lick-practice-ui">Lick Practice UI</a>) 経由で行われます。
+  ユーザーがリックを選択すると、PhrasePath (SVG曲線)、PianoRoll、PhraseAnalysisPanel で表示・分析されます。
 </p>
 
-<h3><code>buildSkeleton()</code></h3>
-<p>スケルトン構築のメイン関数。以下の手順で PhraseSkeleton を生成:</p>
-
-<ol>
-  <li><strong>コンター選択</strong> (<code>chooseContour()</code>): start/goal のピッチ関係から動的に導出
-    <ul>
-      <li>上行 (diff > 2): ascending(35), reverse-arch(30), wave(20), arch(15)</li>
-      <li>下行 (diff < -2): descending(40), arch(35), wave(15), reverse-arch(10) — §2ビバップ下行バイアス準拠</li>
-      <li>同ピッチ帯: descending(30), arch(28), wave(20), reverse-arch(14), ascending(8)</li>
-      <li>前フレーズと同コンター連続時は -50% 減衰ペナルティ</li>
-    </ul>
-  </li>
-  <li><strong>ビートグリッド計算</strong>: beatOffset〜lastBeat の範囲で表拍 (integer beats) と強拍 (beat % 2 === 0) を列挙</li>
-  <li><strong>ハードアンカー配置</strong>: start (開始音, required=true) と target (ゴール音, required=true) を固定配置</li>
-  <li><strong>表拍CTアンカー配置</strong>: 各表拍で <code>contourCurve()</code> が返すターゲットピッチに最も近いCTをアンカーとして配置。
-    <code>findAnchorCT()</code> はピッチ近接度、前アンカーからの到達可能性、弦距離をスコアリング</li>
-  <li><strong>強拍GTバイアス</strong>: 強拍 (beat 1, 3) ではCTよりGT (3rd/7th) を優先。<code>findGTNear()</code> が最適なGTを探索し、
-    見つかれば <code>strong-gt</code> ロールで配置</li>
-  <li><strong>ビバップパッシングトーン排除</strong>: <code>getBebopPassingTone()</code> で特定されたパッシングトーンはスケルトン上に配置しない</li>
-  <li><strong>演奏可能性検証</strong>: 連続スロット間で pitchDist > 12 または stringDist > 3 の場合、
-    non-required スロットを代替CTに置換またはスロット除去</li>
-</ol>
-
-<h4>SkeletonSlot ロール</h4>
+<h3>統合済みユーティリティ</h3>
+<p>以下の関数は <code>lickEngine.ts</code> に統合されています:</p>
 <table>
-  <tr><th>Role</th><th>配置条件</th><th>Required</th><th>UI記号</th></tr>
-  <tr><td><code>start</code></td><td>フレーズ開始位置</td><td>true</td><td><span style="color:#FFD700">★</span></td></tr>
-  <tr><td><code>downbeat-ct</code></td><td>表拍 (非強拍) のCT</td><td>false</td><td><span style="color:#FFD700">●</span></td></tr>
-  <tr><td><code>strong-gt</code></td><td>強拍 (beat 1, 3) のGT</td><td>false</td><td><span style="color:#FFD700">◆</span></td></tr>
-  <tr><td><code>target</code></td><td>ゴール音位置</td><td>true</td><td>—</td></tr>
+  <tr><th>関数</th><th>用途</th></tr>
+  <tr><td><code>absolutePitch()</code></td><td>stringIdx + fret から絶対ピッチ (MIDI相当) を計算</td></tr>
+  <tr><td><code>buildNotePool()</code></td><td>ポジション内のスケール音 + アプローチ音を PoolNote[] として収集。リックの指板マッピングに使用</td></tr>
 </table>
 
-<h4>コンター曲線 — <code>contourCurve()</code></h4>
-<p>位置 t (0〜1) におけるターゲットピッチを返す5種の曲線関数:</p>
-<table>
-  <tr><th>Contour</th><th>形状</th><th>説明</th></tr>
-  <tr><td><code>ascending</code></td><td>線形上昇</td><td>start → goal に直線的に上昇</td></tr>
-  <tr><td><code>descending</code></td><td>線形下降</td><td>start → goal に直線的に下降</td></tr>
-  <tr><td><code>arch</code></td><td>山型</td><td>中間点でピーク (max + peakExtra) → goal に下降</td></tr>
-  <tr><td><code>reverse-arch</code></td><td>谷型</td><td>中間点で谷 (min - peakExtra) → goal に上昇</td></tr>
-  <tr><td><code>wave</code></td><td>S字波形</td><td>1/3で谷、2/3でピーク → goal に収束</td></tr>
-</table>
-<p><code>peakExtra</code> = max(4, |goalPitch - startPitch| * 0.5) — 最低4半音の曲率を保証。</p>
-
-<h3><code>fillSkeleton()</code> — スケルトン肉付け</h3>
-<p><code>bebopScheduler.ts</code> に実装。スケルトンの骨格にセグメント関数でノートを充填:</p>
-<ol>
-  <li><code>distributeAnchors()</code>: 内部スロット (start/target以外) を各セグメントのビート範囲に割当。
-    セグメント末尾付近のスロットは <code>exit</code> アンカー、それ以外は <code>interior</code> アンカーとして配分</li>
-  <li>各セグメントに <code>exitAnchor</code> / <code>interiorAnchors</code> を渡して実行</li>
-  <li>セグメント接合部の重複除去・休符挿入 (15%)</li>
-  <li>リズム決定: <code>planSegmentRhythms()</code> + ポスト圧縮 (chromaticのみ16分, エンクロージャーは圧縮しない)</li>
-  <li>CT/GT促進パス (スケルトンが保証しきれなかったケースの軽量フォールバック)</li>
-  <li>CT終止試行 (テンション終止はゴール選択段階で処理済み)</li>
-  <li>ビート予算トリミング</li>
-  <li>スケルトン整合性チェック: required=true のスロット (start/target) が出力に含まれるか検証</li>
-</ol>
-
-<div class="callout design">
-  <div class="callout-label">設計判断: エンクロージャーの16分圧縮を廃止</div>
-  旧 <code>buildPhrase()</code> ではエンクロージャーセグメントの35%を16分音符に圧縮していたが、
-  <code>fillSkeleton()</code> ではこれを行わない。理由: スケルトンが強拍にGTアンカーを配置しており、
-  エンクロージャーの圧縮は強拍アラインメントを崩す可能性があるため。
-</div>
-
-<h2 id="phrase-notepool">Note Pool &amp; Instance Scope</h2>
-
-<h3><code>buildNotePool()</code></h3>
-<p>ポジション内の全スケール音を収集し、オプションでクロマチックアプローチ音を追加します。</p>
-
+<h4>PoolNote の構造</h4>
 <div class="card">
-  <div class="card-title">PoolNote の構造</div>
 <pre>{
   noteName: string,       // "C", "D♭", etc.
   stringIdx: number,      // 0 (1E) ~ 5 (6E)
@@ -774,109 +549,9 @@ degree ラベル、フレーバーテキストを持ちます。</p>
 }</pre>
 </div>
 
-<h3>Instance Scope Restriction</h3>
-<p>音域をコンパクトに保つため、<strong>第1インスタンスの範囲</strong>に制限します。</p>
-<ul>
-  <li><code>activePool</code>: <code>instFretMin - 1</code> 〜 <code>instFretMax + 1</code> のノートのみ</li>
-  <li><code>activeCtPool</code>: activePool のうちコードトーンのみ</li>
-  <li>プール不足時 (≤6音 or CT<2) は全プールにフォールバック</li>
-</ul>
-
-<h2 id="phrase-goal">Goal Note Selection</h2>
-<p>フレーズの最終音（beat 8）を最初に決定します。これが全体の方向性を決めます。</p>
-
-<div class="callout design">
-  <div class="callout-label">設計根拠</div>
-  <ul style="margin:4px 0 0;padding-left:20px">
-    <li><strong>70% の理由</strong>: パーカーの実際のソロでは ii-V-I フレーズ境界で 60-80% 程度の 7th→3rd 半音解決が観察される。100% だとフレーズが画一化するため 30% の変化余地を残す。</li>
-    <li><strong>半音（1 semitone）のみ</strong>: <code>diff === 1 || diff === 11</code> で厳密に半音差のみチェック。全音は含まない。ii→V、V→I のような典型進行でのみ発動し、半音解決がない進行ではフォールバックが機能する。</li>
-    <li><strong>辞典モードのゴール音</strong>: 次コードの 3rd そのものではなく、<code>STRONG_RESOLUTION_DEGREE_IDX</code> で推定した解決先の度数に最も近い<strong>現コードの CT</strong>（特に 3rd/7th）をゴールにする。ビバップでは現コード内で解決方向を示唆するのが定石。</li>
-  </ul>
-</div>
-
-<h4><code>chooseGoalNote()</code> の決定ロジック</h4>
-<div class="card">
-  <div class="card-title">練習モード（nextChordContext + nextChordPool あり）</div>
-  <ol>
-    <li>現コードの7thが次コードの3rdに半音で解決する場合 → <strong>70%の確率</strong>で現コードの7thをゴールに</li>
-    <li>次コードの3rdと1半音差のCTを優先検索</li>
-    <li>フォールバック: 次コードの3rdと同名のCTを選択</li>
-    <li><strong>resolvedNextStart</strong>: ゴール音に absolutePitch が最も近い次コードプール内の音を確定。次コードのポジション fretMin〜fretMax 内かどうかで <code>inPosition</code> を設定</li>
-  </ol>
-</div>
-
-<div class="card">
-  <div class="card-title">コード間ボイスリーディング接続 (resolvedStart)</div>
-  <p>演奏者の思考を再現する VL 意図の伝達メカニズム:</p>
-  <ol>
-    <li>コードA: <code>chooseGoalNote()</code> が <code>resolvedNextStart</code> を確定（次コードの解決先 PoolNote + inPosition フラグ）</li>
-    <li>コードA: フレーズ生成、ゴール到達時に <code>resolvedGoalForNext</code> を返す</li>
-    <li>コードB: <code>config.resolvedStart</code> として受け取り、<code>startHint</code> より優先</li>
-  </ol>
-  <p><strong>inPosition=true</strong>: 解決音をそのまま次フレーズの開始音に使用（シームレス接続）</p>
-  <p><strong>inPosition=false</strong>: 解決音を1音(8分音符)で鳴らし、8分休符を挿入してからポジション内で本体開始（演奏者の「解決→ブレス→新ポジション」の動き）</p>
-</div>
-
-<div class="card">
-  <div class="card-title">辞典モード</div>
-  <p><code>STRONG_RESOLUTION_DEGREE_IDX</code> で「このモードが解決する先のコードの3rd」を推定。実際のゴール音は<strong>現コードのCT</strong>から選択:</p>
-  <table>
-    <tr><th>Mode</th><th>Resolution</th><th>Target</th></tr>
-    <tr><td>Ionian</td><td>I → IV</td><td>IVの3rd (scale deg 6)</td></tr>
-    <tr><td>Dorian</td><td>ii → V</td><td>Vの3rd (scale deg 7)</td></tr>
-    <tr><td>Mixolydian</td><td>V → I</td><td>Iの3rd (scale deg 3)</td></tr>
-    <tr><td>Aeolian</td><td>vi → ii</td><td>iiの3rd (scale deg 4)</td></tr>
-  </table>
-</div>
-
-
-<h2 id="phrase-segments">Segments &amp; Scheduler</h2>
-
-<h3>SegmentOpts — スケルトン対応拡張</h3>
-<p>全9セグメント関数に渡されるオプション。スケルトン駆動に対応して以下のフィールドが追加:</p>
-<pre>interface SegmentOpts {
-  goalNote?: PoolNote;        // セグメント末尾のターゲットCT
-  quality?: string;           // コードクオリティ
-  beatParity?: number;        // 0 = 表拍開始, 1 = 裏拍開始
-  beatPhase?: number;         // 0-3: 4位相 (strong-on/strong-off/nonstrong-on/nonstrong-off)
-  rhythm?: RhythmType;        // セグメントのリズム (planSegmentRhythmsで決定)
-  exitAnchor?: PoolNote;      // ★ スケルトンの出口アンカー (セグメントはこの音に向かう)
-  interiorAnchors?: PoolNote[]; // ★ 中間アンカー (経由すべき音)
-}</pre>
-
-<h4>exitAnchor / interiorAnchors の効果</h4>
-<table>
-  <tr><th>Segment</th><th>exitAnchor の利用</th><th>interiorAnchors の利用</th></tr>
-  <tr><td>scaleRun</td><td>出口方向の決定 + 終点スナップ</td><td>経由ノートとして方向制御</td></tr>
-  <tr><td>arpeggio</td><td>アルペジオの終点CT</td><td>—</td></tr>
-  <tr><td>enclosure</td><td>エンクロージャーのターゲットCT</td><td>—</td></tr>
-  <tr><td>approachCT</td><td>アプローチ先CT</td><td>—</td></tr>
-  <tr><td>octaveDisp</td><td>オクターブの選択バイアス</td><td>—</td></tr>
-  <tr><td>1235 / dim7 / upper / chromatic</td><td>パターン終点の調整</td><td>—</td></tr>
-</table>
-
-<h3>segEnclosure リライト</h3>
-<p><code>buildEncl()</code> ヘルパーと <code>synthChromNote()</code> による再構築:</p>
-<ul>
-  <li><strong>buildEncl(type)</strong>: エンクロージャータイプ別のノート配列を生成。失敗時は null を返し、フォールバックチェーン (diatonic → mixed → chromatic) で代替</li>
-  <li><strong>synthChromNote(ref, semiOffset)</strong>: プール外のクロマチック音を合成。fret はプールの fretMin〜fretMax にクランプして位置範囲違反 (U.1) を回避</li>
-  <li><strong>Mixed エンクロージャー (w=55)</strong>: 上方はdiatonic (プールに音がなければスケールセミトーンから合成)、下方はchromatic (スケール外を検証)</li>
-  <li><strong>beatPhase パディング</strong>: <code>beatPhase</code> (0-3) に基づいてターゲットが表拍に着地するようにスケール音をプリペンド。位相ごとに必要パッド数を計算</li>
-</ul>
-
-<h3>スケジューラー変更まとめ</h3>
-<table>
-  <tr><th>項目</th><th>旧 (buildPhrase)</th><th>新 (fillSkeleton)</th></tr>
-  <tr><td>アンカー配分</td><td>なし</td><td><code>distributeAnchors()</code> でスケルトンスロットをセグメント別に配分</td></tr>
-  <tr><td>エンクロージャー圧縮</td><td>35%で16分に圧縮</td><td>圧縮しない (強拍アラインメント保持)</td></tr>
-  <tr><td>テンション終止</td><td>ポスト処理で26%スワップ</td><td>ゴールノート選択段階で処理 (goalIsVL時は抑制)</td></tr>
-  <tr><td>assignRhythms()</td><td>deprecated (存在)</td><td>削除済み</td></tr>
-  <tr><td>整合性チェック</td><td>なし</td><td>required=true スロットが出力に含まれるか検証</td></tr>
-</table>
-
 <h2 id="phrase-analysis">Phrase Analysis</h2>
-<p><code>analyzePhrase()</code> がフレーズの各ノートを分析し、PhraseAnalysisPanel で表示します。
-全ラベルは日本語にローカライズ済みです。</p>
+<p><code>analyzePhrase()</code> がリックの各ノートを分析し、PhraseAnalysisPanel で表示します。
+リック選択時に自動的に分析結果が生成されます。全ラベルは日本語にローカライズ済みです。</p>
 
 <h4>Per-Note Analysis</h4>
 <table>
@@ -895,44 +570,15 @@ degree ラベル、フレーバーテキストを持ちます。</p>
   <tr><td>thirdsPct</td><td>3-4st の割合</td></tr>
   <tr><td>rangeSemitones</td><td>フレーズ全体の音域幅</td></tr>
   <tr><td>directionChanges</td><td>方向転換の回数</td></tr>
-  <tr><td>goalReason</td><td>ゴール音の選択理由（事後検証済み: 実際の最終音がゴールと異なる場合は「CT到達」または「テンプレート終端」に更新。次コード情報を含む enriched 形式）</td></tr>
   <tr><td>motifLabel</td><td>モチーフパターン (例: "+3, -2")</td></tr>
-  <tr><td>templateLabel</td><td>テンプレート名 (例: "Arp↑+Scale↓")。サマリー行に表示</td></tr>
-  <tr><td>skeletonStartCtLabel</td><td>スケルトン開始音のCTラベル (例: "3rd", "R")。スケルトン使用時のみ</td></tr>
-  <tr><td>skeletonContour</td><td>スケルトンが選択したコンター (例: "ascending", "arch")。config.contour より正確</td></tr>
-  <tr><td>skeletonHasStrongGT</td><td>スケルトンに strong-gt ロールのスロットが存在するか。true = 強拍GT配置あり</td></tr>
 </table>
 
-<h4>Skeleton Role Symbols in UI</h4>
-<p>PhraseAnalysisPanel の拍位置列にスケルトンのロール記号を表示:</p>
-<table>
-  <tr><th>記号</th><th>ロール</th><th>意味</th><th>色</th></tr>
-  <tr><td>★</td><td><code>start</code></td><td>スケルトン開始音</td><td>#FFD700 (金)</td></tr>
-  <tr><td>●</td><td><code>downbeat-ct</code></td><td>表拍CTアンカー</td><td>#FFD700</td></tr>
-  <tr><td>◆</td><td><code>strong-gt</code></td><td>強拍GTアンカー</td><td>#FFD700</td></tr>
-</table>
-<p><code>isSkeletonBeat=true</code> のノートは太字 + 金色背景ハイライトで表示。
-ノートの beatStart とスケルトンスロットの beatPos を照合してマッチング。</p>
-
-<h4>Enhanced Narrative</h4>
-<p>ナラティブ生成にスケルトン情報を統合:</p>
-<ul>
-  <li>スケルトンパターンラベル (例: "R→3→5→7") + 起点CTラベル + コンター名</li>
-  <li>強拍GT配置ありの場合は「強拍GT配置」を付記</li>
-  <li>コンター名は日本語化: arch→アーチ, descending→下行, ascending→上行, wave→波形, reverse-arch→逆アーチ</li>
-</ul>
-
-<h4>Template Detail Display</h4>
-<p>分析パネル展開時、テンプレート情報を各セグメントの種類・方向・拍配分で表示:</p>
-<pre><code>テンプレート: Arp↑+Scale↓
-  ① Arp ↑ (2拍) 4音 → ② Scale ↓ (残) 6音</code></pre>
-<p>セグメントタイプは短縮名で表示: Arp, Scale, Encl, 1235, App→CT, dim7, Upper, Chr, OctDisp。
-テンプレート名ホバーで日本語フレーバーテキスト (description) をツールチップ表示。各テンプレートの音楽的意図を簡潔に説明。</p>
+<h4>Narrative</h4>
+<p>ナラティブ生成はリックの分析結果を自然言語で要約します。音域、方向性、CT率などの統計情報を含みます。</p>
 
 <h4>Debug Copy</h4>
-<p>テンプレート情報の右端の <strong>[📋 Debug]</strong> ボタンで、フレーズ再現に必要な全情報をクリップボードにコピー。
-コピーされるJSONには root, mode, posId, templateId, contour, goalReason, beatCount, nextChord (練習モード時),
-goalOverride, notes (コンパクト形式: n=音名, s=弦, f=フレット, ct=CT, ap=アプローチ, seg=セグメント, beat=拍位置, dur=音価) が含まれます。</p>
+<p>分析パネルの <strong>[📋 Debug]</strong> ボタンで、リックの分析情報をクリップボードにコピー。
+コピーされるJSONには root, mode, posId, notes (コンパクト形式: n=音名, s=弦, f=フレット, ct=CT, ap=アプローチ, beat=拍位置, dur=音価) が含まれます。</p>
 
 <!-- ==================== HARMONY ==================== -->
 <h2 id="guide-tones">Guide Tones &amp; Voice Leading</h2>
@@ -1227,7 +873,7 @@ Footer</pre>
     <li>指板クリック音が無効化 (playNote 非発火)</li>
     <li>GlobalAudioControls (再生バー) が非表示</li>
     <li>ガイドトーンが常時表示 (現モードの 3rd/7th を指板上に表示。次コード情報はなし)</li>
-    <li>フレーズ生成UIが非表示 (OptionBar の「フレーズ」チェックボックス削除、PhraseControls 無効)</li>
+    <li>フレーズ生成UIなし (フレーズジェネレーターは削除済み)</li>
   </ul>
 </div>
 
@@ -1254,7 +900,7 @@ Footer</pre>
       </ul>
     </li>
     <li>コードリストがエディタから削除 — ChordChart 内に × 削除ボタン付きで表示 (編集時)。4列ビートグリッドで拍位置にコード挿入可能</li>
-    <li>フレーズ生成UI非表示 (OptionBar の「フレーズ」チェックボックス削除、PhraseControls 無効)。リック選択がフレーズ生成の唯一の手段</li>
+    <li>リック選択がフレーズ表示の唯一の手段 (フレーズジェネレーターは削除済み)</li>
   </ul>
 </div>
 
@@ -1306,7 +952,7 @@ interface Mode {
   chordSub?: string        // Subscript suffix
 }
 
-// フレーズノート
+// フレーズノート (リック表示・分析に使用)
 interface PhraseNote {
   noteName: string
   stringIdx: number        // 0-5
@@ -1317,37 +963,13 @@ interface PhraseNote {
   isExtension?: boolean
   beatPosition: number     // 1-8
   isStrong: boolean        // true = 強拍 (metrically strong: beat 1, 3)
-  approachGroup?: ApproachGroupInfo
-  digitalPattern?: DigitalPatternTag   // デジタルパターンのタグ
-  isDim7Tone?: boolean                 // dim7アルペジオ構成音 (♭9等)
-  isBebopPassing?: boolean             // ビバップ経過音
-  isSkeletonBeat?: boolean             // スケルトン拍
-  isRest?: boolean                     // 休符 (セグメント接合部ブレス)
+  isRest?: boolean                     // 休符
   duration?: RhythmType                // 音価 (q/t/e/s)
   beatStart?: number                   // 絶対拍位置 (0起点)
 }
 
 type RhythmType = 'q' | 't' | 'e' | 's'  // 4分/3連/8分/16分
 type InstrumentType = 'guitar' | 'saxophone'  // フレーズ再生楽器
-
-// 生成メタデータ型
-interface SkeletonMeta {
-  patternLabel: string     // "R→3→5→7"
-  direction: 'asc' | 'desc' | 'mixed'
-  continuityCtIdx?: number // startHintから決定されたbeat1 CT index
-  slots?: Array&lt;{          // ★ スケルトンスロット実データ
-    beatPos: number;
-    noteName: string;
-    role: 'start' | 'downbeat-ct' | 'strong-gt' | 'target';
-    ctLabel?: string;      // 'R', '3rd', '5th', '7th'
-  }&gt;;
-  contour?: string;        // スケルトンが選択したコンター (ascending/descending/arch/...)
-}
-interface DigitalPatternTag {
-  name: string             // "1-2-3-5"
-  position: number         // 0-based index
-  size: number             // pattern length
-}
 
 // コードスロット (各コードのユーザー選択を永続化)
 interface ChordSlot {
@@ -1550,30 +1172,25 @@ GeneratedPhrase
 </table>
 
 <h3>辞典モードの変更</h3>
-<p>辞典モードではフレーズ生成UIを完全に非表示（OptionBar の「フレーズ」チェックボックス削除、PhraseControls 無効）。
-辞典モードはモード/ポジション閲覧専用として機能。指板クリック音も無効化され、GlobalAudioControls（再生バー）も非表示。
-ガイドトーンは辞典モードで常時表示され、現モードの 3rd/7th を指板上に表示（次コード情報はなし）。</p>
+<p>辞典モードはモード/ポジション閲覧専用として機能。指板クリック音も無効化され、GlobalAudioControls（再生バー）も非表示。
+ガイドトーンは辞典モードで常時表示され、現モードの 3rd/7th を指板上に表示（次コード情報はなし）。
+フレーズ生成・リック練習は練習モード専用。</p>
 
 <!-- ==================== TESTING ==================== -->
 <h2 id="testing">Test Suite</h2>
-<p><code>npm test</code> — Vitest による <strong>866テスト</strong>。</p>
+<p><code>npm test</code> — Vitest による <strong>701テスト</strong>。</p>
 
 <table>
   <tr><th>Test File</th><th>Tests</th><th>Coverage</th></tr>
   <tr><td>fretboard.test.ts</td><td>388</td><td>Pos1リファレンス、度数オフセット不変条件、構造検証</td></tr>
   <tr><td>progression.test.ts</td><td>125</td><td>parseChordSymbol, QUALITY_TO_MODES, 近接ランキング</td></tr>
-  <tr><td>phraseQualityAudit.test.ts</td><td>54</td><td>品質監査: §1拍位置(2), §2ビバップスケール(3), §3アプローチ方向(1), §4エンクロージャー(2), §5テンプレート構造(5), §6開始終了(3), §7VL(6), §9Musical Forces(2), 全モード網羅(3), 多様性(4), 拍数適合(2), ポジション(1), 実用性(7), セグメント接合(4), リズム多様性R.1-R.5(5), 休符(3), GAPレポート(1)</td></tr>
   <tr><td>jazzStandards.test.ts</td><td>42</td><td>パース、エンディング、リピート、ビート幅</td></tr>
   <tr><td>chordForms.test.ts</td><td>36</td><td>Drop 2/3 ボイシング検索、テンプレート構造</td></tr>
+  <tr><td>lickEngine.test.ts</td><td>30</td><td>リックDB読込, 品質マッピング, 移調, 指板マッピング, モード推定, ポジション選択, インスタンス選択, 8音スケール対応, GeneratedPhrase変換</td></tr>
+  <tr><td>swing.test.ts</td><td>25</td><td>スウィングタイミング, ダイナミクス倍率, アーティキュレーション倍率, 4分/3連符非適用, テンポ補正</td></tr>
   <tr><td>guideTones.test.ts</td><td>22</td><td>ガイドトーン抽出、解決分類</td></tr>
-  <tr><td>phraseAnalysis.test.ts</td><td>33</td><td>分析・度数・機能ラベル + メタデータパススルー + ナラティブ生成</td></tr>
   <tr><td>noteSpelling.test.ts</td><td>19</td><td>スペリング、度数マップ、resolveMode</td></tr>
   <tr><td>audioEngine.test.ts</td><td>14</td><td>Karplus-Strong, サクソフォン, エレピ, コードストラム</td></tr>
-  <tr><td>bebopSegments.test.ts</td><td>11</td><td>各セグメント関数 (Arp, ScaleRun, Enclosure, 1235, dim7, ApproachCT, Chromatic, UpperStructure)</td></tr>
-  <tr><td>bebopTemplates.test.ts</td><td>15</td><td>テンプレート構造、品質フィルタ、コンター親和、拍配分(allocateEighths/allocateBeats)</td></tr>
-  <tr><td>bebopGenerator.test.ts</td><td>25</td><td>ルールベース生成 (全7モード+LydDom+Alt対応、CT表拍率、音域、跳躍制限、メタデータ、可変リズム、planSegmentRhythms、スケルトン駆動生成)</td></tr>
-  <tr><td>swing.test.ts</td><td>25</td><td>スウィングタイミング, ダイナミクス倍率, アーティキュレーション倍率, 4分/3連符非適用, テンポ補正</td></tr>
-  <tr><td>lickEngine.test.ts</td><td>30</td><td>リックDB読込, 品質マッピング, 移調, 指板マッピング, モード推定, ポジション選択, インスタンス選択, 8音スケール対応, GeneratedPhrase変換</td></tr>
 </table>
 
 <div class="callout warn">
@@ -1585,7 +1202,7 @@ GeneratedPhrase
 <!-- Footer -->
 <hr style="border-color: var(--border); margin: 48px 0 24px;">
 <p style="color: var(--text-muted); font-size: 13px;">
-  Jazz Guitar Trainer Documentation — Generated 2026-03-09<br>
+  Jazz Guitar Trainer Documentation — Generated 2026-03-12<br>
   Vite 7 + React 19 + TypeScript 5 + Tailwind CSS v4
 </p>
 

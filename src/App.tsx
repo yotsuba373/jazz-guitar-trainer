@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import type { LabelMode, RootName, Progression, ChordNotationPrefs, ChartLayout, SongKey, ChordSlot, ApproachType, GeneratedPhrase, PhraseConfig, PhraseNote, PhraseContour, InstrumentType, PoolNote, LickDB, LickEntry } from './types';
-import { MODE_TEMPLATES, ROOTS, MODE_COLORS, OPEN_STRINGS } from './constants';
+import type { LabelMode, RootName, Progression, ChordNotationPrefs, ChartLayout, SongKey, ChordSlot, GeneratedPhrase, InstrumentType, LickDB, LickEntry } from './types';
+import { MODE_TEMPLATES, ROOTS, MODE_COLORS } from './constants';
 import {
   buildFretMap, generatePositions, generateDimPositions, resolveMode,
   loadProgressions, saveProgressions, QUALITY_TO_MODES,
@@ -10,12 +10,12 @@ import {
   getGuideTones, findNoteLocations, classifyResolution,
   findVoicingsInPosition,
   playChordStrum,
-  generatePhraseRule, buildNotePool, schedulePhrase,
+  buildNotePool, schedulePhrase,
   loadLickDB, QUALITY_TO_LICK_TYPE, buildLickContext, getTransposeSemitones,
   lickToGeneratedPhrase, selectBestInstance,
 } from './utils';
 import { Fretboard } from './components/Fretboard';
-import { RootSelector, ModeSelector, PositionSelector, OptionBar, PhraseControls, PhraseAnalysisPanel, GlobalAudioControls, LickPanel } from './components/Controls';
+import { RootSelector, ModeSelector, PositionSelector, OptionBar, PhraseAnalysisPanel, GlobalAudioControls, LickPanel } from './components/Controls';
 import { PositionGrid } from './components/PositionGrid';
 import { ProgressionEditor, ProgressionPlayer } from './components/Progression';
 import { Footer } from './components/Footer';
@@ -117,16 +117,7 @@ export default function App() {
   const [showChordForms, setShowChordForms] = useState(false);
   const [selectedVoicingIdx, setSelectedVoicingIdx] = useState(0);
 
-  // Phrase generator state
-  const [showPhrase, setShowPhrase] = useState(false);
-  const [phraseApproachTypes, setPhraseApproachTypes] = useState<ApproachType[]>(
-    ['single-below', 'single-above', 'enclosure']
-  );
-  const [phraseHistory, setPhraseHistory] = useState<GeneratedPhrase[]>([]);
-  const [activePhraseIdx, setActivePhraseIdx] = useState(0);
-  const [phraseAnimSpeed, setPhraseAnimSpeed] = useState(() =>
-    Number(localStorage.getItem('phraseAnimSpeed')) || 350
-  );
+  const phraseAnimSpeed = Number(localStorage.getItem('phraseAnimSpeed')) || 350;
 
   // Progression mode state
   const [progMode, setProgMode] = useState(false);
@@ -159,8 +150,6 @@ export default function App() {
   const wasAutoAdvanceRef = useRef(false);
   const playPosRef = useRef(0);
 
-  // Phrase auto-play state (progression mode)
-  const [phraseAutoPlay, setPhraseAutoPlay] = useState(false);
   // Single-note volume: shared between fretboard clicks and phrase playback
   const [noteVolume, setNoteVolume] = useState<number>(() => {
     const s = parseFloat(localStorage.getItem('noteVolume') ?? localStorage.getItem('phraseVolume') ?? '');
@@ -182,19 +171,12 @@ export default function App() {
   );
   const swingEnabledRef = useRef(swingEnabled);
   const swingAmountRef = useRef(swingAmount);
-  const phraseAutoPlayRef = useRef(phraseAutoPlay);
   const activePhraseStopRef = useRef<{ stop: () => void } | null>(null);
   const [autoPlayPhrase, setAutoPlayPhrase] = useState<GeneratedPhrase | null>(null);
   // Lick practice state
   const [lickDB, setLickDB] = useState<LickDB | null>(null);
   const [selectedLickIdx, setSelectedLickIdx] = useState<number | null>(null);
   const [lickHighOctave, setLickHighOctave] = useState(false);
-  // Refs for on-the-fly phrase chaining across chords
-  const prevLastNoteRef = useRef<PhraseNote | undefined>(undefined);
-  const prevContourRef = useRef<PhraseContour | undefined>(undefined);
-  const prevMotifRef = useRef<number[] | undefined>(undefined);
-  const prevResolvedStartRef = useRef<PhraseConfig['resolvedStart'] | undefined>(undefined);
-
   const template = MODE_TEMPLATES[modeIdx];
   const mode = useMemo(() => resolveMode(rootName, template), [rootName, modeIdx]);
   const is8Note = mode.notes.length > 7;
@@ -208,13 +190,6 @@ export default function App() {
   // Chord form voicings (only when exactly 1 position selected)
   const canShowChordForms = selPosIds.length === 1 && !overlay && !is8Note && modeIdx <= 6;
 
-  // Phrase beat count (normal mode) and goal selection
-  const [beatCount, setBeatCount] = useState<2 | 3 | 4>(4);
-  const [goalSelectMode, setGoalSelectMode] = useState(false);
-  const [selectedGoalNote, setSelectedGoalNote] = useState<PhraseConfig['goalNoteOverride'] | null>(null);
-
-  // Phrase generator: available when single position selected, not overlay, not dim scale
-  const canShowPhrase = selPosIds.length === 1 && !overlay && !is8Note;
   const selPos = selPosIds.length === 1 ? allPos.find(p => p.id === selPosIds[0]) ?? null : null;
 
   const availableVoicings = useMemo(() => {
@@ -247,12 +222,6 @@ export default function App() {
   useEffect(() => {
     loadLickDB().then(db => setLickDB(db)).catch(() => setLickDB(null));
   }, []);
-
-  // Clear phrase history when context changes
-  useEffect(() => {
-    setPhraseHistory([]);
-    setActivePhraseIdx(0);
-  }, [rootName, modeIdx, selPosIds, activeChordIdx]);
 
   const deg = mode.degrees;
   const rootNote = mode.notes[0];
@@ -435,17 +404,11 @@ export default function App() {
   }, [selectedLickIdx, filteredLicks.licks, progMode, activeProg, activeChordIdx, effectiveAll, lickHighOctave]);
 
   const activePhrase = useMemo(() => {
-    // Lick phrase takes priority in progression mode
     if (activeLickPhrase) return activeLickPhrase;
-    // During auto-play in progression mode, show the on-the-fly generated phrase
-    // (also show autoPlayPhrase when it's a saved-lick playback, even if phraseAutoPlay is off)
-    if (progMode && autoPlayPhrase && (phraseAutoPlay || isPlaying))
+    if (progMode && autoPlayPhrase && isPlaying)
       return autoPlayPhrase;
-    // Normal manual mode
-    if (showPhrase && phraseHistory.length > 0)
-      return phraseHistory[activePhraseIdx] ?? null;
     return null;
-  }, [activeLickPhrase, phraseAutoPlay, progMode, autoPlayPhrase, isPlaying, showPhrase, phraseHistory, activePhraseIdx]);
+  }, [activeLickPhrase, progMode, autoPlayPhrase, isPlaying]);
 
   // Keyboard navigation for progression mode
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
@@ -500,13 +463,6 @@ export default function App() {
   useEffect(() => { instrumentRef.current = instrument; localStorage.setItem('phraseInstrument', instrument); }, [instrument]);
   useEffect(() => { swingEnabledRef.current = swingEnabled; localStorage.setItem('swingEnabled', String(swingEnabled)); }, [swingEnabled]);
   useEffect(() => { swingAmountRef.current = swingAmount; localStorage.setItem('swingAmount', String(swingAmount)); }, [swingAmount]);
-  useEffect(() => { phraseAutoPlayRef.current = phraseAutoPlay; }, [phraseAutoPlay]);
-
-  // Auto-enable showPhrase when phraseAutoPlay is turned on
-  useEffect(() => { if (phraseAutoPlay && !showPhrase) setShowPhrase(true); }, [phraseAutoPlay]);
-  // Turn off phraseAutoPlay when leaving progression mode
-  useEffect(() => { if (!progMode) setPhraseAutoPlay(false); }, [progMode]);
-
   // Check if a chord has a saved lick that should be played during auto-advance
   function chordHasSavedLick(chordIdx: number, prog: Progression): boolean {
     const chord = prog.chords[chordIdx];
@@ -517,11 +473,10 @@ export default function App() {
     return licks.some(l => l.id === chord.lickId);
   }
 
-  // Generate a phrase on-the-fly for a given chord index (used during auto-advance)
-  function generatePhraseForChord(
+  // Play a saved lick for a given chord index (used during auto-advance)
+  function playLickForChord(
     chordIdx: number,
     prog: Progression,
-    step: { beats: number },
   ): GeneratedPhrase | null {
     const chords = prog.chords;
     const effAll = computeEffectiveSelections(chords, prog.songKey);
@@ -529,7 +484,6 @@ export default function App() {
     const eff = effAll[chordIdx];
     if (!chord || !eff || !QUALITY_TO_MODES[chord.quality]) return null;
 
-    // If a lick is saved for this chord, use it instead of generating a new phrase
     if (chord.lickId && lickDB) {
       const lickType = QUALITY_TO_LICK_TYPE[chord.quality];
       const licks = lickType ? (lickDB[lickType] ?? []) : [];
@@ -552,106 +506,15 @@ export default function App() {
           const bestInstIdx = selectBestInstance(pos, lickPitches, highOctave);
           const singleInstPos = { ...pos, instances: [pos.instances[bestInstIdx]] };
           const pool = buildNotePool(singleInstPos, chordMode, chordFretMap, true);
-          const phrase = lickToGeneratedPhrase(
+          return lickToGeneratedPhrase(
             lick, eff.posId, MODE_TEMPLATES[eff.modeIdx].key, chord.rootName, pool, transposeSemitones, extraShift,
           );
-          if (phrase) {
-            // Reset chaining refs since lick doesn't chain
-            prevLastNoteRef.current = undefined;
-            prevContourRef.current = undefined;
-            prevMotifRef.current = undefined;
-            prevResolvedStartRef.current = undefined;
-            return phrase;
-          }
         }
       }
     }
 
-    const chordMode = resolveMode(chord.rootName, MODE_TEMPLATES[eff.modeIdx]);
-    if (chordMode.notes.length > 7) return null;
-
-    const chordFretMap = buildFretMap(chordMode.semi, chordMode.notes);
-    const positions = generatePositions(chordFretMap, chordMode.notes);
-    const pos = positions.find(p => p.id === eff.posId);
-    if (!pos) return null;
-
-    let targetThirdNote: string | undefined;
-    let nextChordContext: PhraseConfig['nextChordContext'] | undefined;
-    let nextChordPool: PoolNote[] | undefined;
-    let nextPosFretRange: { fretMin: number; fretMax: number } | undefined;
-    const nextIdx = (chordIdx + 1) % chords.length;
-    if (nextIdx !== chordIdx) {
-      const nextChord = chords[nextIdx];
-      const nextEff = effAll[nextIdx];
-      if (nextChord && nextEff && QUALITY_TO_MODES[nextChord.quality]) {
-        const nextMode = resolveMode(nextChord.rootName, MODE_TEMPLATES[nextEff.modeIdx]);
-        if (nextMode.notes.length <= 7) {
-          const gt = getGuideTones(nextMode);
-          targetThirdNote = gt.third;
-          nextChordContext = {
-            thirdNote: gt.third,
-            seventhNote: gt.seventh,
-            rootNote: nextMode.notes[0],
-            quality: nextChord.quality,
-          };
-          // Build next chord's note pool for VL resolution
-          const nextFretMap = buildFretMap(nextMode.semi, nextMode.notes);
-          const nextPositions = generatePositions(nextFretMap, nextMode.notes);
-          const nextPos = nextPositions.find(p => p.id === nextEff.posId);
-          if (nextPos) {
-            nextChordPool = buildNotePool(nextPos, nextMode, nextFretMap, false);
-            const nextInst = nextPos.instances[0];
-            if (nextInst) {
-              nextPosFretRange = { fretMin: nextInst.fretMin, fretMax: nextInst.fretMax };
-            }
-          }
-        }
-      }
-    }
-
-    const phraseLength = Math.min(8, Math.max(4, Math.round(step.beats * 2)));
-    const pln = prevLastNoteRef.current;
-    const resolvedStart = prevResolvedStartRef.current;
-    const config: PhraseConfig = {
-      approachTypes: phraseApproachTypes,
-      resolvedStart: resolvedStart ?? undefined,
-      startHint: resolvedStart ? undefined : (pln ? {
-        noteName: pln.noteName,
-        stringIdx: pln.stringIdx,
-        fret: pln.fret,
-        semitone: pln.semitone,
-      } : undefined),
-      phraseLength,
-      prevContour: prevContourRef.current,
-      nextChordContext,
-      prevMotif: prevMotifRef.current,
-    };
-
-    const phrase = generatePhraseRule(pos, chordMode, chordFretMap, config, targetThirdNote, nextChordPool, nextPosFretRange);
-    if (phrase) {
-      prevLastNoteRef.current = phrase.notes[phrase.notes.length - 1];
-      prevContourRef.current = phrase.config.contour;
-      prevMotifRef.current = phrase.motif;
-      prevResolvedStartRef.current = phrase.resolvedGoalForNext;
-    } else {
-      prevLastNoteRef.current = undefined;
-      prevContourRef.current = undefined;
-      prevMotifRef.current = undefined;
-      prevResolvedStartRef.current = undefined;
-    }
-    return phrase;
+    return null;
   }
-
-  // Reset chaining refs when auto-play is toggled off
-  useEffect(() => {
-    if (!phraseAutoPlay) {
-      setAutoPlayPhrase(null);
-      prevLastNoteRef.current = undefined;
-      prevContourRef.current = undefined;
-      prevMotifRef.current = undefined;
-      prevResolvedStartRef.current = undefined;
-    }
-  }, [phraseAutoPlay]);
 
   // BPM auto-advance: drift-free, respects section repeats and volta endings
   useEffect(() => {
@@ -686,15 +549,10 @@ export default function App() {
           activeStrumRef.current = playChordStrum(ctx, strumNotes, chordVolumeRef.current, ctx.currentTime);
         }
       }
-      // Generate + schedule phrase for initial chord on playback start
-      if (isPlaybackStart && (phraseAutoPlayRef.current || chordHasSavedLick(activeChordIdx, activeProg))) {
+      // Schedule saved lick for initial chord on playback start
+      if (isPlaybackStart && (chordHasSavedLick(activeChordIdx, activeProg))) {
         activePhraseStopRef.current?.stop();
-        prevLastNoteRef.current = undefined;
-        prevContourRef.current = undefined;
-        prevMotifRef.current = undefined;
-        prevResolvedStartRef.current = undefined;
-        const initStep = seq[playPosRef.current];
-        const phrase = initStep ? generatePhraseForChord(activeChordIdx, activeProg, initStep) : null;
+        const phrase = playLickForChord(activeChordIdx, activeProg);
         if (phrase) {
           setAutoPlayPhrase(phrase);
           if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
@@ -732,10 +590,9 @@ export default function App() {
       }
 
       // Generate + schedule phrase for the next chord on auto-advance
-      if (activeProg && (phraseAutoPlayRef.current || chordHasSavedLick(nextChordIdx, activeProg))) {
+      if (activeProg && (chordHasSavedLick(nextChordIdx, activeProg))) {
         activePhraseStopRef.current?.stop();
-        const nextStep = seq[nextPos];
-        const phrase = generatePhraseForChord(nextChordIdx, activeProg, nextStep);
+        const phrase = playLickForChord(nextChordIdx, activeProg);
         if (phrase) {
           setAutoPlayPhrase(phrase);
           if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
@@ -905,19 +762,6 @@ export default function App() {
     }
   }, [phraseAnimSpeed, progMode, selPos, mode.chordTones, isMetronomeOn, bpm]);
 
-  const handlePlayPhrase = useCallback(() => {
-    // Toggle off if already playing
-    if (manualPhraseRef.current) {
-      manualPhraseRef.current.stop();
-      manualPhraseRef.current = null;
-      if (manualPhraseTimer.current) clearTimeout(manualPhraseTimer.current);
-      setIsPhraseAudioPlaying(false);
-      return;
-    }
-    if (!activePhrase) return;
-    playPhraseAudio(activePhrase);
-  }, [activePhrase, playPhraseAudio]);
-
   // Stop manual phrase on context change — but skip if we just started playback
   // (Generate triggers both activePhrase change and playPhraseAudio in the same tick)
   const justStartedPlayRef = useRef(false);
@@ -932,65 +776,6 @@ export default function App() {
     setIsPhraseAudioPlaying(false);
   }, [activePhrase]);
 
-  const handleNoteClick = useCallback((stringIdx: number, fret: number) => {
-    // Goal note selection mode
-    if (goalSelectMode && canShowPhrase && selPos) {
-      const inst = selPos.instances[0];
-      if (fret >= inst.fretMin - 1 && fret <= inst.fretMax + 1) {
-        const semi = (OPEN_STRINGS[stringIdx] + fret) % 12;
-        const CHROMATIC_NAMES = ['C', 'D\u266D', 'D', 'E\u266D', 'E', 'F', 'G\u266D', 'G', 'A\u266D', 'A', 'B\u266D', 'B'];
-        const noteName = CHROMATIC_NAMES[semi];
-        setSelectedGoalNote({ noteName, stringIdx, fret, semitone: semi });
-      }
-      return;
-    }
-  }, [goalSelectMode, canShowPhrase, selPos]);
-
-  const handleGeneratePhrase = useCallback(() => {
-    if (!canShowPhrase || selPosIds.length !== 1) return;
-    const pos = allPos.find(p => p.id === selPosIds[0]);
-    if (!pos) return;
-
-    // In progression mode, compute next chord's 3rd as target
-    let targetThirdNote: string | undefined;
-    let nextChordCtx: PhraseConfig['nextChordContext'] | undefined;
-    if (progMode && activeProg) {
-      const nextChord = activeProg.chords[activeChordIdx + 1];
-      const nextEff = effectiveAll[activeChordIdx + 1];
-      if (nextChord && nextEff && QUALITY_TO_MODES[nextChord.quality]) {
-        const nextMode = resolveMode(nextChord.rootName, MODE_TEMPLATES[nextEff.modeIdx]);
-        const gt = getGuideTones(nextMode);
-        targetThirdNote = gt.third;
-        nextChordCtx = {
-          thirdNote: gt.third,
-          seventhNote: gt.seventh,
-          rootNote: nextMode.notes[0],
-          quality: nextChord.quality,
-        };
-      }
-    }
-
-    const config: PhraseConfig = {
-      approachTypes: phraseApproachTypes,
-      nextChordContext: nextChordCtx,
-      ...(!progMode && { beatCount }),
-      ...(selectedGoalNote && { goalNoteOverride: selectedGoalNote }),
-    };
-    const phrase = generatePhraseRule(pos, mode, fretMap, config, targetThirdNote);
-    if (!phrase) return;
-
-    setPhraseHistory(prev => {
-      const next = [...prev, phrase];
-      if (next.length > 20) next.shift();
-      return next;
-    });
-    setActivePhraseIdx(
-      Math.min(phraseHistory.length, 19)
-    );
-
-    // Auto-play the generated phrase
-    playPhraseAudio(phrase);
-  }, [canShowPhrase, selPosIds, allPos, mode, fretMap, phraseApproachTypes, progMode, activeProg, activeChordIdx, effectiveAll, phraseHistory.length, beatCount, selectedGoalNote, playPhraseAudio]);
 
   function getLabel(nn: string): string {
     return labelMode === 'degree' ? (deg[nn] || nn) : nn;
@@ -1231,34 +1016,6 @@ export default function App() {
           onToggleChordForms={setShowChordForms}
         />
 
-        {false && (showPhrase || phraseAutoPlay) && canShowPhrase && (
-          <PhraseControls
-            approachTypes={phraseApproachTypes}
-            onApproachTypesChange={setPhraseApproachTypes}
-            onGenerate={handleGeneratePhrase}
-            onPlayPhrase={handlePlayPhrase}
-            isPhraseAudioPlaying={isPhraseAudioPlaying}
-            hasPhrase={!!activePhrase}
-            phraseCount={phraseHistory.length}
-            phraseIdx={activePhraseIdx}
-            onPhraseNav={setActivePhraseIdx}
-            animSpeed={phraseAnimSpeed}
-            onAnimSpeedChange={v => { setPhraseAnimSpeed(v); localStorage.setItem('phraseAnimSpeed', String(v)); }}
-            chordQuality={template.chordQuality}
-            progMode={progMode}
-            phraseAutoPlay={phraseAutoPlay}
-            onTogglePhraseAutoPlay={() => setPhraseAutoPlay(p => !p)}
-            onRegeneratePhraseMap={handleGeneratePhrase}
-            isPlaying={isPlaying}
-            isMetronomeOn={isMetronomeOn}
-            beatCount={beatCount}
-            onBeatCountChange={setBeatCount}
-            goalSelectMode={goalSelectMode}
-            onGoalSelectModeChange={setGoalSelectMode}
-            selectedGoalNote={selectedGoalNote}
-          />
-        )}
-
         <Fretboard
           visible={visible}
           selPosIds={selPosIds}
@@ -1269,16 +1026,13 @@ export default function App() {
           rootNote={rootNote}
           guideToneInfo={guideToneInfo}
           voicingHighlights={voicingHighlights}
-          onNoteClick={handleNoteClick}
           activePhrase={activePhrase}
           phraseAnimKey={phraseAnimKey}
-          phraseAnimSpeed={(phraseAutoPlay && progMode && isPlaying) || isMetronomeOn
+          phraseAnimSpeed={isMetronomeOn
             ? Math.round((60000 / bpm) / 2)
             : phraseAnimSpeed}
           swingAmount={swingEnabled ? swingAmount : 0}
           bpm={bpm}
-          selectedGoalNote={selectedGoalNote}
-          goalSelectMode={goalSelectMode}
         />
 
         {activePhrase && <PhraseAnalysisPanel phrase={activePhrase} mode={mode} swingAmount={swingEnabled ? swingAmount : 0} bpm={bpm} />}
