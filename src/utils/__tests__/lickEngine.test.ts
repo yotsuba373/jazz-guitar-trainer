@@ -14,6 +14,10 @@ import {
   buildLickContext,
   loadLickDB,
   clearLickDBCache,
+  detectIiVPattern,
+  isIiVLickId,
+  buildIiVLickContext,
+  getIiVTransposeSemitones,
 } from '../lickEngine';
 import { MODE_TEMPLATES } from '../../constants';
 import { resolveMode } from '../noteSpelling';
@@ -371,5 +375,206 @@ describe('loadLickDB', () => {
     });
 
     await expect(loadLickDB()).rejects.toThrow('Failed to load licks.json');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ii-V detection & context
+// ---------------------------------------------------------------------------
+
+describe('getIiVTransposeSemitones', () => {
+  it('keeps low values unchanged (0-6)', () => {
+    expect(getIiVTransposeSemitones(0)).toBe(0);
+    expect(getIiVTransposeSemitones(5)).toBe(5);
+    expect(getIiVTransposeSemitones(6)).toBe(6);
+  });
+
+  it('normalizes high values to negative (7-11)', () => {
+    expect(getIiVTransposeSemitones(7)).toBe(-5);
+    expect(getIiVTransposeSemitones(10)).toBe(-2);
+    expect(getIiVTransposeSemitones(11)).toBe(-1);
+  });
+});
+
+describe('detectIiVPattern', () => {
+  it('detects major ii-V: Dm7 → G7', () => {
+    const chords = [
+      { quality: 'm7', rootName: 'D' },
+      { quality: '7', rootName: 'G' },
+    ];
+    const result = detectIiVPattern(chords, 0);
+    expect(result).not.toBeNull();
+    expect(result!.types).toContain('maj-ii-v-short');
+    expect(result!.types).toContain('maj-ii-v-long');
+    expect(result!.keyCenterSemitone).toBe(0); // C
+  });
+
+  it('detects major ii-V in F: Gm7 → C7', () => {
+    const chords = [
+      { quality: 'm7', rootName: 'G' },
+      { quality: '7', rootName: 'C' },
+    ];
+    const result = detectIiVPattern(chords, 0);
+    expect(result).not.toBeNull();
+    expect(result!.keyCenterSemitone).toBe(5); // F
+  });
+
+  it('detects major ii-V in all 12 keys', () => {
+    // ii-V pairs for all keys: ii root = key + 2 semitones, V root = key + 7 semitones
+    const ROOTS_SEMI: Record<string, number> = {
+      'C': 0, 'D♭': 1, 'D': 2, 'E♭': 3, 'E': 4, 'F': 5,
+      'G♭': 6, 'G': 7, 'A♭': 8, 'A': 9, 'B♭': 10, 'B': 11,
+    };
+    const ROOT_NAMES = Object.keys(ROOTS_SEMI);
+    for (const keyRoot of ROOT_NAMES) {
+      const keySemi = ROOTS_SEMI[keyRoot];
+      const iiSemi = (keySemi + 2) % 12;
+      const vSemi = (keySemi + 7) % 12;
+      const iiName = ROOT_NAMES.find(r => ROOTS_SEMI[r] === iiSemi)!;
+      const vName = ROOT_NAMES.find(r => ROOTS_SEMI[r] === vSemi)!;
+      const chords = [
+        { quality: 'm7', rootName: iiName },
+        { quality: '7', rootName: vName },
+      ];
+      const result = detectIiVPattern(chords, 0);
+      expect(result).not.toBeNull();
+      expect(result!.keyCenterSemitone).toBe(keySemi);
+    }
+  });
+
+  it('detects minor ii-V: Dm7♭5 → G7', () => {
+    const chords = [
+      { quality: 'm7♭5', rootName: 'D' },
+      { quality: '7', rootName: 'G' },
+    ];
+    const result = detectIiVPattern(chords, 0);
+    expect(result).not.toBeNull();
+    expect(result!.types).toEqual(['min-ii-v-short']);
+    expect(result!.keyCenterSemitone).toBe(0); // C minor
+  });
+
+  it('detects ii-V with dom7 variants: Dm7 → G7alt', () => {
+    const chords = [
+      { quality: 'm7', rootName: 'D' },
+      { quality: '7alt', rootName: 'G' },
+    ];
+    const result = detectIiVPattern(chords, 0);
+    expect(result).not.toBeNull();
+    expect(result!.types).toContain('maj-ii-v-short');
+  });
+
+  it('returns null for wrong interval: Dm7 → A7 (not ii-V)', () => {
+    const chords = [
+      { quality: 'm7', rootName: 'D' },
+      { quality: '7', rootName: 'A' },
+    ];
+    expect(detectIiVPattern(chords, 0)).toBeNull();
+  });
+
+  it('returns null for wrong quality: Dmaj7 → G7', () => {
+    const chords = [
+      { quality: 'maj7', rootName: 'D' },
+      { quality: '7', rootName: 'G' },
+    ];
+    expect(detectIiVPattern(chords, 0)).toBeNull();
+  });
+
+  it('returns null for V not dom7: Dm7 → Gmaj7', () => {
+    const chords = [
+      { quality: 'm7', rootName: 'D' },
+      { quality: 'maj7', rootName: 'G' },
+    ];
+    expect(detectIiVPattern(chords, 0)).toBeNull();
+  });
+
+  it('returns null at last chord (no next chord)', () => {
+    const chords = [{ quality: 'm7', rootName: 'D' }];
+    expect(detectIiVPattern(chords, 0)).toBeNull();
+  });
+
+  it('works at non-zero index: chords[1] → chords[2]', () => {
+    const chords = [
+      { quality: 'maj7', rootName: 'C' },
+      { quality: 'm7', rootName: 'D' },
+      { quality: '7', rootName: 'G' },
+    ];
+    const result = detectIiVPattern(chords, 1);
+    expect(result).not.toBeNull();
+    expect(result!.keyCenterSemitone).toBe(0);
+  });
+});
+
+describe('isIiVLickId', () => {
+  it('detects maj-ii-v-short prefix IS-', () => {
+    expect(isIiVLickId('IS-abc1')).toBe('maj-ii-v-short');
+    expect(isIiVLickId('is-abc1')).toBe('maj-ii-v-short');
+  });
+
+  it('detects maj-ii-v-long prefix IL-', () => {
+    expect(isIiVLickId('IL-abc1')).toBe('maj-ii-v-long');
+    expect(isIiVLickId('il-abc1')).toBe('maj-ii-v-long');
+  });
+
+  it('detects min-ii-v-short prefix iS-', () => {
+    expect(isIiVLickId('iS-abc1')).toBe('min-ii-v-short');
+  });
+
+  it('returns null for non-iiV IDs', () => {
+    expect(isIiVLickId('D-3a7f')).toBeNull();
+    expect(isIiVLickId('m-b2c1')).toBeNull();
+    expect(isIiVLickId(undefined)).toBeNull();
+  });
+});
+
+describe('buildIiVLickContext', () => {
+  const iiVLick: LickEntry = {
+    notes: [
+      { pitch: 62, beatStart: 0, duration: 0.5 },   // D4
+      { pitch: 64, beatStart: 0.5, duration: 0.5 }, // E4
+      { pitch: 65, beatStart: 1, duration: 0.5 },   // F4
+      { pitch: 67, beatStart: 1.5, duration: 0.5 }, // G4
+      { pitch: 65, beatStart: 2, duration: 0.5 },   // F4
+      { pitch: 64, beatStart: 2.5, duration: 0.5 }, // E4
+      { pitch: 62, beatStart: 3, duration: 0.5 },   // D4
+      { pitch: 60, beatStart: 3.5, duration: 0.5 }, // C4
+    ],
+    noteCount: 8,
+    beats: 4,
+    id: 'IS-test',
+  };
+
+  it('returns non-null for valid ii-V context', () => {
+    // Dm7 → G7 in C: keyCenterSemitone = 0, V = G7
+    const result = buildIiVLickContext(iiVLick, 0, '7', 'G', 7);
+    expect(result).not.toBeNull();
+    expect(result!.phrase.notes.length).toBe(8);
+    expect(result!.transposeSemitones).toBe(0); // C=0 stored, target C=0
+  });
+
+  it('transposes correctly for F key: keyCenterSemitone = 5', () => {
+    // Gm7 → C7 in F: keyCenterSemitone = 5
+    const result = buildIiVLickContext(iiVLick, 5, '7', 'C', 0);
+    expect(result).not.toBeNull();
+    expect(result!.transposeSemitones).toBe(5);
+  });
+
+  it('normalizes transposition for high keys (Bb=10 → -2)', () => {
+    // Cm7 → F7 in Bb: keyCenterSemitone = 10
+    const result = buildIiVLickContext(iiVLick, 10, '7', 'F', 5);
+    expect(result).not.toBeNull();
+    expect(result!.transposeSemitones).toBe(-2); // 10 > 6 → 10 - 12 = -2
+  });
+
+  it('normalizes transposition for B key (11 → -1)', () => {
+    const result = buildIiVLickContext(iiVLick, 11, '7', 'G♭', 6);
+    expect(result).not.toBeNull();
+    expect(result!.transposeSemitones).toBe(-1); // 11 > 6 → 11 - 12 = -1
+  });
+
+  it('returns a valid phrase with positions', () => {
+    const result = buildIiVLickContext(iiVLick, 0, '7', 'G', 7);
+    expect(result).not.toBeNull();
+    expect(result!.positions.length).toBeGreaterThan(0);
+    expect(result!.posId).toBeGreaterThan(0);
   });
 });
