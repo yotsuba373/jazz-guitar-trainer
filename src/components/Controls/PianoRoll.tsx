@@ -1,5 +1,5 @@
 import type { GeneratedPhrase, NoteAnalysis, PhraseNote, RhythmType } from '../../types';
-import { absolutePitch } from '../../utils/bebopScheduler';
+import { absolutePitch } from '../../utils/lickEngine';
 import { swingBeatStart } from '../../utils/swing';
 
 interface PianoRollProps {
@@ -17,13 +17,8 @@ const RHYTHM_BEATS: Record<RhythmType, number> = {
 const CT_COLOR = '#5EBBFF';
 const APPROACH_COLOR = '#FFCC44';
 const SCALE_COLOR = '#7A8899';
-const EXTENSION_COLOR = '#44DDAA';
-const BEBOP_COLOR = '#FF7744';
 
 function noteColor(n: PhraseNote): string {
-  if (n.isBebopPassing) return BEBOP_COLOR;
-  if (n.isDim7Tone) return EXTENSION_COLOR;
-  if (n.isExtension) return EXTENSION_COLOR;
   if (n.approachGroup?.role === 'target') return CT_COLOR;
   if (n.isChordTone) return CT_COLOR;
   if (n.isApproach || n.approachGroup?.role === 'approach') return APPROACH_COLOR;
@@ -167,27 +162,12 @@ export function PianoRoll({ phrase, noteAnalysis, swingAmount = 0, bpm = 120 }: 
         );
       })}
 
-      {/* Segment boundary lines */}
-      {phrase.templateId && notes.map((n, i) => {
-        if (i === 0 || n.segmentIdx === notes[i - 1].segmentIdx) return null;
-        const bs = n.beatStart ?? (i * 0.5);
-        const x = xScale(swingBeatStart(bs, n.duration ?? 'e', swingAmount, bpm));
-        return (
-          <line key={`sb-${i}`}
-            x1={x} y1={margin.top} x2={x} y2={margin.top + plotH}
-            stroke="#FF6B9D50" strokeWidth={1.5} strokeDasharray="4,3"
-          />
-        );
-      })}
-
       {/* Legend */}
       <g transform={`translate(${margin.left + 4}, ${margin.top - 4})`}>
         {[
           { color: CT_COLOR, label: 'CT' },
           { color: APPROACH_COLOR, label: 'App' },
           { color: SCALE_COLOR, label: 'Scale' },
-          { color: EXTENSION_COLOR, label: 'Ext' },
-          { color: BEBOP_COLOR, label: 'Bebop' },
         ].map(({ color, label }, i) => (
           <g key={label} transform={`translate(${i * 48}, 0)`}>
             <rect x={0} y={-6} width={8} height={6} fill={color} rx={1} opacity={0.92} />

@@ -1,10 +1,5 @@
-import type { GeneratedPhrase, Mode, PhraseNote, NoteAnalysis, PhraseAnalysis, PhraseAnalysisSummary, ApproachType, PhraseContour } from '../types';
-import { absolutePitch } from './bebopScheduler';
-import { PHRASE_TEMPLATES } from './bebopTemplates';
-
-const FALLBACK_LABELS: Record<string, string> = {
-  'scale-down-fallback': 'スケール下降 (フォールバック)',
-};
+import type { GeneratedPhrase, Mode, PhraseNote, NoteAnalysis, PhraseAnalysis, PhraseAnalysisSummary, ApproachType } from '../types';
+import { absolutePitch } from './lickEngine';
 
 // ---------------------------------------------------------------------------
 // Interval naming
@@ -78,37 +73,10 @@ function getFunctionLabel(note: PhraseNote, mode: Mode): string {
     }
   }
   if (note.isChordTone) return `CT (${chordToneLabel(note.noteName, mode)})`;
-  // dim7 arpeggio tone (e.g. ♭9 in dim7-from-3rd)
-  if (note.isDim7Tone) {
-    const deg = getScaleDegree(note.noteName, mode);
-    return `dim7構成音 (${deg})`;
-  }
-  // Bebop passing tone (e.g. nat7 in Mixolydian)
-  if (note.isBebopPassing) {
-    const deg = getScaleDegree(note.noteName, mode);
-    return `ビバップ経過音 (${deg})`;
-  }
-  // Extension tone (9th/13th)
-  if (note.isExtension) {
-    const deg = getScaleDegree(note.noteName, mode);
-    return `テンション (${deg})`;
-  }
   // Heuristic: if isApproach and next note is CT at 1 semitone distance, label direction
   if (note.isApproach) return 'クロマチック';
   return 'スケール音';
 }
-
-// ---------------------------------------------------------------------------
-// Contour descriptions
-// ---------------------------------------------------------------------------
-
-const CONTOUR_LABELS: Record<PhraseContour, string> = {
-  'arch': 'アーチ',
-  'reverse-arch': '逆アーチ',
-  'descending': '下行',
-  'wave': '波形',
-  'ascending': '上行',
-};
 
 // ---------------------------------------------------------------------------
 // Main analysis
@@ -141,7 +109,7 @@ export function analyzePhrase(phrase: GeneratedPhrase, mode: Mode): PhraseAnalys
       ? (absPitch > prevPitch ? 'up' : absPitch < prevPitch ? 'down' : 'unison')
       : null;
 
-    const na: NoteAnalysis = {
+    return {
       beatPosition: note.beatPosition,
       noteName: note.noteName,
       scaleDegree: getScaleDegree(note.noteName, mode),
@@ -152,23 +120,12 @@ export function analyzePhrase(phrase: GeneratedPhrase, mode: Mode): PhraseAnalys
       functionLabel: getFunctionLabel(note, mode),
       approachGroup: note.approachGroup,
     };
-    // Pass through generation metadata
-    if (note.digitalPattern) na.digitalPattern = note.digitalPattern;
-    if (note.isDim7Tone) na.isDim7Tone = true;
-    if (note.isBebopPassing) na.isBebopPassing = true;
-    if (note.isExtension) na.isExtension = true;
-    if (note.isSkeletonBeat) na.isSkeletonBeat = true;
-    return na;
   });
 
   const summary = computeSummary(phrase, notes);
   const narrative = buildNarrative(summary);
   return { notes, summary, narrative };
 }
-
-// ---------------------------------------------------------------------------
-// Summary computation
-// ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
 // Narrative generation
@@ -185,49 +142,11 @@ const APPROACH_TYPE_LABEL: Record<string, string> = {
   'b9-arpeggio': '♭9アルペジオ',
 };
 
-const CONTOUR_LABELS_NARRATIVE: Record<string, string> = {
-  'arch': 'アーチ',
-  'reverse-arch': '逆アーチ',
-  'descending': '下行',
-  'wave': '波形',
-  'ascending': '上行',
-};
-
 function buildNarrative(summary: PhraseAnalysisSummary): string {
   const parts: string[] = [];
 
-  // Skeleton — show start CT, anchor chain, contour, strong-GT info
-  if (summary.skeletonLabel) {
-    let skelDesc = '';
-    // Start note CT label
-    if (summary.skeletonStartCtLabel) {
-      const startSlotNote = summary.skeletonLabel.split(' ')[0].split('→')[0];
-      skelDesc += `${startSlotNote}(${summary.skeletonStartCtLabel})起点`;
-    }
-    // Contour from skeleton (more precise than config contour)
-    const contourStr = summary.skeletonContour
-      ? CONTOUR_LABELS_NARRATIVE[summary.skeletonContour] ?? summary.skeletonContour
-      : summary.contourLabel;
-    if (contourStr) {
-      skelDesc += (skelDesc ? '、' : '') + `${contourStr}コンター`;
-    }
-    // Strong-GT info
-    if (summary.skeletonHasStrongGT) {
-      skelDesc += (skelDesc ? '、' : '') + '強拍GT配置';
-    }
-    parts.push(`${summary.skeletonLabel}骨格${skelDesc ? ' (' + skelDesc + ')' : ''}でCTを配置`);
-  } else if (summary.contourLabel) {
+  if (summary.contourLabel) {
     parts.push(`${summary.contourLabel}コンター`);
-  }
-
-  // Template
-  if (summary.templateLabel) {
-    parts.push(`テンプレート: ${summary.templateLabel}`);
-  }
-
-  // Digital pattern
-  if (summary.digitalPatternUsed && summary.digitalPatternBeats) {
-    parts.push(`拍${summary.digitalPatternBeats}でデジタルパターン「${summary.digitalPatternUsed}」を使用`);
   }
 
   // Approach patterns
@@ -236,11 +155,6 @@ function buildNarrative(summary: PhraseAnalysisSummary): string {
       .map(p => `${APPROACH_TYPE_LABEL[p.type] ?? p.type}×${p.count}`)
       .join('、');
     parts.push(`アプローチ: ${labels}`);
-  }
-
-  // Goal reason — enriched with next chord info when available
-  if (summary.goalReason) {
-    parts.push(`ゴール: ${summary.goalReason}`);
   }
 
   return parts.join('。') + (parts.length > 0 ? '。' : '');
@@ -286,42 +200,10 @@ function computeSummary(phrase: GeneratedPhrase, notes: NoteAnalysis[]): PhraseA
     }
   }
 
-  // Skeleton label
-  const DIR_ARROW: Record<string, string> = { asc: '↑', desc: '↓', mixed: '↕' };
-  const skeletonLabel = phrase.skeleton
-    ? `${phrase.skeleton.patternLabel} ${DIR_ARROW[phrase.skeleton.direction] ?? ''}`
-    : undefined;
-
-  // Skeleton detail fields
-  const skeletonStartCtLabel = phrase.skeleton?.slots?.find(s => s.role === 'start')?.ctLabel;
-  const skeletonContour = phrase.skeleton?.contour;
-  const skeletonHasStrongGT = phrase.skeleton?.slots?.some(s => s.role === 'strong-gt') ?? false;
-
-  // Digital pattern used
-  const dpNotes = phrase.notes.filter(n => n.digitalPattern);
-  let digitalPatternUsed: string | undefined;
-  let digitalPatternBeats: string | undefined;
-  if (dpNotes.length > 0) {
-    digitalPatternUsed = dpNotes[0].digitalPattern!.name;
-    const beats = dpNotes.map(n => n.beatPosition);
-    digitalPatternBeats = `${Math.min(...beats)}-${Math.max(...beats)}`;
-  }
-
-  // Motif label
-  const motifLabel = phrase.motif && phrase.motif.length > 0
-    ? phrase.motif.map(v => v > 0 ? `↑${v}半音` : v < 0 ? `↓${Math.abs(v)}半音` : '同音').join(', ')
-    : undefined;
-
-  // Bebop & extension counts
-  const bebopPassingCount = phrase.notes.filter(n => n.isBebopPassing).length;
-  const extensionCount = phrase.notes.filter(n => n.isExtension).length;
-
-  // Template label (rule-based engine): resolve ID to human-readable label
-  const templateLabel = phrase.templateId
-    ? (PHRASE_TEMPLATES.find(t => t.id === phrase.templateId)?.label
-      ?? FALLBACK_LABELS[phrase.templateId]
-      ?? phrase.templateId)
-    : undefined;
+  // Extension count
+  const extensionCount = phrase.notes.filter(n =>
+    !n.isChordTone && !n.isApproach && !n.isRest
+  ).length;
 
   return {
     stepwisePct: pct(stepwise),
@@ -329,22 +211,12 @@ function computeSummary(phrase: GeneratedPhrase, notes: NoteAnalysis[]): PhraseA
     fourthsPct: pct(fourths),
     leapsPct: pct(leaps),
     rangeSemitones,
-    contourLabel: CONTOUR_LABELS[phrase.config.contour!] ?? '',
+    contourLabel: '',
     approachPatternsUsed: Array.from(patternCounts.entries()).map(([type, count]) => ({ type, count })),
     directionChanges,
     chordToneCount: soundPhraseNotes.filter(n => n.isChordTone && !n.isApproach).length,
     approachNoteCount: soundPhraseNotes.filter(n => n.isApproach).length,
     scaleNoteCount: soundPhraseNotes.filter(n => !n.isChordTone && !n.isApproach).length,
-    skeletonLabel,
-    skeletonStartCtLabel: skeletonStartCtLabel ?? undefined,
-    skeletonContour: skeletonContour ?? undefined,
-    skeletonHasStrongGT: skeletonHasStrongGT || undefined,
-    digitalPatternUsed,
-    digitalPatternBeats,
-    goalReason: phrase.goalReason,
-    motifLabel,
-    bebopPassingCount: bebopPassingCount > 0 ? bebopPassingCount : undefined,
     extensionCount: extensionCount > 0 ? extensionCount : undefined,
-    templateLabel,
   };
 }

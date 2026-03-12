@@ -67,9 +67,7 @@ export {
   playNote,
   schedulePhrase,
 } from './audioEngine';
-export { absolutePitch, pickRandom, isExtensionTone } from './bebopScheduler';
-export { pickWeighted } from './bebopTemplates';
-export { generatePhraseRule, buildNotePool, chooseGoalNote } from './bebopGenerator';
+export { absolutePitch, buildNotePool } from './lickEngine';
 export { analyzePhrase } from './phraseAnalysis';
 export { swingBeatStart, swingVolumeMult, swingDurMult } from './swing';
 export {

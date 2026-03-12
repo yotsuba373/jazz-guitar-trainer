@@ -18,7 +18,7 @@ import {
 import { MODE_TEMPLATES } from '../../constants';
 import { resolveMode } from '../noteSpelling';
 import { buildFretMap, generatePositions } from '../fretboard';
-import { buildNotePool } from '../bebopGenerator';
+import { buildNotePool } from '../lickEngine';
 
 // Sample lick for testing (C root, dom7, 4 beats, 8th notes)
 const sampleDom7Lick: LickEntry = {
