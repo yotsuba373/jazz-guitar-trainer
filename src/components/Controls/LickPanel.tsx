@@ -1,6 +1,7 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import type { LickEntry } from '../../types';
-import { SOURCE_DISPLAY_NAMES, inferModeCandidates, QUALITY_TO_LICK_TYPE } from '../../utils';
+import type { IiVDetection } from '../../utils';
+import { SOURCE_DISPLAY_NAMES, inferModeCandidates, QUALITY_TO_LICK_TYPE, isIiVLickId, getIiVTransposeSemitones } from '../../utils';
 import { MODE_TEMPLATES, MODE_COLORS } from '../../constants';
 
 /** Tiny SVG contour preview of a lick's melody */
@@ -38,6 +39,7 @@ function LickContourMini({ notes, selected }: { notes: LickEntry['notes']; selec
 /** Root semitone values for each lick type (what key licks are stored in) */
 const TYPE_ROOT_SEMITONE: Record<string, number> = {
   'dom7': 7, 'min7': 2, 'maj7': 0, 'm7b5': 2,
+  'maj-ii-v-short': 0, 'maj-ii-v-long': 0, 'min-ii-v-short': 0,
 };
 
 const CHROMATIC_DEGREE: Record<number, string> = {
@@ -45,6 +47,13 @@ const CHROMATIC_DEGREE: Record<number, string> = {
   6: '♭5', 7: '5', 8: '♭6', 9: '6', 10: '♭7', 11: '7',
 };
 const CHROMATIC_NAMES = ['C','D♭','D','E♭','E','F','G♭','G','A♭','A','B♭','B'];
+
+/** ii-V type display badge */
+const IIV_BADGE: Record<string, { label: string; color: string }> = {
+  'maj-ii-v-short': { label: 'ii-V S', color: '#4FC3F7' },
+  'maj-ii-v-long': { label: 'ii-V L', color: '#4FC3F7' },
+  'min-ii-v-short': { label: 'ii-V m', color: '#4FC3F7' },
+};
 
 interface LickPanelProps {
   licks: LickEntry[];
@@ -57,6 +66,10 @@ interface LickPanelProps {
   onClear: () => void;
   quality: string;
   rootSemitone: number;
+  iiV: IiVDetection | null;
+  singleLickCount: number;
+  vChordQuality?: string;
+  vChordRootSemitone?: number;
   highOctave: boolean;
   onToggleOctave: () => void;
   canHighOctave: boolean;
@@ -67,38 +80,51 @@ interface LickPanelProps {
 
 export function LickPanel({
   licks, selectedIdx, onSelect, onPlay, onStop, isPlaying, lickType, onClear,
-  quality, rootSemitone, highOctave, onToggleOctave, canHighOctave,
+  quality, rootSemitone, iiV, singleLickCount,
+  vChordQuality, vChordRootSemitone,
+  highOctave, onToggleOctave, canHighOctave,
   highInstance, onToggleInstance, canHighInstance,
 }: LickPanelProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const hasSelection = selectedIdx != null;
   const listRef = useRef<HTMLDivElement>(null);
+  const iiVLickCount = licks.length - singleLickCount;
 
-  // Auto-scroll to selected item
+  // Auto-scroll to selected item — need to account for separator in DOM
   useEffect(() => {
     if (!open || selectedIdx == null || !listRef.current) return;
-    const el = listRef.current.children[selectedIdx] as HTMLElement | undefined;
+    // Find the actual DOM element by data attribute
+    const el = listRef.current.querySelector(`[data-lick-idx="${selectedIdx}"]`) as HTMLElement | undefined;
     el?.scrollIntoView({ block: 'nearest' });
   }, [selectedIdx, open]);
 
   // Precompute mode candidates + start/end note info for each lick
   const lickMeta = useMemo(() => {
-    const lt = QUALITY_TO_LICK_TYPE[quality] ?? quality;
-    const storedRoot = TYPE_ROOT_SEMITONE[lt] ?? 0;
-    const transpose = rootSemitone - storedRoot;
+    return licks.map((lick) => {
+      const iiVType = isIiVLickId(lick.id);
+      const isIiV = !!iiVType;
 
-    return licks.map(lick => {
-      const modes = inferModeCandidates(lick, quality, rootSemitone);
+      // For ii-V licks, use V chord's quality/rootSemitone for mode inference
+      const q = isIiV && vChordQuality ? vChordQuality : quality;
+      const rs = isIiV && vChordRootSemitone != null ? vChordRootSemitone : rootSemitone;
+
+      const modes = inferModeCandidates(lick, q, rs);
       const modeNames = modes.map(m => MODE_TEMPLATES[m.modeIdx].name);
       const modeKeys = modes.map(m => MODE_TEMPLATES[m.modeIdx].key);
+
+      // For degree/note display, ii-V licks use keyCenterSemitone for transposition
+      const lt = isIiV ? iiVType! : (QUALITY_TO_LICK_TYPE[quality] ?? quality);
+      const storedRoot = TYPE_ROOT_SEMITONE[lt] ?? 0;
+      const transpose = isIiV && iiV ? getIiVTransposeSemitones(iiV.keyCenterSemitone) : (rootSemitone - storedRoot);
+      const degRef = isIiV && vChordRootSemitone != null ? vChordRootSemitone : rootSemitone;
 
       const pitched = lick.notes.filter(n => !n.rest && n.pitch != null);
       let startDeg = '', endDeg = '', startNote = '', endNote = '';
       if (pitched.length > 0) {
         const info = (p: number) => {
           const real = ((p + transpose) % 12 + 12) % 12;
-          const deg = ((p + transpose - rootSemitone) % 12 + 12) % 12;
+          const deg = ((p + transpose - degRef) % 12 + 12) % 12;
           return { note: CHROMATIC_NAMES[real], deg: CHROMATIC_DEGREE[deg] };
         };
         const s = info(pitched[0].pitch!);
@@ -106,11 +132,15 @@ export function LickPanel({
         startDeg = s.deg; startNote = s.note;
         endDeg = e.deg; endNote = e.note;
       }
-      return { modes, modeNames, modeKeys, startDeg, endDeg, startNote, endNote };
-    });
-  }, [licks, quality, rootSemitone]);
 
-  // Filter licks by search query (matches id, source display name, mode names, degrees)
+      // Badge info
+      const badge = isIiV ? IIV_BADGE[iiVType!] : null;
+
+      return { modes, modeNames, modeKeys, startDeg, endDeg, startNote, endNote, isIiV, badge };
+    });
+  }, [licks, quality, rootSemitone, iiV, vChordQuality, vChordRootSemitone]);
+
+  // Filter licks by search query (matches id, source display name, mode names, degrees, ii-V badge)
   const filtered = useMemo(() => {
     if (!query.trim()) return licks.map((l, i) => ({ lick: l, origIdx: i }));
     const q = query.trim().toLowerCase();
@@ -123,14 +153,30 @@ export function LickPanel({
       const m = lickMeta[i];
       const modeStr = m ? m.modeNames.join(' ').toLowerCase() : '';
       const noteStr = m ? `${m.startDeg} ${m.endDeg} ${m.startNote} ${m.endNote}`.toLowerCase() : '';
-      if (id.includes(q) || src.includes(q) || meta.includes(q) || modeStr.includes(q) || noteStr.includes(q)) {
+      const badgeStr = m?.badge ? m.badge.label.toLowerCase() : '';
+      if (id.includes(q) || src.includes(q) || meta.includes(q) || modeStr.includes(q) || noteStr.includes(q) || badgeStr.includes(q) || 'ii-v'.includes(q) && m?.isIiV) {
         acc.push({ lick, origIdx: i });
       }
       return acc;
     }, []);
   }, [licks, query, lickMeta]);
 
+  // Build items with separator insertion
+  const listItems = useMemo(() => {
+    const items: Array<{ type: 'lick'; lick: LickEntry; origIdx: number } | { type: 'separator' }> = [];
+    let separatorInserted = false;
+    for (const f of filtered) {
+      if (!separatorInserted && lickMeta[f.origIdx]?.isIiV && singleLickCount > 0) {
+        items.push({ type: 'separator' });
+        separatorInserted = true;
+      }
+      items.push({ type: 'lick', ...f });
+    }
+    return items;
+  }, [filtered, lickMeta, singleLickCount]);
+
   // Header bar (always visible) — acts as toggle
+  const iiVCountStr = iiVLickCount > 0 ? ` + ii-V ${iiVLickCount}` : '';
   const headerContent = (
     <div
       className="flex items-center gap-1.5 px-3 cursor-pointer select-none h-[31px]"
@@ -151,7 +197,7 @@ export function LickPanel({
         フレーズ
       </span>
       <span className="px-1.5 py-0.5 rounded" style={{ background: '#2a2a3a', color: '#AAA' }}>{lickType}</span>
-      <span className="text-text-dim">{licks.length}件</span>
+      <span className="text-text-dim">{singleLickCount}件{iiVCountStr}</span>
 
       {/* Inline controls when collapsed & selected */}
       {!open && hasSelection && (
@@ -243,7 +289,7 @@ export function LickPanel({
               type="text"
               value={query}
               onChange={e => setQuery(e.target.value)}
-              placeholder="検索 (ID, アーティスト, 音数...)"
+              placeholder="検索 (ID, アーティスト, 音数, ii-V...)"
               className="flex-1 text-[10px] rounded px-1.5 py-0.5 outline-none"
               style={{
                 background: '#111',
@@ -320,7 +366,21 @@ export function LickPanel({
               className="overflow-y-auto scrollbar-thin"
               style={{ maxHeight: '160px' }}
             >
-              {filtered.map(({ lick, origIdx }) => {
+              {listItems.map((item) => {
+                if (item.type === 'separator') {
+                  return (
+                    <div
+                      key="sep"
+                      className="flex items-center gap-2 px-2 py-[2px] select-none"
+                      style={{ color: '#4FC3F7', fontSize: 9 }}
+                    >
+                      <span style={{ flex: 1, borderBottom: '1px solid #333' }} />
+                      <span>ii-V</span>
+                      <span style={{ flex: 1, borderBottom: '1px solid #333' }} />
+                    </div>
+                  );
+                }
+                const { lick, origIdx } = item;
                 const isSelected = origIdx === selectedIdx;
                 const sourceName = lick.source
                   ? (SOURCE_DISPLAY_NAMES[lick.source] ?? lick.source)
@@ -329,6 +389,7 @@ export function LickPanel({
                 return (
                   <div
                     key={origIdx}
+                    data-lick-idx={origIdx}
                     onClick={() => onSelect(origIdx)}
                     className="cursor-pointer px-2 py-[3px] flex items-center gap-1.5"
                     style={{
@@ -345,6 +406,18 @@ export function LickPanel({
                     >
                       {lick.id ?? `#${origIdx + 1}`}
                     </span>
+                    {meta?.badge && (
+                      <span
+                        className="text-[8px] font-mono flex-shrink-0 rounded px-1"
+                        style={{
+                          color: meta.badge.color,
+                          background: '#1a2a3a',
+                          border: `1px solid ${meta.badge.color}33`,
+                        }}
+                      >
+                        {meta.badge.label}
+                      </span>
+                    )}
                     <LickContourMini notes={lick.notes} selected={isSelected} />
                     <span
                       className="text-[9px] flex-shrink-0"

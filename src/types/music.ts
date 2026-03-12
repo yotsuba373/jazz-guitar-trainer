@@ -88,6 +88,7 @@ export interface ChordSlot {
   lickId?: string;           // stable lick ID (e.g. "D-3a7f") — saved lick selection
   lickHighOctave?: boolean;  // 8va toggle: +12 semitone shift within same instance
   lickHighInstance?: boolean; // high-position instance toggle
+  lickIiVType?: string;      // ii-V lick type: 'maj-ii-v-short' | 'maj-ii-v-long' | 'min-ii-v-short'
 }
 
 /** Song key with major/minor quality */

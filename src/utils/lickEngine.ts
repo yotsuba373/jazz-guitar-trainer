@@ -104,6 +104,9 @@ const TYPE_ROOT_SEMITONE: Record<string, number> = {
   'min7': 2,    // D (Dm7)
   'maj7': 0,    // C (Cmaj7)
   'm7b5': 2,    // D (Dm7b5)
+  'maj-ii-v-short': 0,  // C (ii-V in C major)
+  'maj-ii-v-long': 0,
+  'min-ii-v-short': 0,
 };
 
 // ---------------------------------------------------------------------------
@@ -584,6 +587,14 @@ export function getTransposeSemitones(quality: string, targetRootSemitone: numbe
   return targetRootSemitone - storedRootSemitone;
 }
 
+/** Compute transposition semitones for ii-V lick.
+ *  Normalizes to [-6, 5] range to avoid octave displacement
+ *  (e.g., Bb key → -2 instead of +10). */
+export function getIiVTransposeSemitones(keyCenterSemitone: number): number {
+  const t = keyCenterSemitone % 12;
+  return t > 6 ? t - 12 : t;
+}
+
 /** Build everything needed to display a lick for a given chord.
  *  Returns null if no matching lick type.
  *  @param alternateOctave - use second-best octave placement within the same instance
@@ -643,6 +654,113 @@ export function buildLickContext(
   // Convert to GeneratedPhrase
   const phrase = lickToGeneratedPhrase(
     lick, posId, template.key, rootName, pool, transposeSemitones, alternateOctave,
+  );
+
+  return { modeIdx, mode, fretMap, positions, posId, pool, transposeSemitones, phrase };
+}
+
+// ---------------------------------------------------------------------------
+// ii-V detection & context
+// ---------------------------------------------------------------------------
+
+export type IiVType = 'maj-ii-v-short' | 'maj-ii-v-long' | 'min-ii-v-short';
+
+export interface IiVDetection {
+  types: IiVType[];
+  keyCenterSemitone: number;
+}
+
+/** DOM7 qualities that can serve as V chord */
+const DOM7_QUALITIES = new Set(['7', '7alt', '7b9', '7#11', '7b13']);
+
+/** Detect a ii-V pattern starting at chords[idx].
+ *  Returns null if the pattern doesn't match. */
+export function detectIiVPattern(
+  chords: { quality: string; rootName: string }[],
+  idx: number,
+): IiVDetection | null {
+  if (idx + 1 >= chords.length) return null;
+  const ii = chords[idx];
+  const V = chords[idx + 1];
+  if (!DOM7_QUALITIES.has(V.quality)) return null;
+
+  const ROOTS_SEMI: Record<string, number> = {
+    'C': 0, 'D♭': 1, 'D': 2, 'E♭': 3, 'E': 4, 'F': 5,
+    'G♭': 6, 'G': 7, 'A♭': 8, 'A': 9, 'B♭': 10, 'B': 11,
+  };
+  const iiRoot = ROOTS_SEMI[ii.rootName];
+  const vRoot = ROOTS_SEMI[V.rootName];
+  if (iiRoot == null || vRoot == null) return null;
+
+  // ii root should be P5 (7 semitones) above V root (e.g., Dm7→G7: D-G = 7)
+  if ((iiRoot - vRoot + 12) % 12 !== 7) return null;
+
+  const keyCenterSemitone = (vRoot + 5) % 12; // I = V + P4 down = V + 5
+
+  if (ii.quality === 'm7') {
+    return { types: ['maj-ii-v-short', 'maj-ii-v-long'], keyCenterSemitone };
+  }
+  if (ii.quality === 'm7♭5') {
+    return { types: ['min-ii-v-short'], keyCenterSemitone };
+  }
+  return null;
+}
+
+/** Check if a lick ID belongs to an ii-V type (prefix IS-/IL-/is-). */
+export function isIiVLickId(id: string | undefined): IiVType | null {
+  if (!id) return null;
+  if (id.startsWith('IS-') || id.startsWith('is-')) return 'maj-ii-v-short';
+  if (id.startsWith('IL-') || id.startsWith('il-')) return 'maj-ii-v-long';
+  if (id.startsWith('iS-') || id.startsWith('iS-')) return 'min-ii-v-short';
+  // Also check lowercase prefixes from parser
+  const lower = id.toLowerCase();
+  if (lower.startsWith('is-')) return 'maj-ii-v-short';
+  if (lower.startsWith('il-')) return 'maj-ii-v-long';
+  return null;
+}
+
+/** Build context for an ii-V lick. Uses V chord's mode/position for mapping. */
+export function buildIiVLickContext(
+  lick: LickEntry,
+  keyCenterSemitone: number,
+  vQuality: string,
+  vRootName: string,
+  vRootSemitone: number,
+  alternateOctave = false,
+  preferHighInstance = false,
+): ReturnType<typeof buildLickContext> {
+  // ii-V licks are stored in C=0; transpose to target key center
+  // Normalize to [-6, 5] to avoid octave displacement
+  const transposeSemitones = getIiVTransposeSemitones(keyCenterSemitone);
+
+  // Use V chord's quality/root for mode inference
+  const modeIdx = inferModeFromLick(lick, vQuality, vRootSemitone);
+  const template = MODE_TEMPLATES[modeIdx];
+  const mode = resolveMode(vRootName as any, template);
+
+  const fretMap = buildFretMap(mode.semi, mode.notes);
+  const positions = mode.notes.length > 7
+    ? generateDimPositions(fretMap, mode.semi[0])
+    : generatePositions(fretMap, mode.notes);
+
+  const posId = findBestPositionForLick(lick, positions, transposeSemitones);
+  const pos = positions.find(p => p.id === posId);
+  if (!pos) return null;
+
+  const lickPitches = lick.notes
+    .filter(n => !n.rest && n.pitch != null)
+    .map(n => n.pitch! + transposeSemitones);
+
+  const bestInstIdx = selectBestInstance(pos, lickPitches, preferHighInstance);
+  const singleInstPos: Position = {
+    ...pos,
+    instances: [pos.instances[bestInstIdx]],
+  };
+
+  const pool = buildNotePool(singleInstPos, mode, fretMap, true);
+
+  const phrase = lickToGeneratedPhrase(
+    lick, posId, template.key, vRootName, pool, transposeSemitones, alternateOctave,
   );
 
   return { modeIdx, mode, fretMap, positions, posId, pool, transposeSemitones, phrase };
