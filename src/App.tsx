@@ -376,11 +376,21 @@ export default function App() {
     return { licks: lickDB[lickType] ?? [], lickType };
   }, [lickDB, progMode, activeProg, activeChordIdx]);
 
-  // Reset lick selection when chord changes
+  // Restore lick selection from ChordSlot when chord changes
   useEffect(() => {
+    if (!progMode || !activeProg) { setSelectedLickIdx(null); setLickHighOctave(false); return; }
+    const chord = activeProg.chords[activeChordIdx];
+    if (chord?.lickId) {
+      const idx = filteredLicks.licks.findIndex(l => l.id === chord.lickId);
+      if (idx >= 0) {
+        setSelectedLickIdx(idx);
+        setLickHighOctave(chord.lickHighOctave ?? false);
+        return;
+      }
+    }
     setSelectedLickIdx(null);
     setLickHighOctave(false);
-  }, [activeChordIdx]);
+  }, [activeChordIdx, progMode, activeProg, filteredLicks.licks]);
 
   // Build GeneratedPhrase from selected lick
   const activeLickPhrase = useMemo((): GeneratedPhrase | null => {
@@ -428,13 +438,14 @@ export default function App() {
     // Lick phrase takes priority in progression mode
     if (activeLickPhrase) return activeLickPhrase;
     // During auto-play in progression mode, show the on-the-fly generated phrase
-    if (phraseAutoPlay && progMode && autoPlayPhrase)
+    // (also show autoPlayPhrase when it's a saved-lick playback, even if phraseAutoPlay is off)
+    if (progMode && autoPlayPhrase && (phraseAutoPlay || isPlaying))
       return autoPlayPhrase;
     // Normal manual mode
     if (showPhrase && phraseHistory.length > 0)
       return phraseHistory[activePhraseIdx] ?? null;
     return null;
-  }, [activeLickPhrase, phraseAutoPlay, progMode, autoPlayPhrase, showPhrase, phraseHistory, activePhraseIdx]);
+  }, [activeLickPhrase, phraseAutoPlay, progMode, autoPlayPhrase, isPlaying, showPhrase, phraseHistory, activePhraseIdx]);
 
   // Keyboard navigation for progression mode
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
@@ -496,6 +507,16 @@ export default function App() {
   // Turn off phraseAutoPlay when leaving progression mode
   useEffect(() => { if (!progMode) setPhraseAutoPlay(false); }, [progMode]);
 
+  // Check if a chord has a saved lick that should be played during auto-advance
+  function chordHasSavedLick(chordIdx: number, prog: Progression): boolean {
+    const chord = prog.chords[chordIdx];
+    if (!chord?.lickId || !lickDB) return false;
+    const lickType = QUALITY_TO_LICK_TYPE[chord.quality];
+    if (!lickType) return false;
+    const licks = lickDB[lickType] ?? [];
+    return licks.some(l => l.id === chord.lickId);
+  }
+
   // Generate a phrase on-the-fly for a given chord index (used during auto-advance)
   function generatePhraseForChord(
     chordIdx: number,
@@ -507,6 +528,44 @@ export default function App() {
     const chord = chords[chordIdx];
     const eff = effAll[chordIdx];
     if (!chord || !eff || !QUALITY_TO_MODES[chord.quality]) return null;
+
+    // If a lick is saved for this chord, use it instead of generating a new phrase
+    if (chord.lickId && lickDB) {
+      const lickType = QUALITY_TO_LICK_TYPE[chord.quality];
+      const licks = lickType ? (lickDB[lickType] ?? []) : [];
+      const lick = licks.find(l => l.id === chord.lickId);
+      if (lick) {
+        const rootSemi = ROOTS.find(r => r.name === chord.rootName)?.semitone ?? 0;
+        const highOctave = chord.lickHighOctave ?? false;
+        const chordMode = resolveMode(chord.rootName, MODE_TEMPLATES[eff.modeIdx]);
+        const chordFretMap = buildFretMap(chordMode.semi, chordMode.notes);
+        const positions = chordMode.notes.length > 7
+          ? generateDimPositions(chordFretMap, chordMode.semi[0])
+          : generatePositions(chordFretMap, chordMode.notes);
+        const pos = positions.find(p => p.id === eff.posId);
+        if (pos) {
+          const transposeSemitones = getTransposeSemitones(chord.quality, rootSemi);
+          const extraShift = highOctave ? 12 : 0;
+          const lickPitches = lick.notes
+            .filter(n => !n.rest && n.pitch != null)
+            .map(n => n.pitch! + transposeSemitones + extraShift);
+          const bestInstIdx = selectBestInstance(pos, lickPitches, highOctave);
+          const singleInstPos = { ...pos, instances: [pos.instances[bestInstIdx]] };
+          const pool = buildNotePool(singleInstPos, chordMode, chordFretMap, true);
+          const phrase = lickToGeneratedPhrase(
+            lick, eff.posId, MODE_TEMPLATES[eff.modeIdx].key, chord.rootName, pool, transposeSemitones, extraShift,
+          );
+          if (phrase) {
+            // Reset chaining refs since lick doesn't chain
+            prevLastNoteRef.current = undefined;
+            prevContourRef.current = undefined;
+            prevMotifRef.current = undefined;
+            prevResolvedStartRef.current = undefined;
+            return phrase;
+          }
+        }
+      }
+    }
 
     const chordMode = resolveMode(chord.rootName, MODE_TEMPLATES[eff.modeIdx]);
     if (chordMode.notes.length > 7) return null;
@@ -628,7 +687,7 @@ export default function App() {
         }
       }
       // Generate + schedule phrase for initial chord on playback start
-      if (isPlaybackStart && phraseAutoPlayRef.current) {
+      if (isPlaybackStart && (phraseAutoPlayRef.current || chordHasSavedLick(activeChordIdx, activeProg))) {
         activePhraseStopRef.current?.stop();
         prevLastNoteRef.current = undefined;
         prevContourRef.current = undefined;
@@ -673,7 +732,7 @@ export default function App() {
       }
 
       // Generate + schedule phrase for the next chord on auto-advance
-      if (phraseAutoPlayRef.current && activeProg) {
+      if (activeProg && (phraseAutoPlayRef.current || chordHasSavedLick(nextChordIdx, activeProg))) {
         activePhraseStopRef.current?.stop();
         const nextStep = seq[nextPos];
         const phrase = generatePhraseForChord(nextChordIdx, activeProg, nextStep);
@@ -779,6 +838,7 @@ export default function App() {
     const copy = [...progressions];
     const prog = { ...copy[activeProgIdx], chords: copy[activeProgIdx].chords.map(c => ({
       ...c, posConfirmed: false, modeConfirmed: false, voicingKey: undefined,
+      lickId: undefined, lickHighOctave: undefined,
     }))};
     copy[activeProgIdx] = prog;
     handleSaveProgressions(copy);
@@ -1066,9 +1126,17 @@ export default function App() {
                     onSelect={(idx) => {
                       setSelectedLickIdx(idx);
                       setLickHighOctave(false);
+                      // Save lick selection to ChordSlot
+                      const lick = filteredLicks.licks[idx];
+                      if (lick?.id) {
+                        const copy = [...progressions];
+                        const prog = { ...copy[activeProgIdx], chords: [...copy[activeProgIdx].chords] };
+                        prog.chords[activeChordIdx] = { ...prog.chords[activeChordIdx], lickId: lick.id, lickHighOctave: false };
+                        copy[activeProgIdx] = prog;
+                        handleSaveProgressions(copy);
+                      }
                       const chord = activeProg.chords[activeChordIdx];
                       if (!chord) return;
-                      const lick = filteredLicks.licks[idx];
                       if (!lick) return;
                       const rootSemi = ROOTS.find(r => r.name === chord.rootName)?.semitone ?? 0;
                       const ctx = buildLickContext(lick, chord.quality, chord.rootName, rootSemi);
@@ -1081,13 +1149,30 @@ export default function App() {
                       if (manualPhraseTimer.current) clearTimeout(manualPhraseTimer.current);
                       setIsPhraseAudioPlaying(false);
                     }}
-                    onClear={() => setSelectedLickIdx(null)}
+                    onClear={() => {
+                      setSelectedLickIdx(null);
+                      const copy = [...progressions];
+                      const prog = { ...copy[activeProgIdx], chords: [...copy[activeProgIdx].chords] };
+                      prog.chords[activeChordIdx] = { ...prog.chords[activeChordIdx], lickId: undefined, lickHighOctave: undefined };
+                      copy[activeProgIdx] = prog;
+                      handleSaveProgressions(copy);
+                    }}
                     isPlaying={isPhraseAudioPlaying}
                     lickType={filteredLicks.lickType}
                     quality={activeProg.chords[activeChordIdx]?.quality ?? ''}
                     rootSemitone={ROOTS.find(r => r.name === activeProg.chords[activeChordIdx]?.rootName)?.semitone ?? 0}
                     highOctave={lickHighOctave}
-                    onToggleOctave={() => setLickHighOctave(v => !v)}
+                    onToggleOctave={() => {
+                      setLickHighOctave(v => {
+                        const next = !v;
+                        const copy = [...progressions];
+                        const prog = { ...copy[activeProgIdx], chords: [...copy[activeProgIdx].chords] };
+                        prog.chords[activeChordIdx] = { ...prog.chords[activeChordIdx], lickHighOctave: next };
+                        copy[activeProgIdx] = prog;
+                        handleSaveProgressions(copy);
+                        return next;
+                      });
+                    }}
                   />
                 )}
               />
