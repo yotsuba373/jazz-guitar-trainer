@@ -14,7 +14,7 @@ npm install
 npm run dev       # 開発サーバー起動 → http://localhost:5173
 npm run build     # tsc + vite build
 npm run lint      # ESLint
-npm test          # vitest run (861 テスト)
+npm test          # vitest run (866 テスト)
 ```
 
 Node.js が未インストールの場合は fnm を使用:
@@ -68,7 +68,7 @@ src/
 │   ├── chordForms.ts                — findVoicingsInPosition(), VOICING_TEMPLATES, formatVoicingLabel()
 │   ├── bebopGenerator.ts            — generatePhraseRule(), buildNotePool(), chooseGoalNote()
 │   ├── bebopScheduler.ts            — buildPhrase(), fillSkeleton(), planSegmentRhythms(), absolutePitch(), pickRandom()
-│   ├── lickEngine.ts                — loadLickDB(), transposeLick(), mapLickToFretboard(), lickToGeneratedPhrase(), inferModeFromLick(), inferModeCandidates(), findBestPositionForLick()
+│   ├── lickEngine.ts                — loadLickDB(), transposeLick(), mapLickToFretboard(), lickToGeneratedPhrase(), inferModeFromLick(), inferModeCandidates(), findBestPositionForLick(), selectBestInstance(), buildLickContext()
 │   ├── bebopSegments.ts             — セグメント関数9種 (Arp, ScaleRun, Enclosure, OctaveDisp等) — exitAnchor/interiorAnchors対応
 │   ├── bebopTemplates.ts            — テンプレート定義11種 (日本語label+description) + 選択ロジック + pickWeighted()
 │   ├── skeleton.ts                  — buildSkeleton(), SkeletonSlot, PhraseSkeleton, コンター曲線ヘルパー
@@ -89,7 +89,7 @@ src/
 │       ├── bebopTemplates.test.ts   — 15 tests (テンプレート選択・品質フィルタ・拍配分・allocateBeats)
 │       ├── bebopGenerator.test.ts   — 25 tests (ルールベース生成・全モード対応・品質チェック・可変リズム・スケルトン統合)
 │       ├── skeleton.test.ts         — 23 tests (スケルトン構築・コンター曲線・表拍CT配置・強拍GT配置・演奏可能性)
-│       └── lickEngine.test.ts       — 25 tests (リックDB読込・移調・指板マッピング・モード推定・ポジション選択・GeneratedPhrase変換)
+│       └── lickEngine.test.ts       — 30 tests (リックDB読込・移調・指板マッピング・モード推定・ポジション選択・インスタンス選択・8音スケール・GeneratedPhrase変換)
 └── components/
     ├── Fretboard/                   — SVG指板描画 (Fretboard, FretboardNote, GhostNote, PhrasePath)
     ├── Controls/                    — RootSelector, ModeSelector, PositionSelector, OptionBar, VoicingGrid, PhraseControls, PhraseAnalysisPanel, PianoRoll, GlobalAudioControls, LickPanel
@@ -516,7 +516,8 @@ GeneratedPhrase → PhrasePath / PianoRoll / PhraseAnalysisPanel
 
 - **モード推定**: `inferModeFromLick()` — リックのピッチクラスを候補モードのスケール音と照合、一致率最大を選択
 - **モード候補**: `inferModeCandidates()` — 重み付きスコアリング (表拍×2, 長音×2) で最大3件のモード候補を返す (LickPanel 表示用)
-- **ポジション選択**: `findBestPositionForLick()` — 各ポジションの absolutePitch セットとリックのピッチを照合、含有率最大を選択
+- **ポジション選択**: `findBestPositionForLick()` — インスタンス単位でカバー率を評価 (音域包含ボーナス+2)、最良インスタンスのスコアでポジション選択
+- **インスタンス選択**: `selectBestInstance()` — 選択ポジション内でリック音域に最適なインスタンスを選び、オクターブ飛びを防止
 - ユーザーは既存UIで手動変更可能
 
 ### UIフロー

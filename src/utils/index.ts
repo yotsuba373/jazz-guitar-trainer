@@ -77,6 +77,6 @@ export {
   QUALITY_TO_LICK_TYPE, SOURCE_DISPLAY_NAMES,
   inferModeFromLick, inferModeCandidates, findBestPositionForLick,
   lickToGeneratedPhrase, mapLickToFretboard,
-  getTransposeSemitones, buildLickContext,
+  getTransposeSemitones, buildLickContext, selectBestInstance,
   inferRhythmType,
 } from './lickEngine';
