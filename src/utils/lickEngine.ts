@@ -5,7 +5,7 @@ import type {
 import { MODE_TEMPLATES } from '../constants';
 import { QUALITY_TO_MODES } from './progression';
 import { resolveMode } from './noteSpelling';
-import { buildFretMap, generatePositions } from './fretboard';
+import { buildFretMap, generatePositions, generateDimPositions } from './fretboard';
 import { absolutePitch } from './bebopScheduler';
 import { buildNotePool } from './bebopGenerator';
 
@@ -104,17 +104,25 @@ function mapPitchToFret(
   midiPitch: number,
   pool: PoolNote[],
   prevStringIdx: number | null,
+  prevFret: number | null,
 ): { stringIdx: number; fret: number; noteName: string; semitone: number; isChordTone: boolean; isApproach: boolean; poolMatch: boolean } {
   // Find all pool notes matching this pitch
   const candidates = pool.filter(p => absolutePitch(p) === midiPitch);
 
   if (candidates.length > 0) {
-    // Pick closest string to previous note
-    if (prevStringIdx != null) {
-      candidates.sort((a, b) =>
-        Math.abs(a.stringIdx - prevStringIdx) - Math.abs(b.stringIdx - prevStringIdx)
-      );
-    }
+    // Sort by combined score: string distance × 10 + fret distance
+    candidates.sort((a, b) => {
+      if (prevStringIdx != null) {
+        const sDist = (d: PoolNote) => Math.abs(d.stringIdx - prevStringIdx!);
+        const fDist = (d: PoolNote) => prevFret != null ? Math.abs(d.fret - prevFret!) : 0;
+        const scoreA = sDist(a) * 10 + fDist(a);
+        const scoreB = sDist(b) * 10 + fDist(b);
+        return scoreA - scoreB;
+      }
+      // First note: prefer middle strings (G=2, D=3)
+      const centerDist = (d: PoolNote) => Math.abs(d.stringIdx - 2.5);
+      return centerDist(a) - centerDist(b);
+    });
     const best = candidates[0];
     return { ...best, poolMatch: true };
   }
@@ -131,8 +139,10 @@ function mapPitchToFret(
   for (let s = 0; s < 6; s++) {
     const fret = midiPitch - OPEN_MIDI[s];
     if (fret < 0 || fret > 21) continue;
-    const dist = prevStringIdx != null ? Math.abs(s - prevStringIdx) : s;
-    if (dist < bestDist || (dist === bestDist && fret < bestFret)) {
+    const sDist = prevStringIdx != null ? Math.abs(s - prevStringIdx) : Math.abs(s - 2.5);
+    const fDist = prevFret != null ? Math.abs(fret - prevFret) : 0;
+    const dist = sDist * 10 + fDist;
+    if (dist < bestDist) {
       bestDist = dist;
       bestString = s;
       bestFret = fret;
@@ -150,18 +160,44 @@ function mapPitchToFret(
   };
 }
 
-/** Map an entire lick to fretboard coordinates using the note pool. */
+/** Map an entire lick to fretboard coordinates using the note pool.
+ *  If some pitches fall outside the pool, tries shifting the entire
+ *  lick ±1 octave to maximize pool coverage.
+ *  @param extraShift - additional semitone shift (e.g. +12 for 8va) applied before auto-octave logic */
 export function mapLickToFretboard(
   lick: LickEntry,
   pool: PoolNote[],
   transposeSemitones: number,
+  extraShift = 0,
 ): Array<{ stringIdx: number; fret: number; noteName: string; semitone: number; isChordTone: boolean; isApproach: boolean } | null> {
+  // Build set of available pitches in pool for quick lookup
+  const poolPitches = new Set(pool.map(p => absolutePitch(p)));
+
+  // Count how many pitched notes are covered at each octave offset
+  const pitched = lick.notes.filter(n => !n.rest && n.pitch != null);
+  const basePitches = pitched.map(n => n.pitch! + transposeSemitones + extraShift);
+
+  let bestOctaveShift = 0;
+  let bestCoverage = 0;
+  for (const shift of [0, -12, 12]) {
+    let cov = 0;
+    for (const p of basePitches) {
+      if (poolPitches.has(p + shift)) cov++;
+    }
+    if (cov > bestCoverage) {
+      bestCoverage = cov;
+      bestOctaveShift = shift;
+    }
+  }
+
   let prevStringIdx: number | null = null;
+  let prevFret: number | null = null;
   return lick.notes.map((n: LickNote) => {
     if (n.rest) return null;
-    const midiPitch = n.pitch! + transposeSemitones;
-    const mapped = mapPitchToFret(midiPitch, pool, prevStringIdx);
+    const midiPitch = n.pitch! + transposeSemitones + extraShift + bestOctaveShift;
+    const mapped = mapPitchToFret(midiPitch, pool, prevStringIdx, prevFret);
     prevStringIdx = mapped.stringIdx;
+    prevFret = mapped.fret;
     return mapped;
   });
 }
@@ -275,7 +311,9 @@ export function inferModeCandidates(
 // Position selection
 // ---------------------------------------------------------------------------
 
-/** Find the best position for a lick's notes. Returns posId. */
+/** Find the best position for a lick's notes. Returns posId.
+ *  Evaluates each instance separately to avoid inflated scores from
+ *  combining pitches across octave-separated instances. */
 export function findBestPositionForLick(
   lick: LickEntry,
   allPositions: Position[],
@@ -289,35 +327,38 @@ export function findBestPositionForLick(
     .filter((n: LickNote) => !n.rest && n.pitch != null)
     .map((n: LickNote) => n.pitch! + transposeSemitones);
 
+  if (pitches.length === 0) return allPositions[0].id;
+
   let bestPosId = allPositions[0].id;
   let bestScore = -1;
 
   for (const pos of allPositions) {
-    // Build set of absolute pitches in this position
-    const posPitches = new Set<number>();
+    // Score each instance separately, take the best
+    let posScore = 0;
     for (const inst of pos.instances) {
+      const instPitches = new Set<number>();
       for (let s = 0; s < 6; s++) {
         const notes = inst.strings[s];
         if (!notes) continue;
         for (const [, fret] of notes) {
-          posPitches.add(OPEN_MIDI[s] + fret);
+          instPitches.add(OPEN_MIDI[s] + fret);
         }
       }
-    }
 
-    // Count how many lick pitches are in this position
-    let score = 0;
-    for (const p of pitches) {
-      if (posPitches.has(p)) score++;
+      let score = 0;
+      for (const p of pitches) {
+        if (instPitches.has(p)) score++;
+      }
+      if (score > posScore) posScore = score;
     }
 
     // Tiebreak: prefer position closer to previous
-    const isBetter = score > bestScore ||
-      (score === bestScore && prevPosId != null &&
+    const isBetter = posScore > bestScore ||
+      (posScore === bestScore && prevPosId != null &&
         Math.abs(pos.id - prevPosId) < Math.abs(bestPosId - prevPosId));
 
     if (isBetter) {
-      bestScore = score;
+      bestScore = posScore;
       bestPosId = pos.id;
     }
   }
@@ -329,7 +370,8 @@ export function findBestPositionForLick(
 // Lick → GeneratedPhrase conversion
 // ---------------------------------------------------------------------------
 
-/** Convert a lick entry into a GeneratedPhrase for display and playback. */
+/** Convert a lick entry into a GeneratedPhrase for display and playback.
+ *  @param extraShift - additional semitone shift (e.g. +12 for 8va) */
 export function lickToGeneratedPhrase(
   lick: LickEntry,
   posId: number,
@@ -337,8 +379,9 @@ export function lickToGeneratedPhrase(
   rootName: string,
   pool: PoolNote[],
   transposeSemitones: number,
+  extraShift = 0,
 ): GeneratedPhrase {
-  const mapped = mapLickToFretboard(lick, pool, transposeSemitones);
+  const mapped = mapLickToFretboard(lick, pool, transposeSemitones, extraShift);
 
   const notes: PhraseNote[] = lick.notes.map((n: LickNote, i: number) => {
     const m = mapped[i];
@@ -390,6 +433,53 @@ export function lickToGeneratedPhrase(
 }
 
 // ---------------------------------------------------------------------------
+// Instance selection
+// ---------------------------------------------------------------------------
+
+/** Select the best instance of a position for a given set of MIDI pitches.
+ *  Considers ±1 octave shift for the entire lick to maximize coverage.
+ *  Prefers majority coverage with low-fret bias (or high-fret if preferHigh). */
+export function selectBestInstance(pos: Position, lickPitches: number[], preferHigh = false): number {
+  if (pos.instances.length <= 1) return 0;
+  if (lickPitches.length === 0) return 0;
+
+  let bestIdx = 0;
+  let bestCov = -1;
+  let bestFret = preferHigh ? -1 : Infinity;
+
+  for (let i = 0; i < pos.instances.length; i++) {
+    const inst = pos.instances[i];
+    const instPitches = new Set<number>();
+    for (let s = 0; s < 6; s++) {
+      const notes = inst.strings[s];
+      if (!notes) continue;
+      for (const [, fret] of notes) {
+        instPitches.add(OPEN_MIDI[s] + fret);
+      }
+    }
+    // Best coverage across octave shifts
+    let cov = 0;
+    for (const shift of [0, -12, 12]) {
+      let c = 0;
+      for (const p of lickPitches) if (instPitches.has(p + shift)) c++;
+      if (c > cov) cov = c;
+    }
+
+    // Prefer higher coverage; tiebreak by fret preference
+    const fretBetter = preferHigh
+      ? inst.fretMin > bestFret
+      : inst.fretMin < bestFret;
+    if (cov > bestCov || (cov === bestCov && fretBetter)) {
+      bestCov = cov;
+      bestIdx = i;
+      bestFret = inst.fretMin;
+    }
+  }
+
+  return bestIdx;
+}
+
+// ---------------------------------------------------------------------------
 // Full pipeline: chord → transposed lick → GeneratedPhrase
 // ---------------------------------------------------------------------------
 
@@ -401,12 +491,14 @@ export function getTransposeSemitones(quality: string, targetRootSemitone: numbe
 }
 
 /** Build everything needed to display a lick for a given chord.
- *  Returns null if no matching lick type. */
+ *  Returns null if no matching lick type.
+ *  @param preferHigh - prefer high-fret instance when multiple exist */
 export function buildLickContext(
   lick: LickEntry,
   quality: string,
   rootName: string,
   rootSemitone: number,
+  preferHigh = false,
 ): {
   modeIdx: number;
   mode: Mode;
@@ -424,23 +516,39 @@ export function buildLickContext(
   const template = MODE_TEMPLATES[modeIdx];
   const mode = resolveMode(rootName as any, template);
 
-  // 8-note scales not supported for lick mapping
-  if (mode.notes.length > 7) return null;
-
   const fretMap = buildFretMap(mode.semi, mode.notes);
-  const positions = generatePositions(fretMap, mode.notes);
+
+  // 8-note scales (dim W-H / H-W) use generateDimPositions
+  const positions = mode.notes.length > 7
+    ? generateDimPositions(fretMap, mode.semi[0])
+    : generatePositions(fretMap, mode.notes);
 
   // Find best position
   const posId = findBestPositionForLick(lick, positions, transposeSemitones);
   const pos = positions.find(p => p.id === posId);
   if (!pos) return null;
 
+  // When preferHigh, shift pitches +12 so they land in the high instance
+  const extraShift = preferHigh ? 12 : 0;
+  const lickPitches = lick.notes
+    .filter(n => !n.rest && n.pitch != null)
+    .map(n => n.pitch! + transposeSemitones + extraShift);
+
+  // Select best instance for the (possibly shifted) pitches
+  const bestInstIdx = selectBestInstance(pos, lickPitches, preferHigh);
+
+  // Build a single-instance position for pool building
+  const singleInstPos: Position = {
+    ...pos,
+    instances: [pos.instances[bestInstIdx]],
+  };
+
   // Build note pool (with chromatic for approach notes)
-  const pool = buildNotePool(pos, mode, fretMap, true);
+  const pool = buildNotePool(singleInstPos, mode, fretMap, true);
 
   // Convert to GeneratedPhrase
   const phrase = lickToGeneratedPhrase(
-    lick, posId, template.key, rootName, pool, transposeSemitones,
+    lick, posId, template.key, rootName, pool, transposeSemitones, extraShift,
   );
 
   return { modeIdx, mode, fretMap, positions, posId, pool, transposeSemitones, phrase };

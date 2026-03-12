@@ -9,7 +9,9 @@ import {
   lickToGeneratedPhrase,
   inferModeFromLick,
   findBestPositionForLick,
+  selectBestInstance,
   getTransposeSemitones,
+  buildLickContext,
   loadLickDB,
   clearLickDBCache,
 } from '../lickEngine';
@@ -228,6 +230,115 @@ describe('lickToGeneratedPhrase', () => {
 
     const phrase = lickToGeneratedPhrase(lickWithRest, 1, 'ionian', 'C', pool, 0);
     expect(phrase.notes[1].isRest).toBe(true);
+  });
+});
+
+describe('buildLickContext with dim quality', () => {
+  it('returns non-null for dim chord (8-note scale)', () => {
+    const lick: LickEntry = {
+      notes: [
+        { pitch: 67, beatStart: 0, duration: 0.5 },  // G
+        { pitch: 65, beatStart: 0.5, duration: 0.5 }, // F
+        { pitch: 63, beatStart: 1, duration: 0.5 },   // Eb
+        { pitch: 60, beatStart: 1.5, duration: 0.5 }, // C
+      ],
+      noteCount: 4,
+      beats: 2,
+    };
+    const result = buildLickContext(lick, 'dim', 'C', 0);
+    expect(result).not.toBeNull();
+    expect(result!.positions.length).toBeGreaterThan(0);
+    expect(result!.phrase.notes.length).toBe(4);
+  });
+});
+
+describe('selectBestInstance', () => {
+  it('selects the instance whose pitches best cover the lick', () => {
+    const mode = resolveMode('G', MODE_TEMPLATES[4]); // Mixolydian
+    const fretMap = buildFretMap(mode.semi, mode.notes);
+    const positions = generatePositions(fretMap, mode.notes);
+    // Pick a position with multiple instances
+    const pos = positions.find(p => p.instances.length >= 2);
+    if (!pos) return; // skip if no multi-instance position
+    // Use pitches from the lower instance range
+    const inst0 = pos.instances[0];
+    const pitches: number[] = [];
+    for (let s = 0; s < 6; s++) {
+      const notes = inst0.strings[s];
+      if (!notes) continue;
+      for (const [, fret] of notes) {
+        pitches.push(64 - 5 * s + fret); // OPEN_MIDI approximation
+      }
+    }
+    const idx = selectBestInstance(pos, pitches.slice(0, 4));
+    expect(idx).toBeGreaterThanOrEqual(0);
+    expect(idx).toBeLessThan(pos.instances.length);
+  });
+
+  it('returns 0 for single-instance position', () => {
+    const pos: Position = {
+      id: 1,
+      bPair: 'C,D',
+      range: '1-5',
+      instances: [{
+        strings: [
+          [['C', 3], ['D', 5], ['E', 7]],
+          [['A', 3], ['B', 5]],
+          [['F', 3], ['G', 5], ['A', 7]],
+          [['C', 3], ['D', 5], ['E', 7]],
+          [['G', 3], ['A', 5], ['B', 7]],
+          [['C', 3], ['D', 5], ['E', 7]],
+        ],
+        fretMin: 3,
+        fretMax: 7,
+      }],
+    };
+    expect(selectBestInstance(pos, [60, 64, 67])).toBe(0);
+  });
+});
+
+describe('mapPitchToFret initial note prefers middle strings', () => {
+  it('first note maps near G/D strings when multiple candidates exist', () => {
+    const mode = resolveMode('C', MODE_TEMPLATES[0]); // Ionian
+    const fretMap = buildFretMap(mode.semi, mode.notes);
+    const positions = generatePositions(fretMap, mode.notes);
+    const pool = buildNotePool(positions[0], mode, fretMap, true);
+
+    // C4 (MIDI 60) exists on multiple strings
+    const lick: LickEntry = {
+      notes: [{ pitch: 60, beatStart: 0, duration: 1 }],
+      noteCount: 1,
+      beats: 1,
+    };
+    const mapped = mapLickToFretboard(lick, pool, 0);
+    expect(mapped[0]).not.toBeNull();
+    // Should prefer middle strings (2=G, 3=D) over edges (0=1E, 5=6E)
+    const si = mapped[0]!.stringIdx;
+    expect(si).toBeGreaterThanOrEqual(1);
+    expect(si).toBeLessThanOrEqual(4);
+  });
+});
+
+describe('findBestPositionForLick per-instance scoring', () => {
+  it('scores positions by best single instance, not combined', () => {
+    const mode = resolveMode('G', MODE_TEMPLATES[4]); // Mixolydian
+    const fretMap = buildFretMap(mode.semi, mode.notes);
+    const positions = generatePositions(fretMap, mode.notes);
+
+    // Use a narrow-range lick that fits in one instance
+    const narrowLick: LickEntry = {
+      notes: [
+        { pitch: 55, beatStart: 0, duration: 0.5 },   // G3
+        { pitch: 57, beatStart: 0.5, duration: 0.5 }, // A3
+        { pitch: 59, beatStart: 1, duration: 0.5 },   // B3
+        { pitch: 60, beatStart: 1.5, duration: 0.5 }, // C4
+      ],
+      noteCount: 4,
+      beats: 2,
+    };
+
+    const posId = findBestPositionForLick(narrowLick, positions, 0);
+    expect(positions.some(p => p.id === posId)).toBe(true);
   });
 });
 

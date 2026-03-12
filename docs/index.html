@@ -1524,12 +1524,13 @@ GeneratedPhrase
   <tr><th>関数</th><th>責務</th></tr>
   <tr><td>loadLickDB()</td><td>fetch('/licks.json') + キャッシュ</td></tr>
   <tr><td>transposeLick()</td><td>ピッチ値を移調</td></tr>
-  <tr><td>mapLickToFretboard()</td><td>MIDI pitch → (stringIdx, fret) マッピング</td></tr>
+  <tr><td>mapLickToFretboard()</td><td>MIDI pitch → (stringIdx, fret) マッピング。弦選択は複合スコア (弦距離×10 + フレット距離) で評価し、最初の音は中間弦 (G/D) を優先</td></tr>
   <tr><td>lickToGeneratedPhrase()</td><td>LickEntry → GeneratedPhrase 変換</td></tr>
   <tr><td>inferModeFromLick()</td><td>ピッチクラスからモード推定 (単一ベスト)</td></tr>
   <tr><td>inferModeCandidates()</td><td>重み付きスコアで最大3モード候補を返す</td></tr>
-  <tr><td>findBestPositionForLick()</td><td>最適ポジション選択</td></tr>
-  <tr><td>buildLickContext()</td><td>全パイプライン一括実行</td></tr>
+  <tr><td>findBestPositionForLick()</td><td>最適ポジション選択。各インスタンスを個別評価し、リック音域が完全に収まるインスタンスに +2 ボーナス</td></tr>
+  <tr><td>selectBestInstance()</td><td>ポジション内の最適インスタンス選択。カバー率 + 音域包含で評価し、リック音が異なるオクターブのインスタンスにマッピングされるのを防止</td></tr>
+  <tr><td>buildLickContext()</td><td>全パイプライン一括実行。8音スケール (dim W-H / H-W) にも対応 (<code>generateDimPositions</code> を使用)</td></tr>
   <tr><td>getTransposeSemitones()</td><td>移調量計算</td></tr>
 </table>
 
@@ -1540,7 +1541,7 @@ GeneratedPhrase
 
 <!-- ==================== TESTING ==================== -->
 <h2 id="testing">Test Suite</h2>
-<p><code>npm test</code> — Vitest による <strong>861テスト</strong>。</p>
+<p><code>npm test</code> — Vitest による <strong>866テスト</strong>。</p>
 
 <table>
   <tr><th>Test File</th><th>Tests</th><th>Coverage</th></tr>
@@ -1557,7 +1558,7 @@ GeneratedPhrase
   <tr><td>bebopTemplates.test.ts</td><td>15</td><td>テンプレート構造、品質フィルタ、コンター親和、拍配分(allocateEighths/allocateBeats)</td></tr>
   <tr><td>bebopGenerator.test.ts</td><td>25</td><td>ルールベース生成 (全7モード+LydDom+Alt対応、CT表拍率、音域、跳躍制限、メタデータ、可変リズム、planSegmentRhythms、スケルトン駆動生成)</td></tr>
   <tr><td>swing.test.ts</td><td>25</td><td>スウィングタイミング, ダイナミクス倍率, アーティキュレーション倍率, 4分/3連符非適用, テンポ補正</td></tr>
-  <tr><td>lickEngine.test.ts</td><td>25</td><td>リックDB読込, 品質マッピング, 移調, 指板マッピング, モード推定, ポジション選択, GeneratedPhrase変換</td></tr>
+  <tr><td>lickEngine.test.ts</td><td>30</td><td>リックDB読込, 品質マッピング, 移調, 指板マッピング, モード推定, ポジション選択, インスタンス選択, 8音スケール対応, GeneratedPhrase変換</td></tr>
 </table>
 
 <div class="callout warn">
