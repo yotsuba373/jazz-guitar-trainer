@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import type { LabelMode, RootName, Progression, ChordNotationPrefs, ChartLayout, SongKey, ChordSlot, GeneratedPhrase, InstrumentType, LickDB, LickEntry } from './types';
+import type { LabelMode, RootName, Progression, ChordNotationPrefs, ChartLayout, SongKey, ChordSlot, GeneratedPhrase, InstrumentType, LickDB, LickEntry, Position, FretMap } from './types';
 import { MODE_TEMPLATES, ROOTS, MODE_COLORS } from './constants';
 import {
   buildFretMap, generatePositions, generateDimPositions, resolveMode,
@@ -12,7 +12,7 @@ import {
   playChordStrum,
   buildNotePool, schedulePhrase,
   loadLickDB, QUALITY_TO_LICK_TYPE, buildLickContext, getTransposeSemitones,
-  lickToGeneratedPhrase, selectBestInstance,
+  lickToGeneratedPhrase, selectBestInstance, hasAlternateOctave,
 } from './utils';
 import { Fretboard } from './components/Fretboard';
 import { RootSelector, ModeSelector, PositionSelector, OptionBar, PhraseAnalysisPanel, GlobalAudioControls, LickPanel } from './components/Controls';
@@ -177,6 +177,7 @@ export default function App() {
   const [lickDB, setLickDB] = useState<LickDB | null>(null);
   const [selectedLickIdx, setSelectedLickIdx] = useState<number | null>(null);
   const [lickHighOctave, setLickHighOctave] = useState(false);
+  const [lickHighInstance, setLickHighInstance] = useState(false);
   const template = MODE_TEMPLATES[modeIdx];
   const mode = useMemo(() => resolveMode(rootName, template), [rootName, modeIdx]);
   const is8Note = mode.notes.length > 7;
@@ -347,18 +348,20 @@ export default function App() {
 
   // Restore lick selection from ChordSlot when chord changes
   useEffect(() => {
-    if (!progMode || !activeProg) { setSelectedLickIdx(null); setLickHighOctave(false); return; }
+    if (!progMode || !activeProg) { setSelectedLickIdx(null); setLickHighOctave(false); setLickHighInstance(false); return; }
     const chord = activeProg.chords[activeChordIdx];
     if (chord?.lickId) {
       const idx = filteredLicks.licks.findIndex(l => l.id === chord.lickId);
       if (idx >= 0) {
         setSelectedLickIdx(idx);
         setLickHighOctave(chord.lickHighOctave ?? false);
+        setLickHighInstance(chord.lickHighInstance ?? false);
         return;
       }
     }
     setSelectedLickIdx(null);
     setLickHighOctave(false);
+    setLickHighInstance(false);
   }, [activeChordIdx, progMode, activeProg, filteredLicks.licks]);
 
   // Build GeneratedPhrase from selected lick
@@ -370,38 +373,112 @@ export default function App() {
 
     const lick = filteredLicks.licks[selectedLickIdx];
     const rootSemi = ROOTS.find(r => r.name === chord.rootName)?.semitone ?? 0;
-    const ctx = buildLickContext(lick, chord.quality, chord.rootName, rootSemi, lickHighOctave);
-    if (!ctx) return null;
+
+    // Helper to build phrase for a given position
+    const buildForPos = (pos: Position, modeIdx: number) => {
+      const t = MODE_TEMPLATES[modeIdx];
+      const m = resolveMode(chord.rootName, t);
+      const fm = buildFretMap(m.semi, m.notes);
+      const transposeSemitones = getTransposeSemitones(chord.quality, rootSemi);
+      const lickPitches = lick.notes
+        .filter(n => !n.rest && n.pitch != null)
+        .map(n => n.pitch! + transposeSemitones);
+      const bestInstIdx = selectBestInstance(pos, lickPitches, lickHighInstance);
+      const singleInstPos = { ...pos, instances: [pos.instances[bestInstIdx]] };
+      const pool = buildNotePool(singleInstPos, m, fm, true);
+      return lickToGeneratedPhrase(
+        lick, pos.id, t.key, chord.rootName, pool, transposeSemitones, lickHighOctave,
+      );
+    };
 
     // If user has changed mode/position, rebuild with current selections
     const eff = effectiveAll[activeChordIdx];
     if (eff) {
-      const userModeIdx = eff.modeIdx;
-      const userPosId = eff.posId;
-      const userTemplate = MODE_TEMPLATES[userModeIdx];
+      const userTemplate = MODE_TEMPLATES[eff.modeIdx];
       const userMode = resolveMode(chord.rootName, userTemplate);
       const userFretMap = buildFretMap(userMode.semi, userMode.notes);
       const userPositions = userMode.notes.length > 7
         ? generateDimPositions(userFretMap, userMode.semi[0])
         : generatePositions(userFretMap, userMode.notes);
-      const userPos = userPositions.find(p => p.id === userPosId);
-      if (userPos) {
-        const transposeSemitones = getTransposeSemitones(chord.quality, rootSemi);
-        const extraShift = lickHighOctave ? 12 : 0;
-        const lickPitches = lick.notes
-          .filter(n => !n.rest && n.pitch != null)
-          .map(n => n.pitch! + transposeSemitones + extraShift);
-        const bestInstIdx = selectBestInstance(userPos, lickPitches, lickHighOctave);
-        const singleInstPos = { ...userPos, instances: [userPos.instances[bestInstIdx]] };
-        const userPool = buildNotePool(singleInstPos, userMode, userFretMap, true);
-        return lickToGeneratedPhrase(
-          lick, userPosId, userTemplate.key, chord.rootName, userPool, transposeSemitones, extraShift,
-        );
-      }
+      const userPos = userPositions.find(p => p.id === eff.posId);
+      if (userPos) return buildForPos(userPos, eff.modeIdx);
     }
 
-    return ctx.phrase;
-  }, [selectedLickIdx, filteredLicks.licks, progMode, activeProg, activeChordIdx, effectiveAll, lickHighOctave]);
+    // Fallback: use auto-detected context
+    const ctx = buildLickContext(lick, chord.quality, chord.rootName, rootSemi, lickHighOctave, lickHighInstance);
+    return ctx?.phrase ?? null;
+  }, [selectedLickIdx, filteredLicks.licks, progMode, activeProg, activeChordIdx, effectiveAll, lickHighOctave, lickHighInstance]);
+
+  // Check if 8va / high-instance toggles are available for current lick+position
+  const { canHighOctave, canHighInstance } = useMemo(() => {
+    const none = { canHighOctave: false, canHighInstance: false };
+    if (selectedLickIdx == null || !filteredLicks.licks[selectedLickIdx]) return none;
+    if (!progMode || !activeProg) return none;
+    const chord = activeProg.chords[activeChordIdx];
+    if (!chord) return none;
+    const lick = filteredLicks.licks[selectedLickIdx];
+    const rootSemi = ROOTS.find(r => r.name === chord.rootName)?.semitone ?? 0;
+    const transposeSemitones = getTransposeSemitones(chord.quality, rootSemi);
+
+    // Resolve position (user-selected or auto-detected)
+    let pos: Position | undefined;
+    let modeObj: ReturnType<typeof resolveMode> | undefined;
+    let fm: FretMap | undefined;
+    const eff = effectiveAll[activeChordIdx];
+    if (eff) {
+      const t = MODE_TEMPLATES[eff.modeIdx];
+      modeObj = resolveMode(chord.rootName, t);
+      fm = buildFretMap(modeObj.semi, modeObj.notes);
+      const positions = modeObj.notes.length > 7
+        ? generateDimPositions(fm, modeObj.semi[0])
+        : generatePositions(fm, modeObj.notes);
+      pos = positions.find(p => p.id === eff.posId);
+    }
+    if (!pos) {
+      const ctx = buildLickContext(lick, chord.quality, chord.rootName, rootSemi);
+      if (!ctx) return none;
+      pos = ctx.positions.find(p => p.id === ctx.posId);
+      modeObj = ctx.mode;
+      fm = ctx.fretMap;
+      if (!pos) return none;
+    }
+
+    // canHighInstance: multiple instances in this position
+    const chi = pos.instances.length > 1;
+
+    // canHighOctave: check if an alternate octave exists in the current instance's pool
+    const basePitches = lick.notes.filter(n => !n.rest && n.pitch != null)
+      .map(n => n.pitch! + transposeSemitones);
+    const instIdx = selectBestInstance(pos, basePitches, lickHighInstance);
+    const singleInstPos = { ...pos, instances: [pos.instances[instIdx]] };
+    const pool = buildNotePool(singleInstPos, modeObj!, fm!, true);
+    const cho = hasAlternateOctave(lick, pool, transposeSemitones);
+
+    return { canHighOctave: cho, canHighInstance: chi };
+  }, [selectedLickIdx, filteredLicks.licks, progMode, activeProg, activeChordIdx, effectiveAll, lickHighInstance]);
+
+  // Auto-disable toggles when they become unavailable
+  useEffect(() => {
+    let changed = false;
+    const updates: Partial<{ lickHighOctave: boolean; lickHighInstance: boolean }> = {};
+    if (!canHighOctave && lickHighOctave) {
+      setLickHighOctave(false);
+      updates.lickHighOctave = false;
+      changed = true;
+    }
+    if (!canHighInstance && lickHighInstance) {
+      setLickHighInstance(false);
+      updates.lickHighInstance = false;
+      changed = true;
+    }
+    if (changed && activeProg && activeProg.chords[activeChordIdx]) {
+      const copy = [...progressions];
+      const prog = { ...copy[activeProgIdx], chords: [...copy[activeProgIdx].chords] };
+      prog.chords[activeChordIdx] = { ...prog.chords[activeChordIdx], ...updates };
+      copy[activeProgIdx] = prog;
+      handleSaveProgressions(copy);
+    }
+  }, [canHighOctave, canHighInstance]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const activePhrase = useMemo(() => {
     if (activeLickPhrase) return activeLickPhrase;
@@ -491,6 +568,7 @@ export default function App() {
       if (lick) {
         const rootSemi = ROOTS.find(r => r.name === chord.rootName)?.semitone ?? 0;
         const highOctave = chord.lickHighOctave ?? false;
+        const highInstance = chord.lickHighInstance ?? false;
         const chordMode = resolveMode(chord.rootName, MODE_TEMPLATES[eff.modeIdx]);
         const chordFretMap = buildFretMap(chordMode.semi, chordMode.notes);
         const positions = chordMode.notes.length > 7
@@ -499,15 +577,14 @@ export default function App() {
         const pos = positions.find(p => p.id === eff.posId);
         if (pos) {
           const transposeSemitones = getTransposeSemitones(chord.quality, rootSemi);
-          const extraShift = highOctave ? 12 : 0;
           const lickPitches = lick.notes
             .filter(n => !n.rest && n.pitch != null)
-            .map(n => n.pitch! + transposeSemitones + extraShift);
-          const bestInstIdx = selectBestInstance(pos, lickPitches, highOctave);
+            .map(n => n.pitch! + transposeSemitones);
+          const bestInstIdx = selectBestInstance(pos, lickPitches, highInstance);
           const singleInstPos = { ...pos, instances: [pos.instances[bestInstIdx]] };
           const pool = buildNotePool(singleInstPos, chordMode, chordFretMap, true);
           return lickToGeneratedPhrase(
-            lick, eff.posId, MODE_TEMPLATES[eff.modeIdx].key, chord.rootName, pool, transposeSemitones, extraShift,
+            lick, eff.posId, MODE_TEMPLATES[eff.modeIdx].key, chord.rootName, pool, transposeSemitones, highOctave,
           );
         }
       }
@@ -695,7 +772,7 @@ export default function App() {
     const copy = [...progressions];
     const prog = { ...copy[activeProgIdx], chords: copy[activeProgIdx].chords.map(c => ({
       ...c, posConfirmed: false, modeConfirmed: false, voicingKey: undefined,
-      lickId: undefined, lickHighOctave: undefined,
+      lickId: undefined, lickHighOctave: undefined, lickHighInstance: undefined,
     }))};
     copy[activeProgIdx] = prog;
     handleSaveProgressions(copy);
@@ -910,13 +987,14 @@ export default function App() {
                     selectedIdx={selectedLickIdx}
                     onSelect={(idx) => {
                       setSelectedLickIdx(idx);
-                      setLickHighOctave(false);
-                      // Save lick selection to ChordSlot
+                      // Preserve current chord's 8va / Hi settings when switching licks
+                      const curOctave = lickHighOctave;
+                      const curInst = lickHighInstance;
                       const lick = filteredLicks.licks[idx];
                       if (lick?.id) {
                         const copy = [...progressions];
                         const prog = { ...copy[activeProgIdx], chords: [...copy[activeProgIdx].chords] };
-                        prog.chords[activeChordIdx] = { ...prog.chords[activeChordIdx], lickId: lick.id, lickHighOctave: false };
+                        prog.chords[activeChordIdx] = { ...prog.chords[activeChordIdx], lickId: lick.id, lickHighOctave: curOctave, lickHighInstance: curInst };
                         copy[activeProgIdx] = prog;
                         handleSaveProgressions(copy);
                       }
@@ -924,7 +1002,7 @@ export default function App() {
                       if (!chord) return;
                       if (!lick) return;
                       const rootSemi = ROOTS.find(r => r.name === chord.rootName)?.semitone ?? 0;
-                      const ctx = buildLickContext(lick, chord.quality, chord.rootName, rootSemi);
+                      const ctx = buildLickContext(lick, chord.quality, chord.rootName, rootSemi, curOctave, curInst);
                       if (ctx) playPhraseAudio(ctx.phrase);
                     }}
                     onPlay={() => { if (activeLickPhrase) playPhraseAudio(activeLickPhrase); }}
@@ -938,7 +1016,7 @@ export default function App() {
                       setSelectedLickIdx(null);
                       const copy = [...progressions];
                       const prog = { ...copy[activeProgIdx], chords: [...copy[activeProgIdx].chords] };
-                      prog.chords[activeChordIdx] = { ...prog.chords[activeChordIdx], lickId: undefined, lickHighOctave: undefined };
+                      prog.chords[activeChordIdx] = { ...prog.chords[activeChordIdx], lickId: undefined, lickHighOctave: undefined, lickHighInstance: undefined };
                       copy[activeProgIdx] = prog;
                       handleSaveProgressions(copy);
                     }}
@@ -947,12 +1025,26 @@ export default function App() {
                     quality={activeProg.chords[activeChordIdx]?.quality ?? ''}
                     rootSemitone={ROOTS.find(r => r.name === activeProg.chords[activeChordIdx]?.rootName)?.semitone ?? 0}
                     highOctave={lickHighOctave}
+                    canHighOctave={canHighOctave}
                     onToggleOctave={() => {
                       setLickHighOctave(v => {
                         const next = !v;
                         const copy = [...progressions];
                         const prog = { ...copy[activeProgIdx], chords: [...copy[activeProgIdx].chords] };
                         prog.chords[activeChordIdx] = { ...prog.chords[activeChordIdx], lickHighOctave: next };
+                        copy[activeProgIdx] = prog;
+                        handleSaveProgressions(copy);
+                        return next;
+                      });
+                    }}
+                    highInstance={lickHighInstance}
+                    canHighInstance={canHighInstance}
+                    onToggleInstance={() => {
+                      setLickHighInstance(v => {
+                        const next = !v;
+                        const copy = [...progressions];
+                        const prog = { ...copy[activeProgIdx], chords: [...copy[activeProgIdx].chords] };
+                        prog.chords[activeChordIdx] = { ...prog.chords[activeChordIdx], lickHighInstance: next };
                         copy[activeProgIdx] = prog;
                         handleSaveProgressions(copy);
                         return next;

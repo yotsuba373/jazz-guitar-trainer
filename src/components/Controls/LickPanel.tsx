@@ -59,11 +59,16 @@ interface LickPanelProps {
   rootSemitone: number;
   highOctave: boolean;
   onToggleOctave: () => void;
+  canHighOctave: boolean;
+  highInstance: boolean;
+  onToggleInstance: () => void;
+  canHighInstance: boolean;
 }
 
 export function LickPanel({
   licks, selectedIdx, onSelect, onPlay, onStop, isPlaying, lickType, onClear,
-  quality, rootSemitone, highOctave, onToggleOctave,
+  quality, rootSemitone, highOctave, onToggleOctave, canHighOctave,
+  highInstance, onToggleInstance, canHighInstance,
 }: LickPanelProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -173,15 +178,31 @@ export function LickPanel({
           </button>
           <button
             onClick={onToggleOctave}
+            disabled={!canHighOctave}
             className="rounded cursor-pointer px-1.5 h-[24px] inline-flex items-center justify-center text-[9px] font-mono"
             style={{
               border: '1px solid #555',
-              background: highOctave ? '#2a2a3a' : '#1a1a1a',
-              color: highOctave ? '#8BF' : '#888',
+              background: !canHighOctave ? '#111' : highOctave ? '#2a2a3a' : '#1a1a1a',
+              color: !canHighOctave ? '#444' : highOctave ? '#8BF' : '#888',
+              cursor: !canHighOctave ? 'not-allowed' : 'pointer',
             }}
-            title={highOctave ? 'ローポジションで再生' : 'ハイポジションで再生'}
+            title={!canHighOctave ? 'この音域ではオクターブ上に収まりません' : highOctave ? '通常オクターブで再生' : 'オクターブ上で再生'}
           >
             8va
+          </button>
+          <button
+            onClick={onToggleInstance}
+            disabled={!canHighInstance}
+            className="rounded cursor-pointer px-1.5 h-[24px] inline-flex items-center justify-center text-[9px] font-mono"
+            style={{
+              border: '1px solid #555',
+              background: !canHighInstance ? '#111' : highInstance ? '#2a2a3a' : '#1a1a1a',
+              color: !canHighInstance ? '#444' : highInstance ? '#F8B' : '#888',
+              cursor: !canHighInstance ? 'not-allowed' : 'pointer',
+            }}
+            title={!canHighInstance ? 'このポジションにはハイインスタンスがありません' : highInstance ? 'ローインスタンスで再生' : 'ハイインスタンスで再生'}
+          >
+            Hi
           </button>
           <button
             onClick={() => { onClear(); onStop(); }}
@@ -247,15 +268,31 @@ export function LickPanel({
                 </button>
                 <button
                   onClick={onToggleOctave}
+                  disabled={!canHighOctave}
                   className="rounded cursor-pointer text-[10px] font-mono px-1.5 h-[24px] inline-flex items-center flex-shrink-0"
                   style={{
                     border: '1px solid #555',
-                    background: highOctave ? '#2a2a3a' : '#1a1a1a',
-                    color: highOctave ? '#8BF' : '#888',
+                    background: !canHighOctave ? '#111' : highOctave ? '#2a2a3a' : '#1a1a1a',
+                    color: !canHighOctave ? '#444' : highOctave ? '#8BF' : '#888',
+                    cursor: !canHighOctave ? 'not-allowed' : 'pointer',
                   }}
-                  title={highOctave ? 'ローポジションで再生' : 'ハイポジションで再生'}
+                  title={!canHighOctave ? 'この音域ではオクターブ上に収まりません' : highOctave ? '通常オクターブで再生' : 'オクターブ上で再生'}
                 >
                   8va
+                </button>
+                <button
+                  onClick={onToggleInstance}
+                  disabled={!canHighInstance}
+                  className="rounded cursor-pointer text-[10px] font-mono px-1.5 h-[24px] inline-flex items-center flex-shrink-0"
+                  style={{
+                    border: '1px solid #555',
+                    background: !canHighInstance ? '#111' : highInstance ? '#2a2a3a' : '#1a1a1a',
+                    color: !canHighInstance ? '#444' : highInstance ? '#F8B' : '#888',
+                    cursor: !canHighInstance ? 'not-allowed' : 'pointer',
+                  }}
+                  title={!canHighInstance ? 'このポジションにはハイインスタンスがありません' : highInstance ? 'ローインスタンスで再生' : 'ハイインスタンスで再生'}
+                >
+                  Hi
                 </button>
                 <button
                   onClick={() => { onClear(); onStop(); }}

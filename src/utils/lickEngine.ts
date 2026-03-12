@@ -219,43 +219,77 @@ function mapPitchToFret(
 /** Map an entire lick to fretboard coordinates using the note pool.
  *  If some pitches fall outside the pool, tries shifting the entire
  *  lick ±1 octave to maximize pool coverage.
- *  @param extraShift - additional semitone shift (e.g. +12 for 8va) applied before auto-octave logic */
+ *  @param alternateOctave - when true, use the second-best octave placement instead of the default */
 export function mapLickToFretboard(
   lick: LickEntry,
   pool: PoolNote[],
   transposeSemitones: number,
-  extraShift = 0,
+  alternateOctave = false,
 ): Array<{ stringIdx: number; fret: number; noteName: string; semitone: number; isChordTone: boolean; isApproach: boolean } | null> {
-  // Build set of available pitches in pool for quick lookup
-  const poolPitches = new Set(pool.map(p => absolutePitch(p)));
-
-  // Count how many pitched notes are covered at each octave offset
-  const pitched = lick.notes.filter(n => !n.rest && n.pitch != null);
-  const basePitches = pitched.map(n => n.pitch! + transposeSemitones + extraShift);
-
-  let bestOctaveShift = 0;
-  let bestCoverage = 0;
-  for (const shift of [0, -12, 12]) {
-    let cov = 0;
-    for (const p of basePitches) {
-      if (poolPitches.has(p + shift)) cov++;
-    }
-    if (cov > bestCoverage) {
-      bestCoverage = cov;
-      bestOctaveShift = shift;
-    }
-  }
+  const chosenShift = pickOctaveShift(lick, pool, transposeSemitones, alternateOctave);
 
   let prevStringIdx: number | null = null;
   let prevFret: number | null = null;
   return lick.notes.map((n: LickNote) => {
     if (n.rest) return null;
-    const midiPitch = n.pitch! + transposeSemitones + extraShift + bestOctaveShift;
+    const midiPitch = n.pitch! + transposeSemitones + chosenShift;
     const mapped = mapPitchToFret(midiPitch, pool, prevStringIdx, prevFret);
     prevStringIdx = mapped.stringIdx;
     prevFret = mapped.fret;
     return mapped;
   });
+}
+
+/** Compute coverage for each octave shift candidate and return sorted results. */
+function octaveCoverages(
+  lick: LickEntry, pool: PoolNote[], transposeSemitones: number,
+): Array<{ shift: number; coverage: number }> {
+  const poolPitches = new Set(pool.map(p => absolutePitch(p)));
+  const pitched = lick.notes.filter(n => !n.rest && n.pitch != null);
+  const basePitches = pitched.map(n => n.pitch! + transposeSemitones);
+
+  const results: Array<{ shift: number; coverage: number }> = [];
+  for (const shift of [0, -12, 12]) {
+    let cov = 0;
+    for (const p of basePitches) if (poolPitches.has(p + shift)) cov++;
+    results.push({ shift, coverage: cov });
+  }
+  // Sort descending by coverage
+  results.sort((a, b) => b.coverage - a.coverage);
+  return results;
+}
+
+/** Among viable octave shifts (≥50% coverage), return them sorted ascending by shift value. */
+function viableOctaveShifts(
+  lick: LickEntry, pool: PoolNote[], transposeSemitones: number,
+): number[] {
+  const ranked = octaveCoverages(lick, pool, transposeSemitones);
+  const total = lick.notes.filter(n => !n.rest && n.pitch != null).length;
+  if (total === 0) return [0];
+  const viable = ranked.filter(r => r.coverage >= total * 0.5).map(r => r.shift);
+  if (viable.length === 0) return [ranked[0].shift]; // fallback to best coverage
+  viable.sort((a, b) => a - b); // ascending: lowest shift first
+  return viable;
+}
+
+/** Pick the octave shift. 8va = highest viable; default = one step below 8va.
+ *  If only one viable shift exists, both return the same value (8va disabled). */
+function pickOctaveShift(
+  lick: LickEntry, pool: PoolNote[], transposeSemitones: number, octaveUp: boolean,
+): number {
+  const shifts = viableOctaveShifts(lick, pool, transposeSemitones);
+  const highIdx = shifts.length - 1;
+  if (octaveUp) return shifts[highIdx];
+  // Default = one step below the highest
+  return highIdx >= 1 ? shifts[highIdx - 1] : shifts[highIdx];
+}
+
+/** Check if 8va is available: highest viable shift must differ from one step below it. */
+export function hasAlternateOctave(
+  lick: LickEntry, pool: PoolNote[], transposeSemitones: number,
+): boolean {
+  const shifts = viableOctaveShifts(lick, pool, transposeSemitones);
+  return shifts.length >= 2 && shifts[shifts.length - 1] !== shifts[shifts.length - 2];
 }
 
 // ---------------------------------------------------------------------------
@@ -427,7 +461,7 @@ export function findBestPositionForLick(
 // ---------------------------------------------------------------------------
 
 /** Convert a lick entry into a GeneratedPhrase for display and playback.
- *  @param extraShift - additional semitone shift (e.g. +12 for 8va) */
+ *  @param alternateOctave - use second-best octave placement within same instance */
 export function lickToGeneratedPhrase(
   lick: LickEntry,
   posId: number,
@@ -435,9 +469,9 @@ export function lickToGeneratedPhrase(
   rootName: string,
   pool: PoolNote[],
   transposeSemitones: number,
-  extraShift = 0,
+  alternateOctave = false,
 ): GeneratedPhrase {
-  const mapped = mapLickToFretboard(lick, pool, transposeSemitones, extraShift);
+  const mapped = mapLickToFretboard(lick, pool, transposeSemitones, alternateOctave);
 
   const notes: PhraseNote[] = lick.notes.map((n: LickNote, i: number) => {
     const m = mapped[i];
@@ -492,9 +526,23 @@ export function selectBestInstance(pos: Position, lickPitches: number[], preferH
   if (pos.instances.length <= 1) return 0;
   if (lickPitches.length === 0) return 0;
 
+  // When preferHigh is explicitly set, simply pick the highest-fret instance
+  if (preferHigh) {
+    let highIdx = 0;
+    let highFret = -1;
+    for (let i = 0; i < pos.instances.length; i++) {
+      if (pos.instances[i].fretMin > highFret) {
+        highFret = pos.instances[i].fretMin;
+        highIdx = i;
+      }
+    }
+    return highIdx;
+  }
+
+  // Default: best coverage with low-fret bias
   let bestIdx = 0;
   let bestCov = -1;
-  let bestFret = preferHigh ? -1 : Infinity;
+  let bestFret = Infinity;
 
   for (let i = 0; i < pos.instances.length; i++) {
     const inst = pos.instances[i];
@@ -514,11 +562,8 @@ export function selectBestInstance(pos: Position, lickPitches: number[], preferH
       if (c > cov) cov = c;
     }
 
-    // Prefer higher coverage; tiebreak by fret preference
-    const fretBetter = preferHigh
-      ? inst.fretMin > bestFret
-      : inst.fretMin < bestFret;
-    if (cov > bestCov || (cov === bestCov && fretBetter)) {
+    // Prefer higher coverage; tiebreak by low fret
+    if (cov > bestCov || (cov === bestCov && inst.fretMin < bestFret)) {
       bestCov = cov;
       bestIdx = i;
       bestFret = inst.fretMin;
@@ -541,13 +586,15 @@ export function getTransposeSemitones(quality: string, targetRootSemitone: numbe
 
 /** Build everything needed to display a lick for a given chord.
  *  Returns null if no matching lick type.
- *  @param preferHigh - prefer high-fret instance when multiple exist */
+ *  @param alternateOctave - use second-best octave placement within the same instance
+ *  @param preferHighInstance - prefer high-fret instance when multiple exist */
 export function buildLickContext(
   lick: LickEntry,
   quality: string,
   rootName: string,
   rootSemitone: number,
-  preferHigh = false,
+  alternateOctave = false,
+  preferHighInstance = false,
 ): {
   modeIdx: number;
   mode: Mode;
@@ -577,14 +624,12 @@ export function buildLickContext(
   const pos = positions.find(p => p.id === posId);
   if (!pos) return null;
 
-  // When preferHigh, shift pitches +12 so they land in the high instance
-  const extraShift = preferHigh ? 12 : 0;
   const lickPitches = lick.notes
     .filter(n => !n.rest && n.pitch != null)
-    .map(n => n.pitch! + transposeSemitones + extraShift);
+    .map(n => n.pitch! + transposeSemitones);
 
-  // Select best instance for the (possibly shifted) pitches
-  const bestInstIdx = selectBestInstance(pos, lickPitches, preferHigh);
+  // Instance selection: preferHighInstance selects high-fret instance independently of octave
+  const bestInstIdx = selectBestInstance(pos, lickPitches, preferHighInstance);
 
   // Build a single-instance position for pool building
   const singleInstPos: Position = {
@@ -597,7 +642,7 @@ export function buildLickContext(
 
   // Convert to GeneratedPhrase
   const phrase = lickToGeneratedPhrase(
-    lick, posId, template.key, rootName, pool, transposeSemitones, extraShift,
+    lick, posId, template.key, rootName, pool, transposeSemitones, alternateOctave,
   );
 
   return { modeIdx, mode, fretMap, positions, posId, pool, transposeSemitones, phrase };
