@@ -85,6 +85,8 @@ export interface ChordSlot {
   posConfirmed: boolean; // true = user explicitly chose this position
   modeConfirmed?: boolean; // true = user explicitly chose this mode
   voicingKey?: string;  // e.g. "drop2-0-5,4,3,2" — saved voicing template selection
+  lickId?: string;           // stable lick ID (e.g. "D-3a7f") — saved lick selection
+  lickHighOctave?: boolean;  // 8va toggle state for the saved lick
 }
 
 /** Song key with major/minor quality */
