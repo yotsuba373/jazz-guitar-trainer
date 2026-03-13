@@ -413,10 +413,10 @@ Utils Layer (pure functions):
 │   ├── jazzStandards.ts          — fetchJazzStandards(), songToProgression()
 │   ├── chartLayout.ts            — deriveChartLayout(), getChartLayout(), buildChordRows(), appendChordToLayout(), removeChordFromLayout(), insertChordAtBeat(), computeInsertFlatIndex(), getMeasureBeatInfo(), splitSection(), mergeSections(), splitEndings(), removeEndings()
 │   ├── chordForms.ts             — findVoicingsInPosition(), VOICING_TEMPLATES(20)
-│   ├── lickEngine.ts             — absolutePitch(), buildNotePool(), loadLickDB(), transposeLick(), mapLickToFretboard(), buildLickContext()
+│   ├── lickEngine.ts             — absolutePitch(), buildNotePool(), loadLickDB(), transposeLick(), mapLickToFretboard(), buildLickContext(), detectIiVPattern(), isIiVLickId(), buildIiVLickContext(), splitIiVLongLick()
 │   ├── phraseAnalysis.ts         — analyzePhrase(), computeSummary()
 │   ├── swing.ts                  — swingBeatStart(), swingVolumeMult(), swingDurMult()
-│   └── __tests__/                — 701 テスト
+│   └── __tests__/                — 708 テスト
 ├── components/
 │   ├── Fretboard/                — SVG指板 (Fretboard, FretboardNote, GhostNote, PhrasePath)
 │   ├── Controls/                 — 全コントロールUI
@@ -782,7 +782,8 @@ CSS Grid 描画</div>
   <li>ユーザー作成進行（layoutなし）→ <code>deriveChartLayout()</code> で1コード/小節に自動生成</li>
   <li><code>beatWidths</code>: フレックス比率 — ChordChart で <code>flex: beats</code>, BPM 再生で <code>(bw/bwSum)*4</code></li>
   <li><code>ChordSlot.lickId</code> / <code>lickHighOctave</code> / <code>lickHighInstance</code>: リック選択・8va（同一インスタンス内オクターブ上）・Hi（ハイポジションインスタンス切替）をコードごとに独立永続化。コード切替時に自動復元、リセットで全クリア。8vaは音域が広すぎてプールに収まらない場合、Hiはインスタンスが1つしかないポジションでは自動disabled</li>
-  <li><code>ChordSlot.lickIiVType</code>: ii-V リックタイプ (<code>"maj-ii-v-short"</code> | <code>"maj-ii-v-long"</code> | <code>"min-ii-v-short"</code>) を ii コード側に永続化。BPM 再生時、ii コードの ii-V リックが鳴っている間は V コードが自身のリックをスキップ</li>
+  <li><code>ChordSlot.lickIiVType</code>: ii-V リックタイプ (<code>"maj-ii-v-short"</code> | <code>"maj-ii-v-long"</code> | <code>"min-ii-v-short"</code>) を ii コード側に永続化。</li>
+  <li><code>ChordSlot.lickIiVPart</code>: ii-V-long リック分割時の担当パート (<code>'ii'</code> | <code>'V'</code>)。ii コードに <code>'ii'</code>、V コードに <code>'V'</code> が設定される。ii コード側のリッククリアに連動して V コード側も自動クリア。</li>
 </ul>
 
 <h3>chartLayout Preservation on Edit</h3>
@@ -854,7 +855,7 @@ ChordChart 自体は表示専用（リピートドット・ボルタ括弧は自
       <li><strong>再訪問マーカー</strong>: 75%縮小 + 次ノート方向に6pxオフセット</li>
       <li><strong>ストローク幅テーパリング</strong>: 始点2.2px → 終点1.4pxで時間方向を明示</li>
       <li><strong>開始ノート強調</strong>: マーカー1.2倍 + 半透明リング</li>
-      <li><strong>コード品質変化でライン分割</strong>: ii-V-long リックでコード品質が変わるビート (<code>chordChangeBeat = beats - 4</code>) で接続線を切断し、V セクション先頭に強調リングを表示。ii-V-short は分割しない</li>
+      <li><strong>コード品質変化でのライン分割は廃止</strong>: 旧 <code>chordChangeBeat</code> フィールドは <code>GeneratedPhrase</code> から削除済み。ii-V-long リックは <code>splitIiVLongLick()</code> で ii パート (前4拍) と V パート (後4拍) に分割され、各コードに独立した <code>GeneratedPhrase</code> として割り当てられる</li>
     </ul>
   </li>
 </ul>
@@ -988,6 +989,7 @@ interface ChordSlot {
   lickHighOctave?: boolean  // 8va: 同一インスタンス内+12半音シフト
   lickHighInstance?: boolean // Hi: ハイポジションインスタンス切替
   lickIiVType?: string    // ii-V リックタイプ ("maj-ii-v-short"|"maj-ii-v-long"|"min-ii-v-short")
+  lickIiVPart?: 'ii' | 'V' // ii-V-long 分割時の担当パート (ii コード='ii', V コード='V')
 }
 
 // コード進行
@@ -1117,7 +1119,8 @@ LickDB: Record&lt;string, LickEntry[]&gt;
     ↓ QUALITY_TO_LICK_TYPE[chord.quality]       // 単コードリック
     ↓ detectIiVPattern(chords, idx)              // ii-V リック (ii コード選択時のみ)
 filteredLicks: LickEntry[]  (単コード) + iiVLicks: LickEntry[] (ii-V)
-    ↓ buildLickContext() / buildIiVLickContext()
+    ↓ buildLickContext(overrideTransposeSemitones?) / buildIiVLickContext()
+    ↓ splitIiVLongLick() — ii-V-long を ii パート / V パートに分割
 GeneratedPhrase
     ↓ PhrasePath / PianoRoll / PhraseAnalysisPanel
 指板表示 + 分析パネル</code></pre>
@@ -1176,11 +1179,12 @@ GeneratedPhrase
   <tr><td>inferModeCandidates()</td><td>重み付きスコアで最大3モード候補を返す</td></tr>
   <tr><td>findBestPositionForLick()</td><td>最適ポジション選択。各インスタンスを個別評価し、リック音域が完全に収まるインスタンスに +2 ボーナス</td></tr>
   <tr><td>selectBestInstance()</td><td>ポジション内の最適インスタンス選択。カバー率 + 音域包含で評価し、リック音が異なるオクターブのインスタンスにマッピングされるのを防止</td></tr>
-  <tr><td>buildLickContext()</td><td>全パイプライン一括実行。8音スケール (dim W-H / H-W) にも対応 (<code>generateDimPositions</code> を使用)</td></tr>
+  <tr><td>buildLickContext()</td><td>全パイプライン一括実行。8音スケール (dim W-H / H-W) にも対応 (<code>generateDimPositions</code> を使用)。省略可能な <code>overrideTransposeSemitones</code> パラメータで移調量を上書き可能</td></tr>
   <tr><td>getTransposeSemitones()</td><td>移調量計算</td></tr>
   <tr><td>detectIiVPattern()</td><td>コード配列と現在インデックスを受け取り、次コードとのルート音程が P5 (7半音) かつ品質が ii-V に対応するペアを検出。Major ii-V (m7→dom7) と Minor ii-V (m7♭5→dom7) を区別</td></tr>
   <tr><td>isIiVLickId()</td><td>リックIDが ii-V タイプ (<code>maj-ii-v-short</code> / <code>maj-ii-v-long</code> / <code>min-ii-v-short</code>) かどうかを判定</td></tr>
-  <tr><td>buildIiVLickContext()</td><td>ii-V リック用のパイプライン。ii コードの根音から移調し、2コードにまたがるフレーズとして GeneratedPhrase を生成</td></tr>
+  <tr><td>buildIiVLickContext()</td><td>ii-V-short リック用のパイプライン。ii コードの根音から移調し、2コード分のフレーズとして GeneratedPhrase を生成</td></tr>
+  <tr><td>splitIiVLongLick()</td><td>ii-V-long リック (8拍) を前半4拍 (iiLick) と後半4拍 (vLick) に分割して返す。<code>{ iiLick: LickEntry, vLick: LickEntry }</code> を返す。各パートはそれぞれのコードに独立した GeneratedPhrase として割り当てられる</td></tr>
 </table>
 
 <h3>辞典モードの変更</h3>
@@ -1221,27 +1225,31 @@ GeneratedPhrase
 
 <h3>再生とBPM自動再生</h3>
 <ul>
-  <li>ii-V リック選択時は <code>buildIiVLickContext()</code> を使用。ii コードの根音から移調し、2コード分のフレーズとして <code>GeneratedPhrase</code> を生成</li>
-  <li>BPM 自動再生中、ii コードに <code>lickIiVType</code> が保存されている場合は ii-V リックを再生。続く V コードは自身の <code>lickId</code> をスキップし、ii-V リックの継続再生を妨げない</li>
-  <li><code>isIiVLickId(lickId)</code> で V コード側がスキップ判定を行う</li>
+  <li><strong>ii-V-short</strong>: <code>buildIiVLickContext()</code> を使用。ii コードの根音から移調し、2コード分のフレーズとして1つの <code>GeneratedPhrase</code> を生成。ii コードの拍数内で再生</li>
+  <li><strong>ii-V-long</strong>: <code>splitIiVLongLick()</code> で前半4拍 (ii パート) と後半4拍 (V パート) に分割。ii コードに ii パート、V コードに V パートが独立して割り当てられ、それぞれのコードのタイミングで再生される</li>
+  <li>BPM 自動再生では各コードが自身に割り当てられた <code>GeneratedPhrase</code> を独立して再生するため、<code>iiVLickEndTimeRef</code> / <code>iiVStillPlaying</code> による跨ぎ管理は不要になった (削除済み)</li>
 </ul>
 
 <h3>永続化</h3>
 <ul>
   <li>ii-V リック選択は <code>ChordSlot.lickIiVType</code> (ii コード側) に保存</li>
+  <li>ii-V-long 選択時: ii コードに <code>lickIiVType</code> + <code>lickIiVPart: 'ii'</code>、V コードに <code>lickId</code> + <code>lickIiVPart: 'V'</code> が設定される</li>
+  <li>ii-V-short 選択時: ii コードに <code>lickIiVType</code> のみ設定。V コードは変更なし</li>
   <li>単コードリック (<code>ChordSlot.lickId</code>) と独立して共存可能。ii-V リックを選ぶと <code>lickId</code> はクリアされ、<code>lickIiVType</code> がセットされる</li>
-  <li>コード切替時に自動復元。✕ ボタンで <code>lickIiVType</code> / <code>lickId</code> 両方をクリア</li>
+  <li>コード切替時に自動復元。ii コードの ii-V-long リックをクリア (✕) すると、V コード側の <code>lickId</code> / <code>lickIiVPart</code> も連動してクリア</li>
 </ul>
 
 <div class="callout">
   <div class="callout-label">設計メモ</div>
-  <p style="margin:4px 0 0">ii-V リックは "ii コードに属する" という考え方で設計されている。V コードは自身のリックを持てるが、ii コードに ii-V リックがある場合は優先される。
-  これにより、ユーザーが ii コードを選択した時点で2コード分のフレーズ選択ができ、自然なコーラス構成を組み立てやすい。</p>
+  <p style="margin:4px 0 0">ii-V-long リックは <code>splitIiVLongLick()</code> で ii/V パートに分割し、各コードに独立した <code>GeneratedPhrase</code> として割り当てる設計に変更された。
+  旧設計では単一フレーズを2コードに跨いで再生するため <code>iiVLickEndTimeRef</code> / <code>iiVStillPlaying</code> によるタイミング管理が必要だったが、
+  分割設計により BPM 自動再生ループを単純化し、<code>chordChangeBeat</code> フィールドも不要になった。
+  PhrasePath のコード品質変化ライン分割ロジックも削除済み。</p>
 </div>
 
 <!-- ==================== TESTING ==================== -->
 <h2 id="testing">Test Suite</h2>
-<p><code>npm test</code> — Vitest による <strong>722テスト</strong>。</p>
+<p><code>npm test</code> — Vitest による <strong>729テスト</strong>。</p>
 
 <table>
   <tr><th>Test File</th><th>Tests</th><th>Coverage</th></tr>
@@ -1249,7 +1257,7 @@ GeneratedPhrase
   <tr><td>progression.test.ts</td><td>125</td><td>parseChordSymbol, QUALITY_TO_MODES, 近接ランキング</td></tr>
   <tr><td>jazzStandards.test.ts</td><td>42</td><td>パース、エンディング、リピート、ビート幅</td></tr>
   <tr><td>chordForms.test.ts</td><td>36</td><td>Drop 2/3 ボイシング検索、テンプレート構造</td></tr>
-  <tr><td>lickEngine.test.ts</td><td>51</td><td>リックDB読込, 品質マッピング, 移調, 指板マッピング, モード推定, ポジション選択, インスタンス選択, 8音スケール対応, GeneratedPhrase変換, ii-Vパターン検出, ii-Vリックタイプ判定, ii-Vコンテキスト生成</td></tr>
+  <tr><td>lickEngine.test.ts</td><td>58</td><td>リックDB読込, 品質マッピング, 移調, 指板マッピング, モード推定, ポジション選択, インスタンス選択, 8音スケール対応, GeneratedPhrase変換, ii-Vパターン検出, ii-Vリックタイプ判定, ii-Vコンテキスト生成, splitIiVLongLick分割, overrideTransposeSemitones</td></tr>
   <tr><td>swing.test.ts</td><td>25</td><td>スウィングタイミング, ダイナミクス倍率, アーティキュレーション倍率, 4分/3連符非適用, テンポ補正</td></tr>
   <tr><td>guideTones.test.ts</td><td>22</td><td>ガイドトーン抽出、解決分類</td></tr>
   <tr><td>noteSpelling.test.ts</td><td>19</td><td>スペリング、度数マップ、resolveMode</td></tr>

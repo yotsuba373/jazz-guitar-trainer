@@ -466,8 +466,7 @@ export function findBestPositionForLick(
 // ---------------------------------------------------------------------------
 
 /** Convert a lick entry into a GeneratedPhrase for display and playback.
- *  @param alternateOctave - use second-best octave placement within same instance
- *  @param chordChangeBeat - beat at which chord quality changes (for ii-V-long line break) */
+ *  @param alternateOctave - use second-best octave placement within same instance */
 export function lickToGeneratedPhrase(
   lick: LickEntry,
   posId: number,
@@ -476,7 +475,6 @@ export function lickToGeneratedPhrase(
   pool: PoolNote[],
   transposeSemitones: number,
   alternateOctave = false,
-  chordChangeBeat?: number,
 ): GeneratedPhrase {
   const mapped = mapLickToFretboard(lick, pool, transposeSemitones, alternateOctave);
 
@@ -519,7 +517,6 @@ export function lickToGeneratedPhrase(
     modeKey,
     rootName,
     totalBeats: lick.beats,
-    ...(chordChangeBeat != null ? { chordChangeBeat } : {}),
   };
 }
 
@@ -582,6 +579,36 @@ export function selectBestInstance(pos: Position, lickPitches: number[], preferH
 }
 
 // ---------------------------------------------------------------------------
+// ii-V-long lick splitting
+// ---------------------------------------------------------------------------
+
+/** Split an ii-V-long lick (8 beats) into ii part (first 4 beats) and V part (last 4 beats).
+ *  Both halves keep the original id (distinguished by ChordSlot.lickIiVPart). */
+export function splitIiVLongLick(lick: LickEntry): { iiLick: LickEntry; vLick: LickEntry } {
+  const splitBeat = lick.beats - 4;
+  const iiNotes = lick.notes.filter(n => n.beatStart < splitBeat);
+  const vNotes = lick.notes
+    .filter(n => n.beatStart >= splitBeat)
+    .map(n => ({ ...n, beatStart: n.beatStart - splitBeat }));
+
+  return {
+    iiLick: {
+      ...lick,
+      notes: iiNotes,
+      noteCount: iiNotes.filter(n => !n.rest).length,
+      beats: splitBeat,
+    },
+    vLick: {
+      ...lick,
+      notes: vNotes,
+      noteCount: vNotes.filter(n => !n.rest).length,
+      beats: 4,
+      anacrusis: undefined, // V part has no anacrusis
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Full pipeline: chord → transposed lick → GeneratedPhrase
 // ---------------------------------------------------------------------------
 
@@ -603,7 +630,8 @@ export function getIiVTransposeSemitones(keyCenterSemitone: number): number {
 /** Build everything needed to display a lick for a given chord.
  *  Returns null if no matching lick type.
  *  @param alternateOctave - use second-best octave placement within the same instance
- *  @param preferHighInstance - prefer high-fret instance when multiple exist */
+ *  @param preferHighInstance - prefer high-fret instance when multiple exist
+ *  @param overrideTransposeSemitones - override transposition (used for split ii-V licks) */
 export function buildLickContext(
   lick: LickEntry,
   quality: string,
@@ -611,6 +639,7 @@ export function buildLickContext(
   rootSemitone: number,
   alternateOctave = false,
   preferHighInstance = false,
+  overrideTransposeSemitones?: number,
 ): {
   modeIdx: number;
   mode: Mode;
@@ -621,7 +650,7 @@ export function buildLickContext(
   transposeSemitones: number;
   phrase: GeneratedPhrase;
 } | null {
-  const transposeSemitones = getTransposeSemitones(quality, rootSemitone);
+  const transposeSemitones = overrideTransposeSemitones ?? getTransposeSemitones(quality, rootSemitone);
 
   // Infer best mode
   const modeIdx = inferModeFromLick(lick, quality, rootSemitone);
@@ -714,13 +743,9 @@ export function detectIiVPattern(
 /** Check if a lick ID belongs to an ii-V type (prefix IS-/IL-/is-). */
 export function isIiVLickId(id: string | undefined): IiVType | null {
   if (!id) return null;
-  if (id.startsWith('IS-') || id.startsWith('is-')) return 'maj-ii-v-short';
+  if (id.startsWith('IS-')) return 'maj-ii-v-short';
   if (id.startsWith('IL-') || id.startsWith('il-')) return 'maj-ii-v-long';
-  if (id.startsWith('iS-') || id.startsWith('iS-')) return 'min-ii-v-short';
-  // Also check lowercase prefixes from parser
-  const lower = id.toLowerCase();
-  if (lower.startsWith('is-')) return 'maj-ii-v-short';
-  if (lower.startsWith('il-')) return 'maj-ii-v-long';
+  if (id.startsWith('is-') || id.startsWith('iS-')) return 'min-ii-v-short';
   return null;
 }
 
@@ -764,12 +789,8 @@ export function buildIiVLickContext(
 
   const pool = buildNotePool(singleInstPos, mode, fretMap, true);
 
-  // ii-V-long: break phrase line at chord change (V gets last 4 beats)
-  const iiVType = isIiVLickId(lick.id);
-  const chordChangeBeat = iiVType === 'maj-ii-v-long' ? lick.beats - 4 : undefined;
-
   const phrase = lickToGeneratedPhrase(
-    lick, posId, template.key, vRootName, pool, transposeSemitones, alternateOctave, chordChangeBeat,
+    lick, posId, template.key, vRootName, pool, transposeSemitones, alternateOctave,
   );
 
   return { modeIdx, mode, fretMap, positions, posId, pool, transposeSemitones, phrase };

@@ -18,6 +18,7 @@ import {
   isIiVLickId,
   buildIiVLickContext,
   getIiVTransposeSemitones,
+  splitIiVLongLick,
 } from '../lickEngine';
 import { MODE_TEMPLATES } from '../../constants';
 import { resolveMode } from '../noteSpelling';
@@ -507,7 +508,6 @@ describe('detectIiVPattern', () => {
 describe('isIiVLickId', () => {
   it('detects maj-ii-v-short prefix IS-', () => {
     expect(isIiVLickId('IS-abc1')).toBe('maj-ii-v-short');
-    expect(isIiVLickId('is-abc1')).toBe('maj-ii-v-short');
   });
 
   it('detects maj-ii-v-long prefix IL-', () => {
@@ -515,8 +515,9 @@ describe('isIiVLickId', () => {
     expect(isIiVLickId('il-abc1')).toBe('maj-ii-v-long');
   });
 
-  it('detects min-ii-v-short prefix iS-', () => {
+  it('detects min-ii-v-short prefix is-/iS-', () => {
     expect(isIiVLickId('iS-abc1')).toBe('min-ii-v-short');
+    expect(isIiVLickId('is-abc1')).toBe('min-ii-v-short');
   });
 
   it('returns null for non-iiV IDs', () => {
@@ -576,5 +577,101 @@ describe('buildIiVLickContext', () => {
     expect(result).not.toBeNull();
     expect(result!.positions.length).toBeGreaterThan(0);
     expect(result!.posId).toBeGreaterThan(0);
+  });
+});
+
+describe('splitIiVLongLick', () => {
+  const longLick: LickEntry = {
+    id: 'IL-test',
+    notes: [
+      { pitch: 62, beatStart: 0, duration: 0.5 },
+      { pitch: 64, beatStart: 0.5, duration: 0.5 },
+      { pitch: 65, beatStart: 1, duration: 0.5 },
+      { pitch: 67, beatStart: 1.5, duration: 0.5 },
+      { pitch: 69, beatStart: 2, duration: 0.5 },
+      { pitch: 67, beatStart: 2.5, duration: 0.5 },
+      { pitch: 65, beatStart: 3, duration: 0.5 },
+      { rest: true, beatStart: 3.5, duration: 0.5 },
+      // V part (beats 4-7)
+      { pitch: 67, beatStart: 4, duration: 0.5 },
+      { pitch: 65, beatStart: 4.5, duration: 0.5 },
+      { pitch: 64, beatStart: 5, duration: 0.5 },
+      { pitch: 62, beatStart: 5.5, duration: 0.5 },
+      { pitch: 60, beatStart: 6, duration: 0.5 },
+      { pitch: 62, beatStart: 6.5, duration: 0.5 },
+      { pitch: 64, beatStart: 7, duration: 0.5 },
+      { pitch: 67, beatStart: 7.5, duration: 0.5 },
+    ],
+    noteCount: 14,
+    beats: 8,
+    source: 'test',
+  };
+
+  it('splits 8-beat lick into ii (4 beats) and V (4 beats)', () => {
+    const { iiLick, vLick } = splitIiVLongLick(longLick);
+    expect(iiLick.beats).toBe(4);
+    expect(vLick.beats).toBe(4);
+  });
+
+  it('ii part contains only notes before beat 4', () => {
+    const { iiLick } = splitIiVLongLick(longLick);
+    expect(iiLick.notes.length).toBe(8); // 7 pitched + 1 rest
+    for (const n of iiLick.notes) {
+      expect(n.beatStart).toBeLessThan(4);
+    }
+  });
+
+  it('V part contains notes from beat 4 onward with shifted beatStart', () => {
+    const { vLick } = splitIiVLongLick(longLick);
+    expect(vLick.notes.length).toBe(8);
+    expect(vLick.notes[0].beatStart).toBe(0); // was 4, now shifted
+    expect(vLick.notes[7].beatStart).toBe(3.5); // was 7.5
+  });
+
+  it('recalculates noteCount (excluding rests)', () => {
+    const { iiLick, vLick } = splitIiVLongLick(longLick);
+    expect(iiLick.noteCount).toBe(7); // 7 pitched notes, 1 rest
+    expect(vLick.noteCount).toBe(8); // all pitched
+  });
+
+  it('boundary note at exactly beat 4 goes to V part', () => {
+    const { iiLick, vLick } = splitIiVLongLick(longLick);
+    // Note at beatStart=4 should be in V part as beatStart=0
+    const iiBeats = iiLick.notes.map(n => n.beatStart);
+    expect(iiBeats).not.toContain(4);
+    expect(vLick.notes[0].beatStart).toBe(0);
+    expect(vLick.notes[0].pitch).toBe(67);
+  });
+
+  it('preserves original id on both halves', () => {
+    const { iiLick, vLick } = splitIiVLongLick(longLick);
+    expect(iiLick.id).toBe('IL-test');
+    expect(vLick.id).toBe('IL-test');
+  });
+
+  it('V part has no anacrusis', () => {
+    const lickWithAnacrusis = { ...longLick, anacrusis: 1 };
+    const { iiLick, vLick } = splitIiVLongLick(lickWithAnacrusis);
+    expect(iiLick.anacrusis).toBe(1); // preserved
+    expect(vLick.anacrusis).toBeUndefined();
+  });
+
+  it('V part produces valid phrase via buildIiVLickContext', () => {
+    const { vLick } = splitIiVLongLick(longLick);
+    // Dm7 → G7 in C: keyCenterSemitone = 0, V = G7
+    const result = buildIiVLickContext(vLick, 0, '7', 'G', 7);
+    expect(result).not.toBeNull();
+    expect(result!.phrase.notes.length).toBeGreaterThan(0);
+    expect(result!.phrase.totalBeats).toBe(4);
+  });
+
+  it('V part produces valid phrase via buildLickContext with overrideTranspose', () => {
+    const { vLick } = splitIiVLongLick(longLick);
+    // Use buildLickContext with override for V chord (G7, rootSemi=7)
+    const overrideTranspose = getIiVTransposeSemitones(0); // C key center = 0
+    const result = buildLickContext(vLick, '7', 'G', 7, false, false, overrideTranspose);
+    expect(result).not.toBeNull();
+    expect(result!.phrase.notes.length).toBeGreaterThan(0);
+    expect(result!.phrase.totalBeats).toBe(4);
   });
 });

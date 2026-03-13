@@ -14,6 +14,7 @@ import {
   loadLickDB, QUALITY_TO_LICK_TYPE, buildLickContext, getTransposeSemitones,
   lickToGeneratedPhrase, selectBestInstance, hasAlternateOctave,
   detectIiVPattern, isIiVLickId, buildIiVLickContext, getIiVTransposeSemitones,
+  splitIiVLongLick,
 } from './utils';
 import { Fretboard } from './components/Fretboard';
 import { RootSelector, ModeSelector, PositionSelector, OptionBar, PhraseAnalysisPanel, GlobalAudioControls, LickPanel } from './components/Controls';
@@ -118,8 +119,6 @@ export default function App() {
   const [showChordForms, setShowChordForms] = useState(false);
   const [selectedVoicingIdx, setSelectedVoicingIdx] = useState(0);
 
-  const phraseAnimSpeed = Number(localStorage.getItem('phraseAnimSpeed')) || 350;
-
   // Progression mode state
   const [progMode, setProgMode] = useState(false);
   const [progressions, setProgressions] = useState<Progression[]>(() => loadProgressions());
@@ -179,6 +178,9 @@ export default function App() {
   const [selectedLickIdx, setSelectedLickIdx] = useState<number | null>(null);
   const [lickHighOctave, setLickHighOctave] = useState(false);
   const [lickHighInstance, setLickHighInstance] = useState(false);
+  // During ii-V-long preview, temporarily show V part on fretboard
+  const [iiVDisplayPhrase, setIiVDisplayPhrase] = useState<GeneratedPhrase | null>(null);
+  const iiVSwitchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const template = MODE_TEMPLATES[modeIdx];
   const mode = useMemo(() => resolveMode(rootName, template), [rootName, modeIdx]);
   const is8Note = mode.notes.length > 7;
@@ -369,11 +371,28 @@ export default function App() {
   }, [lickDB, progMode, activeProg, activeChordIdx]);
 
   // Restore lick selection from ChordSlot when chord changes
+  const prevChordRestoreRef = useRef({ chordIdx: activeChordIdx, progMode });
   useEffect(() => {
+    // Only clear ii-V playback state when the chord actually changes (not on prog save)
+    const prev = prevChordRestoreRef.current;
+    const chordChanged = prev.chordIdx !== activeChordIdx || prev.progMode !== progMode;
+    prevChordRestoreRef.current = { chordIdx: activeChordIdx, progMode };
+    if (chordChanged) {
+      setIiVDisplayPhrase(null);
+      clearIiVSwitchTimer();
+    }
     if (!progMode || !activeProg) { setSelectedLickIdx(null); setLickHighOctave(false); setLickHighInstance(false); return; }
     const chord = activeProg.chords[activeChordIdx];
     if (chord?.lickId) {
-      // For ii-V licks, search in the combined list (which includes ii-V licks after single licks)
+      // V chord of split ii-V-long: lick isn't in filteredLicks (it's an ii-V type, not dom7).
+      // Set selectedLickIdx to null so the V-chord fallback path in activeLickPhrase handles it.
+      if (chord.lickIiVPart === 'V') {
+        setSelectedLickIdx(null);
+        setLickHighOctave(chord.lickHighOctave ?? false);
+        setLickHighInstance(chord.lickHighInstance ?? false);
+        return;
+      }
+      // For ii-V licks on ii chord, search in the combined list (which includes ii-V licks after single licks)
       const idx = filteredLicks.licks.findIndex(l => l.id === chord.lickId);
       if (idx >= 0) {
         setSelectedLickIdx(idx);
@@ -387,66 +406,109 @@ export default function App() {
     setLickHighInstance(false);
   }, [activeChordIdx, progMode, activeProg, filteredLicks.licks]);
 
-  // Build GeneratedPhrase from selected lick
-  const activeLickPhrase = useMemo((): GeneratedPhrase | null => {
-    if (selectedLickIdx == null || !filteredLicks.licks[selectedLickIdx]) return null;
-    if (!progMode || !activeProg) return null;
+  // Build GeneratedPhrase from selected lick (or V chord with saved split lick)
+  // Returns { display, preview }: display is per-chord (split), preview is full lick for audio
+  const { activeLickPhrase, previewLickPhrase, vPartPhrase } = useMemo((): { activeLickPhrase: GeneratedPhrase | null; previewLickPhrase: GeneratedPhrase | null; vPartPhrase: GeneratedPhrase | null } => {
+    const none = { activeLickPhrase: null, previewLickPhrase: null, vPartPhrase: null };
+    if (!progMode || !activeProg) return none;
     const chord = activeProg.chords[activeChordIdx];
-    if (!chord) return null;
+    if (!chord) return none;
 
-    const lick = filteredLicks.licks[selectedLickIdx];
+    // Determine the lick source: user selection, or saved lick on this chord
+    let lick: LickEntry | null = null;
+    let iiVPart: 'ii' | 'V' | undefined;
+    let keyCenterSemi: number | undefined;
+
+    // V chord of split ii-V-long: always look up by lickId (the lick isn't in filteredLicks)
+    if (chord.lickIiVPart === 'V' && chord.lickId) {
+      lick = findLickById(chord.lickId);
+      if (lick) {
+        iiVPart = 'V';
+        const vRootSemi = ROOTS.find(r => r.name === chord.rootName)?.semitone ?? 0;
+        keyCenterSemi = (vRootSemi + 5) % 12;
+      }
+    } else if (selectedLickIdx != null && filteredLicks.licks[selectedLickIdx]) {
+      lick = filteredLicks.licks[selectedLickIdx];
+      iiVPart = chord.lickIiVPart;
+      if (filteredLicks.iiV) keyCenterSemi = filteredLicks.iiV.keyCenterSemitone;
+    } else if (chord.lickId) {
+      // Saved lick not in current filteredLicks (e.g. after mode/quality change)
+      lick = findLickById(chord.lickId);
+      if (lick) {
+        iiVPart = chord.lickIiVPart;
+        if (chord.lickIiVPart === 'ii') {
+          const iiV = detectIiVPattern(activeProg.chords, activeChordIdx);
+          if (iiV) keyCenterSemi = iiV.keyCenterSemitone;
+        }
+      }
+    }
+    if (!lick) return none;
+
     const rootSemi = ROOTS.find(r => r.name === chord.rootName)?.semitone ?? 0;
     const iiVType = isIiVLickId(lick.id);
-    const iiVTranspose = (iiVType && filteredLicks.iiV) ? getIiVTransposeSemitones(filteredLicks.iiV.keyCenterSemitone) : null;
+    const isSplitLong = iiVType === 'maj-ii-v-long' && iiVPart && keyCenterSemi != null;
+    // Split lick for display; keep full lick for preview
+    let displayLick = lick;
+    let overrideTranspose: number | undefined;
+    if (isSplitLong) {
+      const { iiLick, vLick } = splitIiVLongLick(lick);
+      displayLick = iiVPart === 'ii' ? iiLick : vLick;
+      overrideTranspose = getIiVTransposeSemitones(keyCenterSemi!);
+    }
 
-    // Helper to build phrase for a given position
-    // For ii-V licks, transposeSemitones uses normalized keyCenterSemitone
-    const chordChangeBeat = iiVType === 'maj-ii-v-long' ? lick.beats - 4 : undefined;
-    const buildForPos = (pos: Position, modeIdx: number) => {
-      const t = MODE_TEMPLATES[modeIdx];
-      const m = resolveMode(chord.rootName, t);
-      const fm = buildFretMap(m.semi, m.notes);
-      const transposeSemitones = iiVTranspose ?? getTransposeSemitones(chord.quality, rootSemi);
-      const lickPitches = lick.notes
-        .filter(n => !n.rest && n.pitch != null)
-        .map(n => n.pitch! + transposeSemitones);
-      const bestInstIdx = selectBestInstance(pos, lickPitches, lickHighInstance);
-      const singleInstPos = { ...pos, instances: [pos.instances[bestInstIdx]] };
-      const pool = buildNotePool(singleInstPos, m, fm, true);
-      return lickToGeneratedPhrase(
-        lick, pos.id, t.key, chord.rootName, pool, transposeSemitones, lickHighOctave, chordChangeBeat,
-      );
+    const iiVTranspose = (iiVType && !overrideTranspose && keyCenterSemi != null)
+      ? getIiVTransposeSemitones(keyCenterSemi) : overrideTranspose;
+
+    const transposeSemitones = iiVTranspose ?? getTransposeSemitones(chord.quality, rootSemi);
+
+    // Helper to build display (split), preview (full), and V-part phrases
+    const buildAll = (pos: Position, mi: number) => {
+      const display = buildPhraseForLick(displayLick, chord.rootName, pos, mi, transposeSemitones, lickHighOctave, lickHighInstance);
+      const preview = isSplitLong ? buildPhraseForLick(lick!, chord.rootName, pos, mi, transposeSemitones, lickHighOctave, lickHighInstance) : display;
+      let vPart: GeneratedPhrase | null = null;
+      if (isSplitLong && iiVPart === 'ii') {
+        const { vLick } = splitIiVLongLick(lick!);
+        vPart = buildPhraseForLick(vLick, chord.rootName, pos, mi, transposeSemitones, lickHighOctave, lickHighInstance);
+      }
+      return { activeLickPhrase: display, previewLickPhrase: preview, vPartPhrase: vPart };
     };
 
-    // If user has selected mode/position, use it (applies to both single and ii-V licks)
+    // If user has selected mode/position, use it
     const eff = effectiveAll[activeChordIdx];
     if (eff) {
-      const userTemplate = MODE_TEMPLATES[eff.modeIdx];
-      const userMode = resolveMode(chord.rootName, userTemplate);
-      const userFretMap = buildFretMap(userMode.semi, userMode.notes);
-      const userPositions = userMode.notes.length > 7
-        ? generateDimPositions(userFretMap, userMode.semi[0])
-        : generatePositions(userFretMap, userMode.notes);
+      const { positions: userPositions } = resolveChordPositions(chord.rootName, eff.modeIdx);
       const userPos = userPositions.find(p => p.id === eff.posId);
-      if (userPos) return buildForPos(userPos, eff.modeIdx);
+      if (userPos) return buildAll(userPos, eff.modeIdx);
     }
 
     // Fallback: auto-detect
-    if (iiVType && filteredLicks.iiV) {
+    if (iiVType && keyCenterSemi != null) {
       const nextChord = activeProg.chords[activeChordIdx + 1];
-      if (nextChord) {
-        const vRootSemi = ROOTS.find(r => r.name === nextChord.rootName)?.semitone ?? 0;
-        const ctx = buildIiVLickContext(
-          lick, filteredLicks.iiV.keyCenterSemitone,
-          nextChord.quality, nextChord.rootName, vRootSemi,
+      const vChord = iiVPart === 'V' ? chord : nextChord;
+      if (vChord) {
+        const vRootSemi = ROOTS.find(r => r.name === vChord.rootName)?.semitone ?? 0;
+        const displayCtx = buildIiVLickContext(
+          displayLick, keyCenterSemi,
+          vChord.quality, vChord.rootName, vRootSemi,
           lickHighOctave, lickHighInstance,
         );
-        return ctx?.phrase ?? null;
+        if (!displayCtx) return none;
+        const previewPhrase = isSplitLong
+          ? buildIiVLickContext(lick, keyCenterSemi, vChord.quality, vChord.rootName, vRootSemi, lickHighOctave, lickHighInstance)?.phrase ?? null
+          : displayCtx.phrase;
+        // Build V part for ii chord animation switch
+        let vPart: GeneratedPhrase | null = null;
+        if (isSplitLong && iiVPart === 'ii') {
+          const { vLick } = splitIiVLongLick(lick);
+          const vCtx = buildIiVLickContext(vLick, keyCenterSemi, vChord.quality, vChord.rootName, vRootSemi, lickHighOctave, lickHighInstance);
+          vPart = vCtx?.phrase ?? null;
+        }
+        return { activeLickPhrase: displayCtx.phrase, previewLickPhrase: previewPhrase, vPartPhrase: vPart };
       }
     }
     const ctx = buildLickContext(lick, chord.quality, chord.rootName, rootSemi, lickHighOctave, lickHighInstance);
-    return ctx?.phrase ?? null;
-  }, [selectedLickIdx, filteredLicks.licks, filteredLicks.iiV, progMode, activeProg, activeChordIdx, effectiveAll, lickHighOctave, lickHighInstance]);
+    return { activeLickPhrase: ctx?.phrase ?? null, previewLickPhrase: ctx?.phrase ?? null, vPartPhrase: null };
+  }, [selectedLickIdx, filteredLicks.licks, filteredLicks.iiV, progMode, activeProg, activeChordIdx, effectiveAll, lickHighOctave, lickHighInstance, lickDB]);
 
   // Check if 8va / high-instance toggles are available for current lick+position
   const { canHighOctave, canHighInstance } = useMemo(() => {
@@ -467,13 +529,10 @@ export default function App() {
     let fm: FretMap | undefined;
     const eff = effectiveAll[activeChordIdx];
     if (eff) {
-      const t = MODE_TEMPLATES[eff.modeIdx];
-      modeObj = resolveMode(chord.rootName, t);
-      fm = buildFretMap(modeObj.semi, modeObj.notes);
-      const positions = modeObj.notes.length > 7
-        ? generateDimPositions(fm, modeObj.semi[0])
-        : generatePositions(fm, modeObj.notes);
-      pos = positions.find(p => p.id === eff.posId);
+      const resolved = resolveChordPositions(chord.rootName, eff.modeIdx);
+      modeObj = resolved.mode;
+      fm = resolved.fretMap;
+      pos = resolved.positions.find(p => p.id === eff.posId);
     }
     if (!pos) {
       // Fallback: auto-detect (ii-V uses V chord, single uses current chord)
@@ -535,12 +594,17 @@ export default function App() {
     }
   }, [canHighOctave, canHighInstance]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const [isPhraseAudioPlaying, setIsPhraseAudioPlaying] = useState(false);
+
   const activePhrase = useMemo(() => {
+    if (iiVDisplayPhrase) return iiVDisplayPhrase;
+    // During manual playback of ii-V-long, show full phrase (not split display)
+    if (isPhraseAudioPlaying && previewLickPhrase) return previewLickPhrase;
     if (activeLickPhrase) return activeLickPhrase;
     if (progMode && autoPlayPhrase && isPlaying)
       return autoPlayPhrase;
     return null;
-  }, [activeLickPhrase, progMode, autoPlayPhrase, isPlaying]);
+  }, [iiVDisplayPhrase, isPhraseAudioPlaying, previewLickPhrase, activeLickPhrase, progMode, autoPlayPhrase, isPlaying]);
 
   // Keyboard navigation for progression mode
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
@@ -595,9 +659,6 @@ export default function App() {
   useEffect(() => { instrumentRef.current = instrument; localStorage.setItem('phraseInstrument', instrument); }, [instrument]);
   useEffect(() => { swingEnabledRef.current = swingEnabled; localStorage.setItem('swingEnabled', String(swingEnabled)); }, [swingEnabled]);
   useEffect(() => { swingAmountRef.current = swingAmount; localStorage.setItem('swingAmount', String(swingAmount)); }, [swingAmount]);
-  // Ref for ii-V lick end time (prevents V chord from re-triggering lick)
-  const iiVLickEndTimeRef = useRef(0);
-
   /** Find a lick from any DB section by ID */
   function findLickById(lickId: string): LickEntry | null {
     if (!lickDB) return null;
@@ -612,15 +673,44 @@ export default function App() {
   function chordHasSavedLick(chordIdx: number, prog: Progression): boolean {
     const chord = prog.chords[chordIdx];
     if (!chord?.lickId || !lickDB) return false;
-    // ii-V lick check
-    const iiVType = isIiVLickId(chord.lickId) || chord.lickIiVType;
-    if (iiVType) {
-      return findLickById(chord.lickId) != null;
+    return findLickById(chord.lickId) != null;
+  }
+
+  /** Clear the ii-V fretboard switch timer. */
+  function clearIiVSwitchTimer() {
+    if (iiVSwitchTimerRef.current) {
+      clearTimeout(iiVSwitchTimerRef.current);
+      iiVSwitchTimerRef.current = null;
     }
-    const lickType = QUALITY_TO_LICK_TYPE[chord.quality];
-    if (!lickType) return false;
-    const licks = lickDB[lickType] ?? [];
-    return licks.some(l => l.id === chord.lickId);
+  }
+
+  /** Resolve mode → fretMap → positions for a chord's root and mode index. */
+  function resolveChordPositions(chordRootName: RootName, chordModeIdx: number) {
+    const t = MODE_TEMPLATES[chordModeIdx];
+    const m = resolveMode(chordRootName, t);
+    const fm = buildFretMap(m.semi, m.notes);
+    const positions = m.notes.length > 7
+      ? generateDimPositions(fm, m.semi[0])
+      : generatePositions(fm, m.notes);
+    return { template: t, mode: m, fretMap: fm, positions };
+  }
+
+  /** Build a GeneratedPhrase for a lick mapped onto a specific position. */
+  function buildPhraseForLick(
+    lick: LickEntry, chordRootName: RootName, pos: Position,
+    chordModeIdx: number, transposeSemitones: number,
+    highOctave: boolean, highInstance: boolean,
+  ): GeneratedPhrase {
+    const { template, mode: m, fretMap: fm } = resolveChordPositions(chordRootName, chordModeIdx);
+    const lickPitches = lick.notes
+      .filter(n => !n.rest && n.pitch != null)
+      .map(n => n.pitch! + transposeSemitones);
+    const bestInstIdx = selectBestInstance(pos, lickPitches, highInstance);
+    const singleInstPos = { ...pos, instances: [pos.instances[bestInstIdx]] };
+    const pool = buildNotePool(singleInstPos, m, fm, true);
+    return lickToGeneratedPhrase(
+      lick, pos.id, template.key, chordRootName, pool, transposeSemitones, highOctave,
+    );
   }
 
   // Play a saved lick for a given chord index (used during auto-advance)
@@ -635,50 +725,39 @@ export default function App() {
     if (!chord || !eff || !QUALITY_TO_MODES[chord.quality]) return null;
 
     if (chord.lickId && lickDB) {
-      const iiVType = isIiVLickId(chord.lickId) || chord.lickIiVType;
       const highOctave = chord.lickHighOctave ?? false;
       const highInstance = chord.lickHighInstance ?? false;
 
-      // Find the lick from DB
-      const lick = iiVType
-        ? findLickById(chord.lickId)
-        : (QUALITY_TO_LICK_TYPE[chord.quality] ? (lickDB[QUALITY_TO_LICK_TYPE[chord.quality]] ?? []).find(l => l.id === chord.lickId) : null);
+      const lick = findLickById(chord.lickId);
       if (!lick) return null;
 
       const rootSemi = ROOTS.find(r => r.name === chord.rootName)?.semitone ?? 0;
+      const iiVType = isIiVLickId(chord.lickId);
 
-      // Compute transposeSemitones: ii-V uses keyCenterSemitone, single uses chord quality
+      // For split ii-V-long licks, use only the relevant half
+      let effectiveLick = lick;
       let transposeSemitones: number;
-      if (iiVType) {
+      if (iiVType === 'maj-ii-v-long' && chord.lickIiVPart) {
+        const { iiLick, vLick } = splitIiVLongLick(lick);
+        effectiveLick = chord.lickIiVPart === 'ii' ? iiLick : vLick;
+        // Compute key center from chord context
+        const keyCenterSemi = chord.lickIiVPart === 'ii'
+          ? (() => { const iiV = detectIiVPattern(chords, chordIdx); return iiV?.keyCenterSemitone ?? 0; })()
+          : (rootSemi + 5) % 12; // V chord: I = V + P4
+        transposeSemitones = getIiVTransposeSemitones(keyCenterSemi);
+      } else if (iiVType || chord.lickIiVType) {
         const iiV = detectIiVPattern(chords, chordIdx);
         if (!iiV) return null;
         transposeSemitones = getIiVTransposeSemitones(iiV.keyCenterSemitone);
-        // Set end time so V chord skips lick playback
-        const bodyBeats = lick.beats - (lick.anacrusis ?? 0);
-        const beatMs = 60000 / bpm;
-        iiVLickEndTimeRef.current = performance.now() + bodyBeats * beatMs;
       } else {
         transposeSemitones = getTransposeSemitones(chord.quality, rootSemi);
       }
 
       // Use the user's effective mode/position for mapping
-      const chordMode = resolveMode(chord.rootName, MODE_TEMPLATES[eff.modeIdx]);
-      const chordFretMap = buildFretMap(chordMode.semi, chordMode.notes);
-      const positions = chordMode.notes.length > 7
-        ? generateDimPositions(chordFretMap, chordMode.semi[0])
-        : generatePositions(chordFretMap, chordMode.notes);
+      const { positions } = resolveChordPositions(chord.rootName, eff.modeIdx);
       const pos = positions.find(p => p.id === eff.posId);
       if (pos) {
-        const lickPitches = lick.notes
-          .filter(n => !n.rest && n.pitch != null)
-          .map(n => n.pitch! + transposeSemitones);
-        const bestInstIdx = selectBestInstance(pos, lickPitches, highInstance);
-        const singleInstPos = { ...pos, instances: [pos.instances[bestInstIdx]] };
-        const pool = buildNotePool(singleInstPos, chordMode, chordFretMap, true);
-        const ccb = (iiVType === 'maj-ii-v-long') ? lick.beats - 4 : undefined;
-        return lickToGeneratedPhrase(
-          lick, eff.posId, MODE_TEMPLATES[eff.modeIdx].key, chord.rootName, pool, transposeSemitones, highOctave, ccb,
-        );
+        return buildPhraseForLick(effectiveLick, chord.rootName, pos, eff.modeIdx, transposeSemitones, highOctave, highInstance);
       }
     }
 
@@ -690,7 +769,6 @@ export default function App() {
     if (!isPlaying || !progMode || !activeProg) {
       chordStartRef.current = 0;
       wasAutoAdvanceRef.current = false;
-      iiVLickEndTimeRef.current = 0;
       activeStrumRef.current?.stop();
       activeStrumRef.current = null;
       activePhraseStopRef.current?.stop();
@@ -725,6 +803,7 @@ export default function App() {
         const phrase = playLickForChord(activeChordIdx, activeProg);
         if (phrase) {
           setAutoPlayPhrase(phrase);
+          setPhraseAnimKey(k => k + 1);
           if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
           const ctx = audioCtxRef.current;
           const eighthDur = (60 / bpm) / 2;
@@ -760,18 +839,22 @@ export default function App() {
       }
 
       // Generate + schedule phrase for the next chord on auto-advance
-      // Skip if an ii-V lick is still playing across this chord
-      const skipLick = performance.now() < iiVLickEndTimeRef.current;
-      if (!skipLick && activeProg && (chordHasSavedLick(nextChordIdx, activeProg))) {
+      if (activeProg && chordHasSavedLick(nextChordIdx, activeProg)) {
         activePhraseStopRef.current?.stop();
         const phrase = playLickForChord(nextChordIdx, activeProg);
         if (phrase) {
           setAutoPlayPhrase(phrase);
+          setPhraseAnimKey(k => k + 1);
           if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
           const ctx = audioCtxRef.current;
           const eighthDur = (60 / bpm) / 2;
           activePhraseStopRef.current = schedulePhrase(ctx, phrase, ctx.currentTime, eighthDur, noteVolumeRef.current, 99, instrumentRef.current, swingEnabledRef.current ? swingAmountRef.current : 0, bpm);
         }
+      } else {
+        // No saved lick — clear everything
+        activePhraseStopRef.current?.stop();
+        activePhraseStopRef.current = null;
+        setAutoPlayPhrase(null);
       }
 
       setActiveChordIdx(nextChordIdx);
@@ -881,14 +964,15 @@ export default function App() {
   // Manual phrase playback (single phrase, not auto-play)
   const manualPhraseRef = useRef<{ stop: () => void } | null>(null);
   const manualPhraseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [isPhraseAudioPlaying, setIsPhraseAudioPlaying] = useState(false);
   const [phraseAnimKey, setPhraseAnimKey] = useState(0);
 
   // Play a phrase with audio + animation sync
-  const playPhraseAudio = useCallback((phrase: GeneratedPhrase) => {
+  const playPhraseAudio = useCallback((phrase: GeneratedPhrase, switchToVPart?: GeneratedPhrase | null, iiBeats?: number) => {
     // Stop any current playback
     manualPhraseRef.current?.stop();
     if (manualPhraseTimer.current) clearTimeout(manualPhraseTimer.current);
+    clearIiVSwitchTimer();
+    setIiVDisplayPhrase(null);
 
     // Prevent the activePhrase-change effect from killing this playback
     justStartedPlayRef.current = true;
@@ -896,14 +980,24 @@ export default function App() {
     if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
     const ctx = audioCtxRef.current;
     if (ctx.state === 'suspended') ctx.resume();
-    // When metronome is on, sync phrase to BPM; otherwise use speed slider
-    const eighthDur = isMetronomeOn
-      ? (60 / bpm) / 2
-      : Math.max(0.1, phraseAnimSpeed / 1000);
+    // Always sync phrase to BPM
+    const eighthDur = (60 / bpm) / 2;
     const result = schedulePhrase(ctx, phrase, ctx.currentTime, eighthDur, noteVolumeRef.current, 99, instrumentRef.current, swingEnabledRef.current ? swingAmountRef.current : 0, bpm);
     manualPhraseRef.current = result;
     setIsPhraseAudioPlaying(true);
     setPhraseAnimKey(k => k + 1);
+
+    // Schedule ii→V fretboard switch at the split point
+    if (switchToVPart) {
+      const switchDelay = (iiBeats ?? 4) * 2 * eighthDur * 1000;
+      iiVSwitchTimerRef.current = setTimeout(() => {
+        justStartedPlayRef.current = true; // prevent playback stop on activePhrase change
+        setIiVDisplayPhrase(switchToVPart);
+        setPhraseAnimKey(k => k + 1);
+        iiVSwitchTimerRef.current = null;
+      }, switchDelay);
+    }
+
     manualPhraseTimer.current = setTimeout(() => {
       manualPhraseRef.current = null;
       setIsPhraseAudioPlaying(false);
@@ -932,7 +1026,7 @@ export default function App() {
         }
       }
     }
-  }, [phraseAnimSpeed, progMode, selPos, mode.chordTones, isMetronomeOn, bpm]);
+  }, [progMode, selPos, mode.chordTones, isMetronomeOn, bpm]);
 
   // Stop manual phrase on context change — but skip if we just started playback
   // (Generate triggers both activePhrase change and playPhraseAudio in the same tick)
@@ -1090,39 +1184,57 @@ export default function App() {
                       if (lick?.id) {
                         const copy = [...progressions];
                         const prog = { ...copy[activeProgIdx], chords: [...copy[activeProgIdx].chords] };
-                        prog.chords[activeChordIdx] = {
-                          ...prog.chords[activeChordIdx],
-                          lickId: lick.id,
-                          lickHighOctave: curOctave,
-                          lickHighInstance: curInst,
-                          lickIiVType: iiVType,
-                        };
+                        // For ii-V-long: split across ii and V chords
+                        if (iiVType === 'maj-ii-v-long' && activeChordIdx + 1 < prog.chords.length) {
+                          prog.chords[activeChordIdx] = {
+                            ...prog.chords[activeChordIdx],
+                            lickId: lick.id,
+                            lickHighOctave: curOctave,
+                            lickHighInstance: curInst,
+                            lickIiVType: iiVType,
+                            lickIiVPart: 'ii',
+                          };
+                          prog.chords[activeChordIdx + 1] = {
+                            ...prog.chords[activeChordIdx + 1],
+                            lickId: lick.id,
+                            lickHighOctave: curOctave,
+                            lickHighInstance: curInst,
+                            lickIiVType: iiVType,
+                            lickIiVPart: 'V',
+                          };
+                        } else {
+                          prog.chords[activeChordIdx] = {
+                            ...prog.chords[activeChordIdx],
+                            lickId: lick.id,
+                            lickHighOctave: curOctave,
+                            lickHighInstance: curInst,
+                            lickIiVType: iiVType,
+                            lickIiVPart: undefined,
+                          };
+                        }
                         copy[activeProgIdx] = prog;
                         handleSaveProgressions(copy);
                       }
                       const chord = activeProg.chords[activeChordIdx];
                       if (!chord) return;
                       if (!lick) return;
-                      // Play preview — use user's current position for mapping
+                      // Play preview (full lick) — use user's current position for mapping
                       const rootSemi = ROOTS.find(r => r.name === chord.rootName)?.semitone ?? 0;
                       const iiVTransp = (iiVType && filteredLicks.iiV) ? getIiVTransposeSemitones(filteredLicks.iiV.keyCenterSemitone) : null;
+                      const ts = iiVTransp ?? getTransposeSemitones(chord.quality, rootSemi);
                       const eff = effectiveAll[activeChordIdx];
                       if (eff) {
-                        const t = MODE_TEMPLATES[eff.modeIdx];
-                        const m = resolveMode(chord.rootName, t);
-                        const fm = buildFretMap(m.semi, m.notes);
-                        const ts = iiVTransp ?? getTransposeSemitones(chord.quality, rootSemi);
-                        const posArr = m.notes.length > 7
-                          ? generateDimPositions(fm, m.semi[0])
-                          : generatePositions(fm, m.notes);
+                        const { positions: posArr } = resolveChordPositions(chord.rootName, eff.modeIdx);
                         const pos = posArr.find(p => p.id === eff.posId);
                         if (pos) {
-                          const lp = lick.notes.filter(n => !n.rest && n.pitch != null).map(n => n.pitch! + ts);
-                          const bi = selectBestInstance(pos, lp, curInst);
-                          const sip = { ...pos, instances: [pos.instances[bi]] };
-                          const pool = buildNotePool(sip, m, fm, true);
-                          const phrase = lickToGeneratedPhrase(lick, pos.id, t.key, chord.rootName, pool, ts, curOctave);
-                          playPhraseAudio(phrase);
+                          const phrase = buildPhraseForLick(lick, chord.rootName, pos, eff.modeIdx, ts, curOctave, curInst);
+                          if (iiVType === 'maj-ii-v-long') {
+                            const split = splitIiVLongLick(lick);
+                            const vPartSwitch = buildPhraseForLick(split.vLick, chord.rootName, pos, eff.modeIdx, ts, curOctave, curInst);
+                            playPhraseAudio(phrase, vPartSwitch, split.iiLick.beats);
+                          } else {
+                            playPhraseAudio(phrase);
+                          }
                           return;
                         }
                       }
@@ -1131,26 +1243,53 @@ export default function App() {
                         const nextChord = activeProg.chords[activeChordIdx + 1];
                         if (nextChord) {
                           const vRootSemi = ROOTS.find(r => r.name === nextChord.rootName)?.semitone ?? 0;
-                          const ctx = buildIiVLickContext(lick, filteredLicks.iiV.keyCenterSemitone, nextChord.quality, nextChord.rootName, vRootSemi, curOctave, curInst);
-                          if (ctx) playPhraseAudio(ctx.phrase);
+                          const fullCtx = buildIiVLickContext(lick, filteredLicks.iiV.keyCenterSemitone, nextChord.quality, nextChord.rootName, vRootSemi, curOctave, curInst);
+                          if (fullCtx) {
+                            if (iiVType === 'maj-ii-v-long') {
+                              const split = splitIiVLongLick(lick);
+                              const vCtx = buildIiVLickContext(split.vLick, filteredLicks.iiV.keyCenterSemitone, nextChord.quality, nextChord.rootName, vRootSemi, curOctave, curInst);
+                              playPhraseAudio(fullCtx.phrase, vCtx?.phrase ?? null, split.iiLick.beats);
+                            } else {
+                              playPhraseAudio(fullCtx.phrase);
+                            }
+                          }
                         }
                       } else {
                         const ctx = buildLickContext(lick, chord.quality, chord.rootName, rootSemi, curOctave, curInst);
                         if (ctx) playPhraseAudio(ctx.phrase);
                       }
                     }}
-                    onPlay={() => { if (activeLickPhrase) playPhraseAudio(activeLickPhrase); }}
+                    onPlay={() => {
+                      const p = previewLickPhrase ?? activeLickPhrase;
+                      if (!p) return;
+                      if (vPartPhrase && selectedLickIdx != null) {
+                        const srcLick = filteredLicks.licks[selectedLickIdx];
+                        playPhraseAudio(p, vPartPhrase, srcLick ? splitIiVLongLick(srcLick).iiLick.beats : undefined);
+                      } else {
+                        playPhraseAudio(p);
+                      }
+                    }}
                     onStop={() => {
                       manualPhraseRef.current?.stop();
                       manualPhraseRef.current = null;
                       if (manualPhraseTimer.current) clearTimeout(manualPhraseTimer.current);
+                      clearIiVSwitchTimer();
+                      setIiVDisplayPhrase(null);
                       setIsPhraseAudioPlaying(false);
                     }}
                     onClear={() => {
                       setSelectedLickIdx(null);
                       const copy = [...progressions];
                       const prog = { ...copy[activeProgIdx], chords: [...copy[activeProgIdx].chords] };
-                      prog.chords[activeChordIdx] = { ...prog.chords[activeChordIdx], lickId: undefined, lickHighOctave: undefined, lickHighInstance: undefined, lickIiVType: undefined };
+                      const curChord = prog.chords[activeChordIdx];
+                      prog.chords[activeChordIdx] = { ...curChord, lickId: undefined, lickHighOctave: undefined, lickHighInstance: undefined, lickIiVType: undefined, lickIiVPart: undefined };
+                      // Linked clear: if this was ii part of ii-V-long, also clear V chord
+                      if (curChord?.lickIiVPart === 'ii' && activeChordIdx + 1 < prog.chords.length) {
+                        const vChord = prog.chords[activeChordIdx + 1];
+                        if (vChord?.lickId === curChord.lickId && vChord?.lickIiVPart === 'V') {
+                          prog.chords[activeChordIdx + 1] = { ...vChord, lickId: undefined, lickHighOctave: undefined, lickHighInstance: undefined, lickIiVType: undefined, lickIiVPart: undefined };
+                        }
+                      }
                       copy[activeProgIdx] = prog;
                       handleSaveProgressions(copy);
                     }}
@@ -1258,9 +1397,9 @@ export default function App() {
           voicingHighlights={voicingHighlights}
           activePhrase={activePhrase}
           phraseAnimKey={phraseAnimKey}
-          phraseAnimSpeed={isMetronomeOn
+          phraseAnimSpeed={isPhraseAudioPlaying || isPlaying
             ? Math.round((60000 / bpm) / 2)
-            : phraseAnimSpeed}
+            : 0}
           swingAmount={swingEnabled ? swingAmount : 0}
           bpm={bpm}
         />

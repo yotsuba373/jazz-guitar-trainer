@@ -67,7 +67,7 @@ export {
   playNote,
   schedulePhrase,
 } from './audioEngine';
-export { absolutePitch, buildNotePool, hasAlternateOctave, detectIiVPattern, isIiVLickId, buildIiVLickContext, getIiVTransposeSemitones } from './lickEngine';
+export { absolutePitch, buildNotePool, hasAlternateOctave, detectIiVPattern, isIiVLickId, buildIiVLickContext, getIiVTransposeSemitones, splitIiVLongLick } from './lickEngine';
 export type { IiVType, IiVDetection } from './lickEngine';
 export { analyzePhrase } from './phraseAnalysis';
 export { swingBeatStart, swingVolumeMult, swingDurMult } from './swing';
