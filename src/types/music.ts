@@ -89,6 +89,7 @@ export interface ChordSlot {
   lickHighOctave?: boolean;  // 8va toggle: +12 semitone shift within same instance
   lickHighInstance?: boolean; // high-position instance toggle
   lickIiVType?: string;      // ii-V lick type: 'maj-ii-v-short' | 'maj-ii-v-long' | 'min-ii-v-short'
+  lickIiVPart?: 'ii' | 'V';  // which part of a split ii-V-long lick this chord holds
 }
 
 /** Song key with major/minor quality */
@@ -217,8 +218,6 @@ export interface GeneratedPhrase {
   rootName: string;
   /** Total number of beats in the phrase */
   totalBeats: number;
-  /** Beat at which chord quality changes (ii→V). Line breaks here. */
-  chordChangeBeat?: number;
 }
 
 // --- Lick DB Types ---

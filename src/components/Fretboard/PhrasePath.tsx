@@ -219,13 +219,9 @@ export function PhrasePath({ phrase, animKey, animSpeed = 350, swingAmount = 0, 
   });
   const segs = buildSegments(points);
   const fadeDur = Math.max(60, Math.round(animSpeed * 0.4));
-  const fadeStyle = (i: number): React.CSSProperties => {
+  const fadeStyleForDelay = (delayMs: number): React.CSSProperties => {
     if (animSpeed <= 0) return {};
-    const bs = phrase.notes[i].beatStart ?? 0;
-    const dur = phrase.notes[i].duration ?? 'e';
-    const swungBeat = swingBeatStart(bs, dur, swingAmount, bpm);
-    const delay = swungBeat * animSpeed * 2;
-    return { animation: `phraseIn ${fadeDur}ms ease-out ${Math.round(delay)}ms both` };
+    return { animation: `phraseIn ${fadeDur}ms ease-out ${delayMs}ms both` };
   };
 
   // Key forces remount on phrase change or play trigger → restarts CSS animations
@@ -235,13 +231,17 @@ export function PhrasePath({ phrase, animKey, animSpeed = 350, swingAmount = 0, 
     <g key={phraseId}>
       {/* CSS animation keyframes (SVG-embedded) */}
       <defs>
-        <style>{`@keyframes phraseIn { from { opacity: 0 } to { opacity: 1 } }`}</style>
+        <style>{`
+@keyframes phraseIn { from { opacity: 0 } to { opacity: 1 } }
+@keyframes phrasePulse { 0% { r: 8; opacity: 0.7 } 100% { r: 15; opacity: 0 } }
+        `}</style>
       </defs>
 
       {/* Per-beat groups: segment + marker + number appear together */}
       {phrase.notes.map((n, i) => {
         if (n.isRest) return null;
         const { x, y } = points[i];
+        const base = toSvg(n.stringIdx, n.fret);
         const color = getBeatColor(i, phrase.notes.length);
 
         // Beat number y-offset for revisited positions
@@ -249,13 +249,12 @@ export function PhrasePath({ phrase, animKey, animSpeed = 350, swingAmount = 0, 
         const offsets = [-11, 15, 26, -22];
         const yOff = offsets[visitIdx % offsets.length];
 
-        // Detect chord change boundary (ii→V): break line, add emphasis ring
-        const ccb = phrase.chordChangeBeat;
-        const isChordChangeBreak = ccb != null && i > 0 &&
-          !phrase.notes[i - 1]?.isRest &&
-          (phrase.notes[i - 1]?.beatStart ?? 0) < ccb &&
-          (n.beatStart ?? 0) >= ccb;
-        const isSegmentStart = i === 0 || isChordChangeBreak;
+        const isSegmentStart = i === 0;
+
+        // Beat onset delay (shared by fadeIn and pulse)
+        const bs = n.beatStart ?? 0;
+        const dur = n.duration ?? 'e';
+        const onsetDelay = Math.round(swingBeatStart(bs, dur, swingAmount, bpm) * animSpeed * 2);
 
         // Note marker element — size varies by rhythm type, shrunk on revisit
         let mSize = (RHYTHM_MARKER_SIZE[n.duration ?? 'e'] ?? 5) * visitMeta[i].sizeScale;
@@ -272,10 +271,9 @@ export function PhrasePath({ phrase, animKey, animSpeed = 350, swingAmount = 0, 
         }
 
         return (
-          <g key={`beat-${i}`} style={fadeStyle(i)}>
+          <g key={`beat-${i}`} style={fadeStyleForDelay(onsetDelay)}>
             {/* Curve segment leading TO this beat (from previous) — tapered */}
-            {/* Skip segment across chord change boundary */}
-            {i > 0 && !phrase.notes[i - 1]?.isRest && !isChordChangeBreak && (
+            {i > 0 && !phrase.notes[i - 1]?.isRest && (
               <path d={segs[i - 1].d} fill="none" stroke={color}
                 strokeWidth={2.2 - (i / phrase.notes.length) * 0.8}
                 opacity={0.6} strokeLinecap="round" />
@@ -286,6 +284,11 @@ export function PhrasePath({ phrase, animKey, animSpeed = 350, swingAmount = 0, 
             )}
             {/* Note marker */}
             {marker}
+            {/* Pulse ring — expands and fades on note onset */}
+            {animSpeed > 0 && (
+              <circle cx={base.x} cy={base.y} r={8} fill="rgba(255,255,255,0.7)" stroke={color} strokeWidth={3}
+                opacity={0} style={{ animation: `phrasePulse 400ms ease-out ${onsetDelay}ms both` }} />
+            )}
             {/* Beat number */}
             <text x={x} y={y + yOff} textAnchor="middle"
               fontSize="9" fontWeight="800" fill={color}
