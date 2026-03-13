@@ -401,6 +401,7 @@ export default function App() {
 
     // Helper to build phrase for a given position
     // For ii-V licks, transposeSemitones uses normalized keyCenterSemitone
+    const chordChangeBeat = iiVType === 'maj-ii-v-long' ? lick.beats - 4 : undefined;
     const buildForPos = (pos: Position, modeIdx: number) => {
       const t = MODE_TEMPLATES[modeIdx];
       const m = resolveMode(chord.rootName, t);
@@ -413,7 +414,7 @@ export default function App() {
       const singleInstPos = { ...pos, instances: [pos.instances[bestInstIdx]] };
       const pool = buildNotePool(singleInstPos, m, fm, true);
       return lickToGeneratedPhrase(
-        lick, pos.id, t.key, chord.rootName, pool, transposeSemitones, lickHighOctave,
+        lick, pos.id, t.key, chord.rootName, pool, transposeSemitones, lickHighOctave, chordChangeBeat,
       );
     };
 
@@ -674,8 +675,9 @@ export default function App() {
         const bestInstIdx = selectBestInstance(pos, lickPitches, highInstance);
         const singleInstPos = { ...pos, instances: [pos.instances[bestInstIdx]] };
         const pool = buildNotePool(singleInstPos, chordMode, chordFretMap, true);
+        const ccb = (iiVType === 'maj-ii-v-long') ? lick.beats - 4 : undefined;
         return lickToGeneratedPhrase(
-          lick, eff.posId, MODE_TEMPLATES[eff.modeIdx].key, chord.rootName, pool, transposeSemitones, highOctave,
+          lick, eff.posId, MODE_TEMPLATES[eff.modeIdx].key, chord.rootName, pool, transposeSemitones, highOctave, ccb,
         );
       }
     }
