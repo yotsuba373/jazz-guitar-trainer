@@ -262,14 +262,16 @@ function octaveCoverages(
   return results;
 }
 
-/** Among viable octave shifts (≥50% coverage), return them sorted ascending by shift value. */
+/** Among viable octave shifts (≥50% coverage), return the best 2 sorted ascending.
+ *  Limiting to 2 prevents a low-coverage third shift from being offered via 8va. */
 function viableOctaveShifts(
   lick: LickEntry, pool: PoolNote[], transposeSemitones: number,
 ): number[] {
   const ranked = octaveCoverages(lick, pool, transposeSemitones);
   const total = lick.notes.filter(n => !n.rest && n.pitch != null).length;
   if (total === 0) return [0];
-  const viable = ranked.filter(r => r.coverage >= total * 0.5).map(r => r.shift);
+  // Take top 2 by coverage (ranked is already sorted descending by coverage)
+  const viable = ranked.filter(r => r.coverage >= total * 0.5).slice(0, 2).map(r => r.shift);
   if (viable.length === 0) return [ranked[0].shift]; // fallback to best coverage
   viable.sort((a, b) => a - b); // ascending: lowest shift first
   return viable;
