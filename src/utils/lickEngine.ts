@@ -262,39 +262,51 @@ function octaveCoverages(
   return results;
 }
 
-/** Among viable octave shifts (≥50% coverage), return the best 2 sorted ascending.
- *  Limiting to 2 prevents a low-coverage third shift from being offered via 8va. */
-function viableOctaveShifts(
+/** Best viable octave shift (≥80% coverage). Returns { defaultShift, upShift? }.
+ *  When multiple shifts share the best coverage, the highest pitch becomes 8va
+ *  and the next highest becomes default.  Otherwise upShift = any viable shift
+ *  above the default. */
+function pickOctaveShifts(
   lick: LickEntry, pool: PoolNote[], transposeSemitones: number,
-): number[] {
+): { defaultShift: number; upShift: number | null } {
   const ranked = octaveCoverages(lick, pool, transposeSemitones);
   const total = lick.notes.filter(n => !n.rest && n.pitch != null).length;
-  if (total === 0) return [0];
-  // Take top 2 by coverage (ranked is already sorted descending by coverage)
-  const viable = ranked.filter(r => r.coverage >= total * 0.5).slice(0, 2).map(r => r.shift);
-  if (viable.length === 0) return [ranked[0].shift]; // fallback to best coverage
-  viable.sort((a, b) => a - b); // ascending: lowest shift first
-  return viable;
+  if (total === 0) return { defaultShift: 0, upShift: null };
+
+  const viable = ranked.filter(r => r.coverage >= total * 0.8);
+  if (viable.length === 0) return { defaultShift: ranked[0].shift, upShift: null };
+
+  const bestCov = viable[0].coverage;
+  const ties = viable.filter(r => r.coverage === bestCov);
+
+  if (ties.length >= 2) {
+    // Sort ties by shift descending — highest = 8va, next = default
+    ties.sort((a, b) => b.shift - a.shift);
+    return { defaultShift: ties[1].shift, upShift: ties[0].shift };
+  }
+
+  // No tie: default = best coverage, 8va = any viable shift above default
+  const defaultShift = viable[0].shift;
+  const up = viable.find(r => r.shift > defaultShift);
+  return { defaultShift, upShift: up ? up.shift : null };
 }
 
-/** Pick the octave shift. 8va = highest viable; default = one step below 8va.
- *  If only one viable shift exists, both return the same value (8va disabled). */
+/** Pick the octave shift.  Default = best coverage; 8va = viable shift above it.
+ *  If no higher viable shift exists, 8va is disabled and both return the same. */
 function pickOctaveShift(
   lick: LickEntry, pool: PoolNote[], transposeSemitones: number, octaveUp: boolean,
 ): number {
-  const shifts = viableOctaveShifts(lick, pool, transposeSemitones);
-  const highIdx = shifts.length - 1;
-  if (octaveUp) return shifts[highIdx];
-  // Default = one step below the highest
-  return highIdx >= 1 ? shifts[highIdx - 1] : shifts[highIdx];
+  const { defaultShift, upShift } = pickOctaveShifts(lick, pool, transposeSemitones);
+  if (octaveUp && upShift != null) return upShift;
+  return defaultShift;
 }
 
-/** Check if 8va is available: highest viable shift must differ from one step below it. */
+/** Check if 8va is available: a viable shift strictly above the default must exist. */
 export function hasAlternateOctave(
   lick: LickEntry, pool: PoolNote[], transposeSemitones: number,
 ): boolean {
-  const shifts = viableOctaveShifts(lick, pool, transposeSemitones);
-  return shifts.length >= 2 && shifts[shifts.length - 1] !== shifts[shifts.length - 2];
+  const { upShift } = pickOctaveShifts(lick, pool, transposeSemitones);
+  return upShift != null;
 }
 
 // ---------------------------------------------------------------------------
