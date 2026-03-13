@@ -217,6 +217,8 @@ export interface GeneratedPhrase {
   rootName: string;
   /** Total number of beats in the phrase */
   totalBeats: number;
+  /** Beat at which chord quality changes (ii→V). Line breaks here. */
+  chordChangeBeat?: number;
 }
 
 // --- Lick DB Types ---

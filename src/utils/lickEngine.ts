@@ -466,7 +466,8 @@ export function findBestPositionForLick(
 // ---------------------------------------------------------------------------
 
 /** Convert a lick entry into a GeneratedPhrase for display and playback.
- *  @param alternateOctave - use second-best octave placement within same instance */
+ *  @param alternateOctave - use second-best octave placement within same instance
+ *  @param chordChangeBeat - beat at which chord quality changes (for ii-V-long line break) */
 export function lickToGeneratedPhrase(
   lick: LickEntry,
   posId: number,
@@ -475,6 +476,7 @@ export function lickToGeneratedPhrase(
   pool: PoolNote[],
   transposeSemitones: number,
   alternateOctave = false,
+  chordChangeBeat?: number,
 ): GeneratedPhrase {
   const mapped = mapLickToFretboard(lick, pool, transposeSemitones, alternateOctave);
 
@@ -517,6 +519,7 @@ export function lickToGeneratedPhrase(
     modeKey,
     rootName,
     totalBeats: lick.beats,
+    ...(chordChangeBeat != null ? { chordChangeBeat } : {}),
   };
 }
 
@@ -761,8 +764,12 @@ export function buildIiVLickContext(
 
   const pool = buildNotePool(singleInstPos, mode, fretMap, true);
 
+  // ii-V-long: break phrase line at chord change (V gets last 4 beats)
+  const iiVType = isIiVLickId(lick.id);
+  const chordChangeBeat = iiVType === 'maj-ii-v-long' ? lick.beats - 4 : undefined;
+
   const phrase = lickToGeneratedPhrase(
-    lick, posId, template.key, vRootName, pool, transposeSemitones, alternateOctave,
+    lick, posId, template.key, vRootName, pool, transposeSemitones, alternateOctave, chordChangeBeat,
   );
 
   return { modeIdx, mode, fretMap, positions, posId, pool, transposeSemitones, phrase };

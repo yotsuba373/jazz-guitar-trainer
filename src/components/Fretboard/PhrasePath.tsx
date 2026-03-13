@@ -249,10 +249,18 @@ export function PhrasePath({ phrase, animKey, animSpeed = 350, swingAmount = 0, 
         const offsets = [-11, 15, 26, -22];
         const yOff = offsets[visitIdx % offsets.length];
 
+        // Detect chord change boundary (ii→V): break line, add emphasis ring
+        const ccb = phrase.chordChangeBeat;
+        const isChordChangeBreak = ccb != null && i > 0 &&
+          !phrase.notes[i - 1]?.isRest &&
+          (phrase.notes[i - 1]?.beatStart ?? 0) < ccb &&
+          (n.beatStart ?? 0) >= ccb;
+        const isSegmentStart = i === 0 || isChordChangeBreak;
+
         // Note marker element — size varies by rhythm type, shrunk on revisit
         let mSize = (RHYTHM_MARKER_SIZE[n.duration ?? 'e'] ?? 5) * visitMeta[i].sizeScale;
-        // Enlarge first note for emphasis
-        if (i === 0) mSize *= 1.2;
+        // Enlarge first note of each segment for emphasis
+        if (isSegmentStart) mSize *= 1.2;
         let marker: React.ReactNode;
         if (n.isChordTone) {
           marker = <circle cx={x} cy={y} r={mSize} fill={color} stroke="#FFF" strokeWidth={1} opacity={0.9} />;
@@ -266,13 +274,14 @@ export function PhrasePath({ phrase, animKey, animSpeed = 350, swingAmount = 0, 
         return (
           <g key={`beat-${i}`} style={fadeStyle(i)}>
             {/* Curve segment leading TO this beat (from previous) — tapered */}
-            {i > 0 && !phrase.notes[i - 1]?.isRest && (
+            {/* Skip segment across chord change boundary */}
+            {i > 0 && !phrase.notes[i - 1]?.isRest && !isChordChangeBreak && (
               <path d={segs[i - 1].d} fill="none" stroke={color}
                 strokeWidth={2.2 - (i / phrase.notes.length) * 0.8}
                 opacity={0.6} strokeLinecap="round" />
             )}
-            {/* Start note emphasis ring */}
-            {i === 0 && (
+            {/* Start note emphasis ring (phrase start + chord change start) */}
+            {isSegmentStart && (
               <circle cx={x} cy={y} r={mSize + 3} fill="none" stroke={color} strokeWidth={1} opacity={0.3} />
             )}
             {/* Note marker */}
