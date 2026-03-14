@@ -392,6 +392,10 @@ function playClick(accent: boolean, ctx: AudioContext, volume: number, at?: numb
 
 ## UIレイアウト (`App.tsx`)
 
+### モード切替ボタン
+タブ風トグルボタン: 辞典 (本アイコン + 青 `#3498DB`) / 練習 (音符アイコン + 緑 `#27AE60`)。
+12px フォント、30px 高さ。`marginRight: -1` + `zIndex` でアクティブ側ボーダーが重なる。
+
 ### 辞典モード
 ```
 RootSelector (12キー)
