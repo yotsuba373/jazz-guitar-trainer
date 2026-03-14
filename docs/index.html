@@ -712,7 +712,7 @@ actualBeats = (beatWidth / sumOfBeatWidths) * 4</pre>
   <tr><td>Gain</td><td>volume × 3</td><td>volume × 1.5</td></tr>
   <tr><td>Duration</td><td colspan="2">40ms (exponential ramp to 0.001)</td></tr>
 </table>
-<p>4拍ごと（<code>metBeatRef % 4 === 0</code>）にアクセント。BPM コントローラーとは独立した <code>setInterval</code>。</p>
+<p>4拍ごとにアクセント。曲再生・フレーズプレビューともに Web Audio タイムラインに事前予約 (look-ahead scheduling) するため、JS イベントループ遅延に影響されない。</p>
 
 <div class="callout">
   <div class="callout-label">メトロノームボタン廃止</div>
@@ -1243,6 +1243,7 @@ GeneratedPhrase
   <li>各コードに <code>ChordSlot.lickBeatOffset</code> (0=先頭, &gt;0=継続) を保存。先頭コードクリア時は全継続コードも連動クリア</li>
   <li>ii-V リックも通常リックも同じロジック。3コード以上の跨ぎにも対応</li>
   <li>BPM 自動再生では各コードが自身の <code>sliceLick()</code> 結果を独立再生</li>
+  <li><strong>Look-ahead スケジューリング</strong>: 次コードの音声 (ストラム + リック + メトロノーム) を Web Audio タイムラインに事前予約。コードチェンジ時の 1-15ms 遅延を解消し、サンプル精度のタイミングを実現。<code>pendingNextRef</code> パターンで cleanup 安全性を確保</li>
 </ul>
 
 <h3>永続化</h3>
