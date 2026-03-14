@@ -27,6 +27,10 @@ interface GlobalAudioControlsProps {
   isPlaying?: boolean;
   onTogglePlay?: () => void;
   showPlayButton?: boolean;
+  loopLabel?: string;
+  onClearLoop?: () => void;
+  loopSelecting?: boolean;
+  onToggleLoopSelecting?: () => void;
   /** Slot for leading elements (e.g. chord edit button) before play/audio controls */
   leadingSlot?: React.ReactNode;
 }
@@ -61,6 +65,7 @@ export function GlobalAudioControls({
   swingEnabled, onToggleSwing, swingAmount, onSwingAmountChange,
   countInEnabled, onToggleCountIn, countInVolume, onCountInVolumeChange, countInBars, isCountingIn,
   isPlaying, onTogglePlay, showPlayButton,
+  loopLabel, onClearLoop, loopSelecting, onToggleLoopSelecting,
   leadingSlot,
 }: GlobalAudioControlsProps) {
   const [bpmStr, setBpmStr] = useState(String(bpm));
@@ -152,6 +157,37 @@ export function GlobalAudioControls({
             <span className="text-[9px] font-mono animate-pulse" style={{ color: '#BB86FC' }}>Count...</span>
           )}
         </button>
+      )}
+      {/* Loop toggle button + label */}
+      {onToggleLoopSelecting && (
+        <span className="inline-flex items-center h-[24px] rounded"
+          style={{
+            border: `1px solid ${loopSelecting ? '#7B68EE' : loopLabel ? '#7B68EE' : '#444'}`,
+            background: loopSelecting ? '#7B68EE' : loopLabel ? '#1a1a2a' : '#1a1a1a',
+            color: loopSelecting ? '#FFF' : loopLabel ? '#7B68EE' : '#888',
+          }}>
+          <button
+            onClick={onToggleLoopSelecting}
+            className="cursor-pointer px-1.5 h-full inline-flex items-center"
+            title={loopSelecting ? 'ループ選択を終了' : 'ループ範囲を選択'}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M17 2l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/>
+              <path d="M7 22l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+            </svg>
+          </button>
+          {loopSelecting && (
+            <span className="text-[10px] font-mono leading-[24px] cursor-pointer pr-1" onClick={onToggleLoopSelecting}>選択中</span>
+          )}
+          {!loopSelecting && loopLabel && onClearLoop && (<>
+            <span className="text-[10px] font-mono leading-[24px] cursor-pointer" onClick={onToggleLoopSelecting}>{loopLabel}</span>
+            <button onClick={onClearLoop} className="cursor-pointer px-1 h-full inline-flex items-center text-[#888] hover:text-[#FFF]" title="ループ解除">
+              <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="2" y1="2" x2="10" y2="10"/><line x1="10" y1="2" x2="2" y2="10"/>
+              </svg>
+            </button>
+          </>)}
+        </span>
       )}
       {/* Volume mixer dropdown */}
       <div className="relative inline-flex items-center" ref={volRef}>

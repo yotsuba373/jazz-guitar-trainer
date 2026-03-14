@@ -21,17 +21,38 @@ interface ChordChartProps {
   onEmptyMeasureBeat?: (sectionIdx: number, measureIdx: number, endingIdx: number | undefined, beat: number) => void;
   onRemoveEmptyMeasure?: (sectionIdx: number, measureIdx: number, endingIdx: number | undefined) => void;
   selectedBeat?: SelectedBeatInfo | null;
+  loopMeasureRange?: { start: number; end: number } | null;
+  onMeasureLoopClick?: (flatMeasureIdx: number) => void;
+  loopSelecting?: boolean;
 }
 
 export function ChordChart({
   progression, activeChordIdx, effectiveAll, chordPrefs, onChordSelect,
   editing, onRemoveChord, onInsertAtBeat, onEmptyMeasureBeat, onRemoveEmptyMeasure, selectedBeat,
+  loopMeasureRange, onMeasureLoopClick, loopSelecting,
 }: ChordChartProps) {
   const layout = useMemo(() => getChartLayout(progression), [progression]);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const { sections, barsPerRow } = layout;
   const chords = progression.chords;
+  // Compute flat measure index offsets per section (must match buildPlaybackSeq)
+  const sectionFlatOffsets = useMemo(() => {
+    let flat = 0;
+    return sections.map(section => {
+      const mainStart = flat;
+      flat += section.measures.length;
+      const endingStarts = (section.endings ?? []).map(ending => {
+        const start = flat;
+        flat += ending.length;
+        return start;
+      });
+      return { mainStart, endingStarts };
+    });
+  }, [sections]);
+
+  const hasLoop = loopMeasureRange != null;
+
   // When editing, always show label column for section visibility
   const hasLabels = editing
     ? true
@@ -93,6 +114,7 @@ export function ChordChart({
       sectionIdx?: number;
       endingIdx?: number;
       measureOffset?: number; // offset within section for measure index
+      flatIdxBase?: number; // flat measure index of first measure in this row
     } = {},
   ) {
     return (
@@ -276,11 +298,21 @@ export function ChordChart({
           }
 
           // --- Normal mode: flex layout ---
+          const flatIdx = (opts.flatIdxBase ?? 0) + mi;
+          const inLoop = hasLoop && flatIdx >= loopMeasureRange!.start && flatIdx <= loopMeasureRange!.end;
+          const loopCursor = "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%237B68EE' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M17 2l4 4-4 4'/%3E%3Cpath d='M3 11V9a4 4 0 0 1 4-4h14'/%3E%3Cpath d='M7 22l-4-4 4-4'/%3E%3Cpath d='M21 13v2a4 4 0 0 1-4 4H3'/%3E%3C/svg%3E\") 12 12, pointer";
+
           return (
             <div
               key={mi}
-              className="flex items-center gap-1 px-2 py-1.5 min-h-[36px]"
-              style={borderStyles}
+              className="relative flex items-center gap-1 px-2 py-1.5 min-h-[36px]"
+              style={{
+                ...borderStyles,
+                background: inLoop ? '#7B68EE15' : undefined,
+                borderBottom: inLoop ? '2px solid #7B68EE' : borderStyles.borderBottom,
+                opacity: loopSelecting && !inLoop ? 0.35 : 1,
+                transition: 'opacity 0.15s',
+              }}
             >
               {isFirstCell && opts.repeatStart && (
                 <span className="flex flex-col text-[8px] leading-[6px] text-[#888] -ml-1 mr-0.5">
@@ -299,6 +331,14 @@ export function ChordChart({
                 <span className="flex flex-col text-[8px] leading-[6px] text-[#888] ml-auto -mr-1">
                   <span>•</span><span>•</span>
                 </span>
+              )}
+              {/* Loop selection overlay — intercepts all clicks when in loop-selecting mode */}
+              {loopSelecting && onMeasureLoopClick && (
+                <div
+                  className="absolute inset-0 z-10"
+                  style={{ cursor: loopCursor }}
+                  onClick={(e) => { e.stopPropagation(); onMeasureLoopClick(flatIdx); }}
+                />
               )}
             </div>
           );
@@ -354,6 +394,7 @@ export function ChordChart({
                   repeatEnd: hasRepeat && isLastRow && !hasEndings,
                   sectionIdx: si,
                   measureOffset: ri * barsPerRow,
+                  flatIdxBase: sectionFlatOffsets[si].mainStart + ri * barsPerRow,
                 },
               );
             })}
@@ -380,6 +421,7 @@ export function ChordChart({
                     sectionIdx: si,
                     endingIdx: ei,
                     measureOffset: ri * barsPerRow,
+                    flatIdxBase: sectionFlatOffsets[si].endingStarts[ei] + ri * barsPerRow,
                   },
                 );
               });

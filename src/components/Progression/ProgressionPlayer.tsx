@@ -27,6 +27,9 @@ interface ProgressionPlayerProps {
   onEmptyMeasureBeat?: (sectionIdx: number, measureIdx: number, endingIdx: number | undefined, beat: number) => void;
   onRemoveEmptyMeasure?: (sectionIdx: number, measureIdx: number, endingIdx: number | undefined) => void;
   selectedBeat?: SelectedBeatInfo | null;
+  loopMeasureRange?: { start: number; end: number } | null;
+  onMeasureLoopClick?: (flatMeasureIdx: number) => void;
+  loopSelecting?: boolean;
   belowChart?: React.ReactNode;
 }
 
@@ -37,6 +40,7 @@ export function ProgressionPlayer({
   onChordSelect, onModeChange, onPosChange, onReset,
   selPosIds, availableVoicings, selectedVoicingIdx, onSelectVoicing,
   editing, onRemoveChord, onInsertAtBeat, onEmptyMeasureBeat, onRemoveEmptyMeasure, selectedBeat,
+  loopMeasureRange, onMeasureLoopClick, loopSelecting,
   belowChart,
 }: ProgressionPlayerProps) {
   const chords = progression.chords;
@@ -92,6 +96,9 @@ export function ProgressionPlayer({
         onEmptyMeasureBeat={onEmptyMeasureBeat}
         onRemoveEmptyMeasure={onRemoveEmptyMeasure}
         selectedBeat={selectedBeat}
+        loopMeasureRange={loopMeasureRange}
+        onMeasureLoopClick={onMeasureLoopClick}
+        loopSelecting={loopSelecting}
       />
 
       {belowChart}
