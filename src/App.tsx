@@ -267,6 +267,22 @@ export default function App() {
 
   // Sync display state from active chord in progression mode
   const activeProg = progressions[activeProgIdx];
+
+  // Space key toggles play/stop in progression mode
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.code !== 'Space') return;
+      if (!progMode || editing) return;
+      if (!activeProg || activeProg.chords.length === 0) return;
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      e.preventDefault();
+      setIsPlaying(p => !p);
+    }
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [progMode, editing, activeProg]);
+
   const activeChord = activeProg?.chords[activeChordIdx];
   const isSkipped = activeChord && !QUALITY_TO_MODES[activeChord.quality];
 
