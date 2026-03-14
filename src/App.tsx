@@ -207,6 +207,12 @@ export default function App() {
   const [lickHighOctave, setLickHighOctave] = useState(false);
   const [lickHighInstance, setLickHighInstance] = useState(false);
   // Lick favorites (★ toggle, localStorage-persisted)
+  // Zoom level (persisted)
+  const [zoom, setZoom] = useState(() => {
+    const s = parseFloat(localStorage.getItem('appZoom') ?? '');
+    return isNaN(s) ? 1.0 : Math.max(1.0, Math.min(1.5, s));
+  });
+
   const [lickFavorites, setLickFavorites] = useState<Set<string>>(() => {
     try {
       const saved = localStorage.getItem('lickFavorites');
@@ -1229,8 +1235,8 @@ export default function App() {
     return labelMode === 'degree' ? (deg[nn] || nn) : nn;
   }
 
-  return (
-    <div className="bg-bg-root text-text-primary min-h-screen font-mono p-4">
+  return (<>
+    <div className="bg-bg-root text-text-primary min-h-screen font-mono p-4" style={{ zoom }}>
       <div className="max-w-[1040px] mx-auto" style={{ transform: 'translateZ(0)' }}>
         <h2 className="text-lg font-bold mb-0.5 tracking-wide">
           Berklee 7-Position System
@@ -1663,5 +1669,34 @@ export default function App() {
         <Footer chordPrefs={chordPrefs} />
       </div>
     </div>
-  );
+
+    {/* Zoom control — outside zoom container, fixed at bottom-right */}
+    <div className="fixed bottom-3 right-3 flex items-center gap-2 bg-bg-root/90 backdrop-blur border border-border-faint rounded-lg px-3 py-1.5 shadow-lg z-50 font-mono">
+      <span className="text-[10px] text-text-muted select-none">倍率</span>
+      <input
+        type="range"
+        min="100" max="150" step="1"
+        value={Math.round(zoom * 100)}
+        onChange={e => {
+          const v = parseInt(e.target.value) / 100;
+          setZoom(v);
+          localStorage.setItem('appZoom', String(v));
+        }}
+        className="w-20 h-1 accent-blue-500 cursor-pointer"
+      />
+      <span className="text-[10px] text-text-muted tabular-nums w-8 text-right select-none">
+        {Math.round(zoom * 100)}%
+      </span>
+      <button
+        onClick={() => { setZoom(1.0); localStorage.setItem('appZoom', '1'); }}
+        className="text-text-muted hover:text-text-primary cursor-pointer"
+        style={{ visibility: zoom !== 1.0 ? 'visible' : 'hidden' }}
+        title="100%にリセット"
+      >
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+          <line x1="2" y1="2" x2="8" y2="8"/><line x1="8" y1="2" x2="2" y2="8"/>
+        </svg>
+      </button>
+    </div>
+  </>);
 }
