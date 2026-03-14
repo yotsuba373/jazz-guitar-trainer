@@ -18,6 +18,12 @@ interface GlobalAudioControlsProps {
   onToggleSwing: () => void;
   swingAmount: number;
   onSwingAmountChange: (v: number) => void;
+  countInEnabled: boolean;
+  onToggleCountIn: () => void;
+  countInVolume: number;
+  onCountInVolumeChange: (v: number) => void;
+  countInBars: number;
+  isCountingIn?: boolean;
   isPlaying?: boolean;
   onTogglePlay?: () => void;
   showPlayButton?: boolean;
@@ -27,29 +33,20 @@ interface GlobalAudioControlsProps {
 
 const btnBase = 'rounded cursor-pointer text-[10px] font-mono px-2 h-[24px] inline-flex items-center';
 
-function MuteBtn({ muted, onToggle, color }: { muted: boolean; onToggle: () => void; color: string }) {
+function MuteBtn({ muted, onToggle, color, label }: { muted: boolean; onToggle: () => void; color: string; label?: string }) {
+  const text = label ?? (muted ? 'OFF' : 'ON');
+  const active = !muted;
   return (
     <button
       onClick={onToggle}
-      title={muted ? 'ミュート解除' : 'ミュート'}
-      className="rounded cursor-pointer w-[22px] h-[18px] inline-flex items-center justify-center"
+      className="rounded cursor-pointer min-w-[34px] h-[18px] inline-flex items-center justify-center text-[8px] font-mono font-bold px-1"
       style={{
-        border: `1px solid ${muted ? '#555' : color}40`,
-        background: muted ? '#1a1a1a' : `${color}10`,
-        color: muted ? '#555' : color,
+        border: `1px solid ${active ? color : '#555'}40`,
+        background: active ? `${color}10` : '#1a1a1a',
+        color: active ? color : '#555',
       }}
     >
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor" />
-        {muted ? (
-          <>
-            <line x1="18" y1="9" x2="22" y2="15" />
-            <line x1="22" y1="9" x2="18" y2="15" />
-          </>
-        ) : (
-          <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
-        )}
-      </svg>
+      {text}
     </button>
   );
 }
@@ -62,6 +59,7 @@ export function GlobalAudioControls({
   noteVolume, onNoteVolumeChange,
   instrument, onInstrumentChange,
   swingEnabled, onToggleSwing, swingAmount, onSwingAmountChange,
+  countInEnabled, onToggleCountIn, countInVolume, onCountInVolumeChange, countInBars, isCountingIn,
   isPlaying, onTogglePlay, showPlayButton,
   leadingSlot,
 }: GlobalAudioControlsProps) {
@@ -117,7 +115,6 @@ export function GlobalAudioControls({
       onNoteVolumeChange(0);
     }
   }
-
   const [volOpen, setVolOpen] = useState(false);
   const volRef = useRef<HTMLDivElement>(null);
   const handleClickOutside = useCallback((e: MouseEvent) => {
@@ -134,7 +131,7 @@ export function GlobalAudioControls({
       {showPlayButton && onTogglePlay && (
         <button
           onClick={onTogglePlay}
-          className="rounded cursor-pointer px-3 h-[24px] inline-flex items-center"
+          className="rounded cursor-pointer px-3 h-[24px] inline-flex items-center gap-1"
           style={{
             border: `1px solid ${isPlaying ? '#E74C3C' : '#27AE60'}`,
             background: isPlaying ? '#2a1010' : '#102a10',
@@ -150,6 +147,9 @@ export function GlobalAudioControls({
             <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
               <polygon points="2,1 11,6 2,11"/>
             </svg>
+          )}
+          {isCountingIn && (
+            <span className="text-[9px] font-mono animate-pulse" style={{ color: '#BB86FC' }}>Count...</span>
           )}
         </button>
       )}
@@ -174,7 +174,20 @@ export function GlobalAudioControls({
         {volOpen && (
           <div className="absolute left-0 top-[28px] z-50 rounded-md p-2.5 flex flex-col gap-2 min-w-[220px]"
             style={{ background: '#222', border: '1px solid #555', boxShadow: '0 4px 12px rgba(0,0,0,0.5)' }}>
-            <div className="grid gap-y-1.5 gap-x-1.5 items-center" style={{ gridTemplateColumns: 'auto 60px 1fr 28px' }}>
+            <div className="grid gap-y-1.5 gap-x-1.5 items-center" style={{ gridTemplateColumns: 'auto 68px 1fr 28px' }}>
+              <MuteBtn
+                muted={!countInEnabled}
+                onToggle={onToggleCountIn}
+                color="#BB86FC"
+                label={countInEnabled ? `${countInBars}小節` : 'OFF'} />
+              <span className="text-[10px] text-text-dim">カウントイン</span>
+              <input type="range" min={0} max={1} step={0.05}
+                value={countInVolume}
+                onChange={e => onCountInVolumeChange(Number(e.target.value))}
+                style={{ accentColor: '#BB86FC', opacity: !countInEnabled ? 0.3 : 1 }}
+                disabled={!countInEnabled} />
+              <span className="text-[10px] text-text-dim text-right">{Math.round(countInVolume * 100)}%</span>
+
               <MuteBtn muted={metMuted} onToggle={toggleMetMute} color="#F1C40F" />
               <span className="text-[10px] text-text-dim">メトロノーム</span>
               <input type="range" min={0} max={1} step={0.05}
@@ -198,6 +211,7 @@ export function GlobalAudioControls({
                 onChange={e => onNoteVolumeChange(Number(e.target.value))}
                 style={{ accentColor: '#FF6B9D', opacity: noteMuted ? 0.3 : 1 }} />
               <span className="text-[10px] text-text-dim text-right">{Math.round(noteVolume * 100)}%</span>
+
             </div>
             <div className="flex gap-1 mt-1">
               {([
