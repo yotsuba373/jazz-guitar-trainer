@@ -468,6 +468,23 @@ export function ProgressionEditor({
     cancelEdit();
   }
 
+  function handleDuplicate() {
+    const current: Progression = {
+      ...prog,
+      name: prog.name + ' (copy)',
+      chords: prog.chords.map(c => ({ ...c })),
+      chartLayout: prog.chartLayout ? JSON.parse(JSON.stringify(prog.chartLayout)) : undefined,
+    };
+    const copy = [...progressions, current];
+    onSave(copy);
+    onSelectProg(copy.length - 1);
+    setName(current.name);
+    setSongKey(current.songKey);
+    setChords([...current.chords]);
+    setChartLayout(current.chartLayout);
+    cancelEdit();
+  }
+
   function handleDelete() {
     const copy = progressions.filter((_, i) => i !== activeProgIdx);
     if (copy.length === 0) {
@@ -698,6 +715,10 @@ export function ProgressionEditor({
           <button onClick={handleNew} className={btnBase}
             style={{ border: '1px solid #27AE60', background: '#1a1a1a', color: '#27AE60' }}>
             + 新規
+          </button>
+          <button onClick={handleDuplicate} className={btnBase}
+            style={{ border: '1px solid #27AE60', background: '#1a1a1a', color: '#27AE60' }}>
+            複製
           </button>
           <button onClick={handleDelete} className={btnBase}
             style={{ border: '1px solid #E74C3C', background: '#1a1a1a', color: '#E74C3C' }}>
