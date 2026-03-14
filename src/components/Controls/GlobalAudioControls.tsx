@@ -72,7 +72,7 @@ export function GlobalAudioControls({
   useEffect(() => setBpmStr(String(bpm)), [bpm]);
   function commitBpm() {
     const v = parseInt(bpmStr, 10);
-    const clamped = isNaN(v) ? bpm : Math.max(40, Math.min(240, v));
+    const clamped = isNaN(v) ? bpm : Math.max(40, Math.min(320, v));
     onBpmChange(clamped);
     setBpmStr(String(clamped));
   }
@@ -93,7 +93,7 @@ export function GlobalAudioControls({
       const intervals: number[] = [];
       for (let i = 1; i < recent.length; i++) intervals.push(recent[i] - recent[i - 1]);
       const avgMs = intervals.reduce((a, b) => a + b, 0) / intervals.length;
-      const clamped = Math.max(40, Math.min(240, Math.round(60000 / avgMs)));
+      const clamped = Math.max(40, Math.min(320, Math.round(60000 / avgMs)));
       onBpmChange(clamped);
     }
   }
@@ -304,11 +304,11 @@ export function GlobalAudioControls({
         onBlur={commitBpm}
         onKeyDown={e => e.key === 'Enter' && commitBpm()}
         className="w-10 text-center bg-transparent font-mono text-[12px] rounded border border-[#444] h-[24px] text-white"
-        min={40} max={240}
+        min={40} max={320}
       />
       <span className="text-[10px] text-text-dim">BPM</span>
       <button
-        onClick={() => onBpmChange(Math.min(240, bpm + 1))}
+        onClick={() => onBpmChange(Math.min(320, bpm + 1))}
         className={btnBase}
         style={{ border: '1px solid #444', background: '#1a1a1a', color: '#AAA' }}
       >+</button>

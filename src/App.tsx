@@ -151,7 +151,7 @@ export default function App() {
   const [selectedVoicingIdx, setSelectedVoicingIdx] = useState(0);
 
   // Progression mode state
-  const [progMode, setProgMode] = useState(false);
+  const [progMode, setProgMode] = useState(() => localStorage.getItem('progMode') === 'true');
   const [progressions, setProgressions] = useState<Progression[]>(() => loadProgressions());
   const [activeProgIdx, setActiveProgIdx] = useState(0);
   const [activeChordIdx, setActiveChordIdx] = useState(0);
@@ -189,6 +189,7 @@ export default function App() {
   const chordStartRef = useRef(0);
   const wasAutoAdvanceRef = useRef(false);
   const playPosRef = useRef(0);
+  const [advanceTick, setAdvanceTick] = useState(0);  // force effect re-run on same chordIdx
 
   // Single-note volume: shared between fretboard clicks and phrase playback
   const [noteVolume, setNoteVolume] = useState<number>(() => {
@@ -1100,6 +1101,7 @@ export default function App() {
       }
 
       setActiveChordIdx(nextChordIdx);
+      setAdvanceTick(t => t + 1);  // ensure effect re-runs even if chordIdx unchanged (repeat)
     }, delay);
 
     return () => {
@@ -1107,7 +1109,8 @@ export default function App() {
       // If timeout hasn't fired yet, cancel the pre-scheduled next chord audio
       cancelPendingNext();
     };
-  }, [isPlaying, activeChordIdx, bpm, activeProg, progMode, isCountingIn]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPlaying, activeChordIdx, bpm, activeProg, progMode, isCountingIn, advanceTick]);
 
   function handleSaveProgressions(progs: Progression[]) {
     setProgressions(progs);
@@ -1390,7 +1393,7 @@ export default function App() {
         {/* Mode toggle */}
         <div className="flex mb-3">
           <button
-            onClick={() => { setProgMode(false); setEditing(false); setIsPlaying(false); }}
+            onClick={() => { setProgMode(false); localStorage.setItem('progMode', 'false'); setEditing(false); setIsPlaying(false); }}
             className="rounded-l cursor-pointer text-[12px] font-mono px-4 h-[30px] inline-flex items-center gap-1.5 relative"
             style={{
               border: `1px solid ${!progMode ? '#3498DB' : '#444'}`,
@@ -1407,7 +1410,7 @@ export default function App() {
             辞典モード
           </button>
           <button
-            onClick={() => { setProgMode(true); setActiveChordIdx(0); setIsPlaying(false); }}
+            onClick={() => { setProgMode(true); localStorage.setItem('progMode', 'true'); setActiveChordIdx(0); setIsPlaying(false); }}
             className="rounded-r cursor-pointer text-[12px] font-mono px-4 h-[30px] inline-flex items-center gap-1.5 relative"
             style={{
               border: `1px solid ${progMode ? '#27AE60' : '#444'}`,
