@@ -591,32 +591,24 @@ export function selectBestInstance(pos: Position, lickPitches: number[], preferH
 }
 
 // ---------------------------------------------------------------------------
-// ii-V-long lick splitting
+// Lick slicing (extract a beat range from a lick)
 // ---------------------------------------------------------------------------
 
-/** Split an ii-V-long lick (8 beats) into ii part (first 4 beats) and V part (last 4 beats).
- *  Both halves keep the original id (distinguished by ChordSlot.lickIiVPart). */
-export function splitIiVLongLick(lick: LickEntry): { iiLick: LickEntry; vLick: LickEntry } {
-  const splitBeat = lick.beats - 4;
-  const iiNotes = lick.notes.filter(n => n.beatStart < splitBeat);
-  const vNotes = lick.notes
-    .filter(n => n.beatStart >= splitBeat)
-    .map(n => ({ ...n, beatStart: n.beatStart - splitBeat }));
+/** Extract a portion of a lick from `offset` for `beats` duration.
+ *  Notes outside the range are dropped; remaining notes get beatStart shifted by -offset.
+ *  Anacrusis is preserved only for the first slice (offset === 0). */
+export function sliceLick(lick: LickEntry, offset: number, beats: number): LickEntry {
+  const end = offset + beats;
+  const slicedNotes = lick.notes
+    .filter(n => n.beatStart >= offset && n.beatStart < end)
+    .map(n => ({ ...n, beatStart: n.beatStart - offset }));
 
   return {
-    iiLick: {
-      ...lick,
-      notes: iiNotes,
-      noteCount: iiNotes.filter(n => !n.rest).length,
-      beats: splitBeat,
-    },
-    vLick: {
-      ...lick,
-      notes: vNotes,
-      noteCount: vNotes.filter(n => !n.rest).length,
-      beats: 4,
-      anacrusis: undefined, // V part has no anacrusis
-    },
+    ...lick,
+    notes: slicedNotes,
+    noteCount: slicedNotes.filter(n => !n.rest).length,
+    beats,
+    anacrusis: offset === 0 ? lick.anacrusis : undefined,
   };
 }
 

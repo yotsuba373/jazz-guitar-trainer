@@ -184,6 +184,21 @@ function searchSections(layout: ChartLayout, chordIdx: number) {
 }
 
 /**
+ * Return the beat count (in 4-beat measure units) for a chord in the layout.
+ * E.g. a chord that takes 2 beats in a 4/4 measure returns 2.
+ */
+export function getChordBeatCount(layout: ChartLayout, chordIdx: number): number {
+  const r = searchSections(layout, chordIdx);
+  if (!r) return 4;
+  const pos = r.m.chordIndices.indexOf(chordIdx);
+  if (pos === -1) return 4;
+  const n = r.m.chordIndices.length;
+  const bwSum = r.m.beatWidths ? r.m.beatWidths.reduce((a, b) => a + b, 0) : n;
+  const bw = r.m.beatWidths?.[pos] ?? 1;
+  return (bw / bwSum) * BEATS_PER_MEASURE;
+}
+
+/**
  * Return the 1-based beat positions already occupied in the measure containing chordIdx,
  * plus the total beat count of that measure.
  */
