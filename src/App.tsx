@@ -1583,7 +1583,7 @@ export default function App() {
           bpm={bpm}
         />
 
-        {activePhrase && <PhraseAnalysisPanel phrase={activePhrase} mode={mode} swingAmount={swingEnabled ? swingAmount : 0} bpm={bpm} />}
+        {activePhrase && <PhraseAnalysisPanel phrase={activePhrase} mode={mode} />}
 
         {/* Mode description section */}
         <div className="mt-2 mb-3 rounded-md px-3 py-2" style={{ background: '#1a1a1a', borderLeft: `3px solid ${MODE_COLORS[mode.key]}` }}>
