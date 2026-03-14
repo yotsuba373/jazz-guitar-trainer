@@ -191,6 +191,23 @@ export default function App() {
   });
   const instrumentRef = useRef(instrument);
   // Swing state
+  // Count-in state
+  const [countInEnabled, setCountInEnabled] = useState(
+    () => localStorage.getItem('countInEnabled') !== 'false' // default ON
+  );
+  const [countInVolume, setCountInVolume] = useState<number>(() => {
+    const saved = parseFloat(localStorage.getItem('countInVolume') ?? '');
+    return isNaN(saved) ? 0.5 : saved;
+  });
+  const countInVolumeRef = useRef(countInVolume);
+  const [countInBars, setCountInBars] = useState(() => {
+    const saved = parseInt(localStorage.getItem('countInBars') ?? '', 10);
+    return (saved === 1 || saved === 2) ? saved : 2;
+  });
+  const [isCountingIn, setIsCountingIn] = useState(false);
+  const countInTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const countInNodesRef = useRef<OscillatorNode[]>([]);
+
   const [swingEnabled, setSwingEnabled] = useState(
     () => localStorage.getItem('swingEnabled') === 'true'
   );
@@ -682,6 +699,7 @@ export default function App() {
   const [isPhraseAudioPlaying, setIsPhraseAudioPlaying] = useState(false);
 
   const activePhrase = useMemo(() => {
+    if (isCountingIn) return null;  // suppress phrase display during count-in
     if (iiVDisplayPhrase) return iiVDisplayPhrase;
     // During manual playback of ii-V-long, show full phrase (not split display)
     if (isPhraseAudioPlaying && previewLickPhrase) return previewLickPhrase;
@@ -689,7 +707,7 @@ export default function App() {
     if (progMode && autoPlayPhrase && isPlaying)
       return autoPlayPhrase;
     return null;
-  }, [iiVDisplayPhrase, isPhraseAudioPlaying, previewLickPhrase, activeLickPhrase, progMode, autoPlayPhrase, isPlaying]);
+  }, [isCountingIn, iiVDisplayPhrase, isPhraseAudioPlaying, previewLickPhrase, activeLickPhrase, progMode, autoPlayPhrase, isPlaying]);
 
   // Keyboard navigation for progression mode
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
@@ -742,6 +760,12 @@ export default function App() {
   // Note volume ref + persistence (covers fretboard clicks + phrase playback)
   useEffect(() => { noteVolumeRef.current = noteVolume; localStorage.setItem('noteVolume', String(noteVolume)); }, [noteVolume]);
   useEffect(() => { instrumentRef.current = instrument; localStorage.setItem('phraseInstrument', instrument); }, [instrument]);
+  useEffect(() => { countInVolumeRef.current = countInVolume; }, [countInVolume]);
+  useEffect(() => {
+    localStorage.setItem('countInVolume', String(countInVolume));
+    localStorage.setItem('countInEnabled', String(countInEnabled));
+    localStorage.setItem('countInBars', String(countInBars));
+  }, [countInVolume, countInEnabled, countInBars]);
   useEffect(() => { swingEnabledRef.current = swingEnabled; localStorage.setItem('swingEnabled', String(swingEnabled)); }, [swingEnabled]);
   useEffect(() => { swingAmountRef.current = swingAmount; localStorage.setItem('swingAmount', String(swingAmount)); }, [swingAmount]);
 
@@ -940,8 +964,12 @@ export default function App() {
       activePhraseStopRef.current = null;
       stopSongMetronome();
       cancelPendingNext();
+      stopCountIn();
       return;
     }
+    // During count-in phase, skip normal playback logic
+    if (isCountingIn) return;
+
     const seq = buildPlaybackSeq(getChartLayout(activeProg));
     if (!seq.length) return;
 
@@ -953,6 +981,31 @@ export default function App() {
     // On auto-advance: playPosRef was already incremented in the timeout callback.
     if (!wasAutoAdvanceRef.current || chordStartRef.current === 0) {
       const isPlaybackStart = chordStartRef.current === 0;
+
+      // Count-in: on fresh playback start only (chordStartRef === 0)
+      if (isPlaybackStart && countInEnabled) {
+        const beatSec = 60 / bpm;
+        const countInBeats = countInBars * 4;
+        const vol = countInVolumeRef.current;
+        const startAt = ctx.currentTime + 0.05;
+        const nodes: OscillatorNode[] = [];
+        for (let b = 0; b < countInBeats; b++) {
+          const osc = playClick(b % 4 === 0, ctx, vol, startAt + b * beatSec);
+          nodes.push(osc);
+        }
+        countInNodesRef.current = nodes;
+        setIsCountingIn(true);
+        countInTimerRef.current = setTimeout(() => {
+          countInTimerRef.current = null;
+          countInNodesRef.current = [];
+          // Set chordStartRef non-zero before clearing isCountingIn
+          // so the next effect run sees isPlaybackStart=false → no re-entry
+          chordStartRef.current = performance.now();
+          setIsCountingIn(false);
+        }, countInBeats * beatSec * 1000);
+        return;
+      }
+
       const pos = seq.findIndex(s => s.chordIdx === activeChordIdx);
       playPosRef.current = pos >= 0 ? pos : 0;
       chordStartRef.current = performance.now();
@@ -1023,11 +1076,23 @@ export default function App() {
       // If timeout hasn't fired yet, cancel the pre-scheduled next chord audio
       cancelPendingNext();
     };
-  }, [isPlaying, activeChordIdx, bpm, activeProg, progMode]);
+  }, [isPlaying, activeChordIdx, bpm, activeProg, progMode, isCountingIn]);
 
   function handleSaveProgressions(progs: Progression[]) {
     setProgressions(progs);
     saveProgressions(progs);
+  }
+
+  // Count-in cycle: 2小節 → OFF → 1小節 → 2小節 → ...
+  function handleCycleCountIn() {
+    if (countInEnabled && countInBars === 2) {
+      setCountInEnabled(false);
+    } else if (!countInEnabled) {
+      setCountInBars(1);
+      setCountInEnabled(true);
+    } else {
+      setCountInBars(2);
+    }
   }
 
   // BPM change: update state + save to current progression
@@ -1104,6 +1169,16 @@ export default function App() {
   function stopSongMetronome() {
     for (const osc of songMetRef.current) { try { osc.stop(); } catch { /* already stopped */ } }
     songMetRef.current = [];
+  }
+
+  function stopCountIn() {
+    if (countInTimerRef.current) {
+      clearTimeout(countInTimerRef.current);
+      countInTimerRef.current = null;
+    }
+    for (const osc of countInNodesRef.current) { try { osc.stop(); } catch { /* already stopped */ } }
+    countInNodesRef.current = [];
+    setIsCountingIn(false);
   }
 
   function cancelPendingNext() {
@@ -1300,6 +1375,12 @@ export default function App() {
           onToggleSwing={() => setSwingEnabled(p => !p)}
           swingAmount={swingAmount}
           onSwingAmountChange={setSwingAmount}
+          countInEnabled={countInEnabled}
+          onToggleCountIn={handleCycleCountIn}
+          countInVolume={countInVolume}
+          onCountInVolumeChange={setCountInVolume}
+          countInBars={countInBars}
+          isCountingIn={isCountingIn}
           isPlaying={isPlaying}
           onTogglePlay={() => setIsPlaying(p => !p)}
           showPlayButton={!!activeProg && activeProg.chords.length > 0}
