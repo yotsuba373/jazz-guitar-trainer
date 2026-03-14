@@ -6,3 +6,4 @@ export { VoicingGrid } from './VoicingGrid';
 export { PhraseAnalysisPanel } from './PhraseAnalysisPanel';
 export { GlobalAudioControls } from './GlobalAudioControls';
 export { LickPanel } from './LickPanel';
+export { ChordAutocomplete } from './ChordAutocomplete';

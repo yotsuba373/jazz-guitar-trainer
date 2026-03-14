@@ -352,6 +352,7 @@
     <li><strong>リックお気に入り</strong> — ★ボタンでお気に入り登録、リスト上位にソート、localStorage永続化</li>
     <li><strong>曲ごとのBPM保存</strong> — 各進行に BPM を保存・復元、曲切替時に自動適用</li>
     <li><strong>スウィングモード</strong> — タイミング+ダイナミクス+アーティキュレーションの多次元スウィング</li>
+    <li><strong>カウントイン</strong> — 再生開始前に1小節 (BPM≥160で2小節) クリック、音量調節可</li>
   </ul>
 </div>
 
@@ -711,6 +712,22 @@ actualBeats = (beatWidth / sumOfBeatWidths) * 4</pre>
 // 自動進行時: targetAt (理想時刻) を次コードの anchor に
 // 手動ナビ / BPM変更 / 再生開始時: performance.now() に再アンカー</pre>
 
+<h3>Count-In (カウントイン)</h3>
+<p>再生開始前にメトロノームクリックを鳴らし、テンポを体に入れてから演奏を開始できる機能。</p>
+<table>
+  <tr><th>BPM</th><th>カウントイン拍数</th></tr>
+  <tr><td>&lt; 160</td><td>4拍 (1小節)</td></tr>
+  <tr><td>≥ 160</td><td>8拍 (2小節)</td></tr>
+</table>
+<ul>
+  <li>デフォルト ON。<code>GlobalAudioControls</code> ドロップダウン内の Count In ボタンで ON/OFF トグル</li>
+  <li>カウントイン音量: 専用スライダー (デフォルト 0.5)、メトロノーム音量とは独立</li>
+  <li>「停止→再生」時のみ発動。auto-advance 中 (曲途中) には鳴らない</li>
+  <li>カウントイン中は再生ボタンに <code>Count...</code> パルスアニメーション表示</li>
+  <li>State: <code>countInEnabled</code> + <code>countInVolume</code> (両方 localStorage 永続化)</li>
+  <li>カウントイン中に停止すると即座にクリーンアップ (予約済みクリック音を停止)</li>
+</ul>
+
 <h2 id="metronome">Metronome</h2>
 <table>
   <tr><th>Parameter</th><th>Accent (小節頭)</th><th>Normal</th></tr>
@@ -734,6 +751,7 @@ actualBeats = (beatWidth / sumOfBeatWidths) * 4</pre>
   <tr><td>Metronome</td><td><code>metVolume</code></td><td>0.5</td><td><code>playClick()</code></td></tr>
   <tr><td>Chord</td><td><code>chordVolume</code></td><td>0.5</td><td><code>playChordStrum()</code></td></tr>
   <tr><td>Single Note</td><td><code>noteVolume</code></td><td>0.4</td><td><code>playNote()</code> + <code>schedulePhrase()</code></td></tr>
+  <tr><td>Count-In</td><td><code>countInVolume</code></td><td>0.5</td><td><code>playClick()</code> (カウントイン専用)</td></tr>
   <tr><td>Instrument</td><td><code>phraseInstrument</code></td><td>'guitar'</td><td>楽器選択 (guitar/saxophone)</td></tr>
 </table>
 <p>全て localStorage に永続化。<code>useRef</code> 経由でコールバック内から参照（再レンダリング回避）。
@@ -926,6 +944,7 @@ Footer</pre>
         <li><strong>複製</strong>: 現在選択中の進行をディープコピーし「(copy)」付きの名前で新規保存。chartLayout・リック選択・ボイシング等の ChordSlot プロパティも完全保持</li>
         <li>コード追加フロー: 「+ 小節」で空小節追加 → ビートグリッドの「+」で拍位置選択 → コード入力 → Enter</li>
         <li>未選択時はコード入力・挿入/更新・取消ボタンがグレーアウト。グリッドクリックで有効化+オートフォーカス</li>
+        <li><strong>オートコンプリート</strong>: コード入力フィールドにルート+品質サフィックスのサジェストドロップダウンを表示。↑↓で選択、Enter/Tabで確定、Escで閉じ。ルート文字はゴールド色でハイライト。<code>parseChordSymbol()</code> で有効なコードのみ候補表示</li>
         <li>選択中のビートセルは緑ハイライト（挿入）/黄ハイライト（編集）で表示</li>
       </ul>
     </li>
