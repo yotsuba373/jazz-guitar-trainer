@@ -697,8 +697,8 @@ degree ラベル、フレーバーテキストを持ちます。</p>
 
 <h3><code>buildPlaybackSeq()</code></h3>
 <p>ChartLayout からセクションリピートとvolta endingsを展開したフラットな再生順リストを生成。</p>
-<pre>// 出力: { chordIdx: number, beats: number }[]
-// 全リピート/エンディングを展開済み
+<pre>// 出力: { chordIdx: number, beats: number, measureFlatIdx: number }[]
+// 全リピート/エンディングを展開済み、各エントリに視覚上の小節インデックスを付与
 const seq = buildPlaybackSeq(getChartLayout(activeProg));</pre>
 
 <h4>BeatWidths 変換</h4>
@@ -726,6 +726,18 @@ actualBeats = (beatWidth / sumOfBeatWidths) * 4</pre>
   <li>カウントイン中は再生ボタンに <code>Count...</code> パルスアニメーション表示</li>
   <li>State: <code>countInEnabled</code> + <code>countInVolume</code> (両方 localStorage 永続化)</li>
   <li>カウントイン中に停止すると即座にクリーンアップ (予約済みクリック音を停止)</li>
+</ul>
+
+<h3>Measure Loop (小節ループ)</h3>
+<p>苦手な箇所を繰り返し練習するための小節単位ループ機能。</p>
+<ul>
+  <li>コード譜面の各小節右上にループアイコン (ホバー時表示) → クリックでループ設定</li>
+  <li>1回目クリック: 単一小節ループ。別の小節をクリック: 範囲拡張 (min-max)。同じ小節再クリック: 解除</li>
+  <li>ループ範囲内の小節: オレンジ下線ハイライト。範囲外: dim 表示 (opacity 0.35)</li>
+  <li>再生中、ループ範囲の最後のコード完了後に範囲先頭へ自動的に戻る</li>
+  <li><code>GlobalAudioControls</code> にループ状態ラベル + 解除ボタン表示</li>
+  <li>曲ごとに <code>Progression.loopRange</code> として localStorage に永続化。進行切替時に復元</li>
+  <li>実装: <code>buildPlaybackSeq()</code> の各エントリに <code>measureFlatIdx</code> を付与し、auto-advance effect で次コードのインデックスがループ範囲外ならループ先頭に戻す</li>
 </ul>
 
 <h2 id="metronome">Metronome</h2>
@@ -945,6 +957,7 @@ Footer</pre>
         <li>コード追加フロー: 「+ 小節」で空小節追加 → ビートグリッドの「+」で拍位置選択 → コード入力 → Enter</li>
         <li>未選択時はコード入力・挿入/更新・取消ボタンがグレーアウト。グリッドクリックで有効化+オートフォーカス</li>
         <li><strong>オートコンプリート</strong>: コード入力フィールドにルート+品質サフィックスのサジェストドロップダウンを表示。↑↓で選択、Enter/Tabで確定、Escで閉じ。ルート文字はゴールド色でハイライト。<code>parseChordSymbol()</code> で有効なコードのみ候補表示</li>
+        <li><strong>Undo/Redo</strong>: コード編集操作（追加・削除・更新・セクション変更等）を ↩/↪ ボタンまたは Ctrl+Z / Ctrl+Y で取り消し/やり直し可能。最大50履歴。進行切替時に履歴クリア。<code>useUndoRedo</code> フックで chords + chartLayout をペアでスナップショット管理</li>
         <li>選択中のビートセルは緑ハイライト（挿入）/黄ハイライト（編集）で表示</li>
       </ul>
     </li>

@@ -78,6 +78,8 @@ src/
 │       ├── audioEngine.test.ts      — 14 tests (Karplus-Strong, サクソフォン, エレピ, コードストラム)
 │       ├── swing.test.ts            — 25 tests (タイミング/ダイナミクス/アーティキュレーション/テンポ補正)
 │       └── lickEngine.test.ts       — 61 tests (リックDB読込・移調・指板マッピング・モード推定・ポジション選択・インスタンス選択・8音スケール・GeneratedPhrase変換・ii-V検出・sliceLick汎用分割)
+├── hooks/
+│   └── useUndoRedo.ts               — 汎用 Undo/Redo フック (past/present/future スタック)
 └── components/
     ├── Fretboard/                   — SVG指板描画 (Fretboard, FretboardNote, GhostNote, PhrasePath)
     ├── Controls/                    — RootSelector, ModeSelector, PositionSelector, OptionBar, VoicingGrid, PhraseAnalysisPanel, PianoRoll, GlobalAudioControls, LickPanel, ChordAutocomplete
@@ -273,7 +275,7 @@ CSS Grid 描画
 `ChartLayout` から section repeats と volta endings を展開したフラットな再生順リストを生成:
 
 ```typescript
-// { chordIdx: number, beats: number }[] — 全リピート/エンディングを展開済み
+// { chordIdx: number, beats: number, measureFlatIdx: number }[] — 全リピート/エンディングを展開済み
 const seq = buildPlaybackSeq(getChartLayout(activeProg));
 ```
 
@@ -313,6 +315,17 @@ const songMetRef = useRef([]);        // 曲再生メトロノームの予約済
 - カウントイン中は `isCountingIn = true` → auto-advance effect 早期リターン + `activePhrase = null` (フレーズ表示抑制)
 - タイマー完了時に `chordStartRef = performance.now()` をセットしてから `setIsCountingIn(false)` → effect 再実行時 `isPlaybackStart = false` で再カウントインを防止
 - 停止時は `stopCountIn()` で予約済みクリック音を即座に停止
+
+### 小節ループ
+
+苦手な箇所を繰り返し練習するための小節単位ループ機能。
+
+- `loopRange: { start: number; end: number } | null` — flat measure index (ChordChart と buildPlaybackSeq で一致)
+- `loopRangeRef` 経由で auto-advance effect 内から参照
+- 次コード計算時にループ範囲チェック: 範囲外なら範囲先頭の seq エントリに戻す
+- ChordChart: 各小節右上にホバー表示のループアイコン、ループ範囲はオレンジ下線 + 範囲外 dim
+- GlobalAudioControls: ループラベル + 解除ボタン
+- 曲ごとに `Progression.loopRange` として localStorage 永続化、進行切替時に復元
 
 ---
 
@@ -451,7 +464,7 @@ Footer
 - ラベル切替（音名/度数）、コード記法プリファレンス (M7/maj7/△7 等)
 - モード説明セクション: スケール音・コード構成音・フレーバーテキスト（常時表示、Fretboard 下）
 - 2モード: 辞典モード (スケール/ポジション閲覧) + 練習モード (コード進行+リック練習)
-- コード進行: 作成・編集・保存・複製 (localStorage)、近接ポジション提案、キーボードナビ、コードインライン編集、chartLayout差分更新保持、「+ 小節」→ビートグリッド挿入フロー (追加ボタン廃止)、空小節 × 削除、選択ビートハイライト、**コード入力オートコンプリート** (ルート+品質サジェスト、↑↓/Enter/Tab/Esc操作、parseChordSymbol検証)
+- コード進行: 作成・編集・保存・複製 (localStorage)、近接ポジション提案、キーボードナビ、コードインライン編集、chartLayout差分更新保持、「+ 小節」→ビートグリッド挿入フロー (追加ボタン廃止)、空小節 × 削除、選択ビートハイライト、**コード入力オートコンプリート** (ルート+品質サジェスト、↑↓/Enter/Tab/Esc操作、parseChordSymbol検証)、**Undo/Redo** (Ctrl+Z/Y、↩/↪ボタン、最大50履歴、chords+chartLayoutスナップショット方式)
 - ガイドトーン (3rd/7th) 表示: 辞典モード (現モードのみ) + 練習モード (次コード3rd+解決分類)
 - JazzStandards インポート (1382曲)
 - iReal Pro 風譜面: セクションラベル、エンディング、リピート、ビート比例幅
@@ -469,6 +482,7 @@ Footer
 - **ii-V リック対応**: `detectIiVPattern()` で連続コード (m7→7) の ii-V パターンを検出。ii コード選択時に ii-V タイプのリック (`maj-ii-v-short`, `maj-ii-v-long`, `min-ii-v-short`) を表示
 - **カウントイン**: 再生開始前に1-2小節クリック、音量調節可、サイクル切替 (2小節→OFF→1小節→2小節)、localStorage 永続化
 - **表示倍率スライダー**: 画面右下固定、CSS `zoom` で100-150% (1%刻み)、localStorage 永続化、リセットボタン付き
+- **小節ループ**: コード譜面上で小節を選択してループ再生 (単一小節/範囲指定)、オレンジ下線ハイライト、範囲外dim、GlobalAudioControlsにループ表示+解除ボタン
 
 ---
 

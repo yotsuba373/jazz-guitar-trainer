@@ -124,6 +124,7 @@ export interface Progression {
   chords: ChordSlot[];
   chartLayout?: ChartLayout;  // optional chart display layout
   bpm?: number;               // per-song BPM (restored on song switch)
+  loopRange?: { start: number; end: number };  // per-song measure loop range
 }
 
 /** Raw song entry from JazzStandards.json */

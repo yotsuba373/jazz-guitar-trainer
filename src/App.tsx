@@ -37,23 +37,35 @@ function playClick(accent: boolean, ctx: AudioContext, volume: number, at?: numb
   return osc;
 }
 
-/** Build a flat playback sequence respecting section repeats and volta endings. */
-function buildPlaybackSeq(layout: ChartLayout): { chordIdx: number; beats: number }[] {
-  const seq: { chordIdx: number; beats: number }[] = [];
-  function addMeasure(m: { chordIndices: number[]; beatWidths?: number[] }) {
+/** Build a flat playback sequence respecting section repeats and volta endings.
+ *  Each entry includes `measureFlatIdx` — the visual measure index on the chart
+ *  (consistent with ChordChart's flat index computation). */
+function buildPlaybackSeq(layout: ChartLayout): { chordIdx: number; beats: number; measureFlatIdx: number }[] {
+  const seq: { chordIdx: number; beats: number; measureFlatIdx: number }[] = [];
+  let flatBase = 0;
+  function addMeasure(m: { chordIndices: number[]; beatWidths?: number[] }, mfi: number) {
     const count = m.chordIndices.length;
     const bwSum = m.beatWidths ? m.beatWidths.reduce((a, b) => a + b, 0) : count;
     m.chordIndices.forEach((ci, i) => {
       const bw = m.beatWidths?.[i] ?? 1;
-      seq.push({ chordIdx: ci, beats: (bw / bwSum) * 4 });
+      seq.push({ chordIdx: ci, beats: (bw / bwSum) * 4, measureFlatIdx: mfi });
     });
   }
   for (const section of layout.sections) {
+    const mainStart = flatBase;
+    flatBase += section.measures.length;
+    const endingStarts: number[] = [];
+    if (section.endings) {
+      for (const ending of section.endings) {
+        endingStarts.push(flatBase);
+        flatBase += ending.length;
+      }
+    }
     const passes = (section.repeats ?? 0) + 1;
     for (let pass = 0; pass < passes; pass++) {
-      for (const m of section.measures) addMeasure(m);
+      section.measures.forEach((m, mi) => addMeasure(m, mainStart + mi));
       if (section.endings?.[pass]) {
-        for (const m of section.endings[pass]) addMeasure(m);
+        section.endings[pass].forEach((m, mi) => addMeasure(m, endingStarts[pass] + mi));
       }
     }
   }
@@ -207,6 +219,14 @@ export default function App() {
   const [isCountingIn, setIsCountingIn] = useState(false);
   const countInTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const countInNodesRef = useRef<OscillatorNode[]>([]);
+
+  // Loop range (measure-based): null = full playback, set = loop only specified measures
+  const [loopRange, setLoopRange] = useState<{ start: number; end: number } | null>(
+    () => progressions[0]?.loopRange ?? null
+  );
+  const loopRangeRef = useRef(loopRange);
+  useEffect(() => { loopRangeRef.current = loopRange; }, [loopRange]);
+  const [loopSelecting, setLoopSelecting] = useState(false);
 
   const [swingEnabled, setSwingEnabled] = useState(
     () => localStorage.getItem('swingEnabled') === 'true'
@@ -1036,7 +1056,18 @@ export default function App() {
     const delay = Math.max(0, targetAt - performance.now());
 
     // Pre-schedule next chord's audio on the Web Audio timeline (look-ahead)
-    const nextPos = (playPosRef.current + 1) % seq.length;
+    let nextPos = (playPosRef.current + 1) % seq.length;
+    // Loop boundary check: only wrap when EXITING the loop range
+    // (i.e. current position is inside the loop but next would leave it)
+    const lr = loopRangeRef.current;
+    if (lr && seq[nextPos]) {
+      const curInLoop = step.measureFlatIdx >= lr.start && step.measureFlatIdx <= lr.end;
+      const nextInLoop = seq[nextPos].measureFlatIdx >= lr.start && seq[nextPos].measureFlatIdx <= lr.end;
+      if (curInLoop && !nextInLoop) {
+        const loopStartPos = seq.findIndex(s => s.measureFlatIdx >= lr.start && s.measureFlatIdx <= lr.end);
+        if (loopStartPos >= 0) nextPos = loopStartPos;
+      }
+    }
     const nextChordIdx = seq[nextPos].chordIdx;
     const audioStartAt = ctx.currentTime + delay / 1000;
     // On loop, carry total beats so metronome accent stays consistent
@@ -1081,6 +1112,42 @@ export default function App() {
   function handleSaveProgressions(progs: Progression[]) {
     setProgressions(progs);
     saveProgressions(progs);
+  }
+
+  // Measure loop: click to set/extend/shrink/clear loop range
+  function handleMeasureLoopClick(flatIdx: number) {
+    setLoopRange(prev => {
+      let next: { start: number; end: number } | null;
+      if (!prev) {
+        // No loop → single measure
+        next = { start: flatIdx, end: flatIdx };
+      } else if (prev.start === flatIdx && prev.end === flatIdx) {
+        // Single measure, same click → clear
+        next = null;
+      } else if (flatIdx >= prev.start && flatIdx <= prev.end) {
+        // Click inside range → shrink (remove from nearest boundary)
+        if (flatIdx === prev.start && flatIdx === prev.end) {
+          next = null;
+        } else if (flatIdx - prev.start <= prev.end - flatIdx) {
+          // Closer to start → shrink from start
+          next = { start: flatIdx + 1, end: prev.end };
+        } else {
+          // Closer to end → shrink from end
+          next = { start: prev.start, end: flatIdx - 1 };
+        }
+        if (next && next.start > next.end) next = null;
+      } else {
+        // Click outside → extend
+        next = { start: Math.min(prev.start, flatIdx), end: Math.max(prev.end, flatIdx) };
+      }
+      // Save to progression
+      if (progMode && activeProg) {
+        const copy = [...progressions];
+        copy[activeProgIdx] = { ...copy[activeProgIdx], loopRange: next ?? undefined };
+        handleSaveProgressions(copy);
+      }
+      return next;
+    });
   }
 
   // Count-in cycle: 2小節 → OFF → 1小節 → 2小節 → ...
@@ -1384,9 +1451,25 @@ export default function App() {
           isPlaying={isPlaying}
           onTogglePlay={() => setIsPlaying(p => !p)}
           showPlayButton={!!activeProg && activeProg.chords.length > 0}
+          loopLabel={loopRange
+            ? loopRange.start === loopRange.end
+              ? `小節 ${loopRange.start + 1}`
+              : `小節 ${loopRange.start + 1}-${loopRange.end + 1}`
+            : undefined}
+          onClearLoop={() => {
+            setLoopRange(null);
+            setLoopSelecting(false);
+            if (activeProg) {
+              const copy = [...progressions];
+              copy[activeProgIdx] = { ...copy[activeProgIdx], loopRange: undefined };
+              handleSaveProgressions(copy);
+            }
+          }}
+          loopSelecting={loopSelecting}
+          onToggleLoopSelecting={() => setLoopSelecting(p => !p)}
           leadingSlot={
             <button
-              onClick={() => { setEditing(!editing); setIsPlaying(false); }}
+              onClick={() => { setEditing(!editing); setIsPlaying(false); setLoopSelecting(false); }}
               className="rounded cursor-pointer text-[10px] font-mono px-2.5 h-[24px] inline-flex items-center"
               style={{
                 border: `1px solid ${editing ? '#F1C40F' : '#666'}`,
@@ -1408,7 +1491,7 @@ export default function App() {
                 chordPrefs={chordPrefs}
                 activeChordIdx={activeChordIdx}
                 onSave={handleSaveProgressions}
-                onSelectProg={(idx) => { setActiveProgIdx(idx); setActiveChordIdx(0); setIsPlaying(false); setBpm(progressions[idx]?.bpm ?? 120); }}
+                onSelectProg={(idx) => { setActiveProgIdx(idx); setActiveChordIdx(0); setIsPlaying(false); setBpm(progressions[idx]?.bpm ?? 120); setLoopRange(progressions[idx]?.loopRange ?? null); }}
                 onClose={() => setEditing(false)}
               >
                 {(editingChords, onRemoveChord, editChartLayout, onInsertAtBeat, onEmptyMeasureBeat, onRemoveEmptyMeasure, selectedBeat) => (editingChords.length > 0 || editChartLayout) && (
@@ -1448,6 +1531,9 @@ export default function App() {
                 availableVoicings={showChordForms ? deduplicatedVoicings : undefined}
                 selectedVoicingIdx={effectiveVoicingIdx}
                 onSelectVoicing={handleSelectVoicing}
+                loopMeasureRange={loopRange}
+                onMeasureLoopClick={handleMeasureLoopClick}
+                loopSelecting={loopSelecting}
                 belowChart={lickDB && (
                   <LickPanel
                     licks={filteredLicks.licks}

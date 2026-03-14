@@ -5,6 +5,12 @@ import { ROOTS } from '../../constants';
 import { parseChordSymbol, buildChordSlot, suggestMode, displayChordName, PRESET_PROGRESSIONS, removeChordFromLayout, computeInsertFlatIndex, insertChordAtBeat, deriveChartLayout, splitSection, mergeSections, splitEndings, removeEndings, renameSection, findChordMeasure, adjustEndingSplit, splitSectionAtEnding, insertEmptyMeasure } from '../../utils';
 import { SongImporter } from './SongImporter';
 import { ChordAutocomplete } from '../Controls';
+import { useUndoRedo } from '../../hooks';
+
+interface EditorSnapshot {
+  chords: ChordSlot[];
+  chartLayout: ChartLayout | undefined;
+}
 
 interface ProgressionEditorProps {
   progressions: Progression[];
@@ -34,8 +40,15 @@ export function ProgressionEditor({
   const prog = progressions[activeProgIdx] ?? { name: '', chords: [] };
   const [name, setName] = useState(prog.name);
   const [songKey, setSongKey] = useState<SongKey | undefined>(prog.songKey);
-  const [chords, setChords] = useState<ChordSlot[]>([...prog.chords]);
-  const [chartLayout, setChartLayout] = useState<ChartLayout | undefined>(prog.chartLayout);
+  const {
+    state: editorState,
+    set: setEditorState,
+    undo, redo, reset: resetEditorState,
+    canUndo, canRedo,
+  } = useUndoRedo<EditorSnapshot>({ chords: [...prog.chords], chartLayout: prog.chartLayout });
+
+  const chords = editorState.chords;
+  const chartLayout = editorState.chartLayout;
   const [input, setInput] = useState('');
   const [error, setError] = useState('');
   const [showImporter, setShowImporter] = useState(false);
@@ -59,6 +72,22 @@ export function ProgressionEditor({
       setError('');
     }
   }, [activeChordIdx]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Undo/Redo keyboard shortcuts
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        undo();
+      }
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+        e.preventDefault();
+        redo();
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [undo, redo]);
 
   function handleSubmit() {
     if (emptyTarget) {
@@ -90,7 +119,7 @@ export function ProgressionEditor({
     }
     const copy = [...chords];
     copy[editIdx] = updated;
-    setChords(copy);
+    setEditorState({ chords: copy, chartLayout });
   }
 
   function handleBeatClick(referenceIdx: number, beat: number) {
@@ -128,8 +157,7 @@ export function ProgressionEditor({
     const newChord = buildChordSlot(trimmed, parsed, prevPosId, songKey);
     const newChords = [...chords];
     newChords.splice(flatIdx, 0, newChord);
-    setChords(newChords);
-    setChartLayout(insertChordAtBeat(layout, editIdx, beat, flatIdx));
+    setEditorState({ chords: newChords, chartLayout: insertChordAtBeat(layout, editIdx, beat, flatIdx) });
     setInput('');
     setEditIdx(null);
   }
@@ -143,8 +171,10 @@ export function ProgressionEditor({
   }
 
   function removeChord(idx: number) {
-    setChords(chords.filter((_, i) => i !== idx));
-    setChartLayout(prev => prev ? removeChordFromLayout(prev, idx) : undefined);
+    setEditorState({
+      chords: chords.filter((_, i) => i !== idx),
+      chartLayout: chartLayout ? removeChordFromLayout(chartLayout, idx) : undefined,
+    });
     if (editIdx === idx) cancelEdit();
     else if (editIdx != null && editIdx > idx) setEditIdx(editIdx - 1);
   }
@@ -162,7 +192,7 @@ export function ProgressionEditor({
       }
       return { ...sec, measures: sec.measures.filter((_, mi) => mi !== measureIdx) };
     });
-    setChartLayout({ sections: newSections, barsPerRow: layout.barsPerRow });
+    setEditorState({ chords, chartLayout: { sections: newSections, barsPerRow: layout.barsPerRow } });
     // If the deleted measure was selected, clear selection
     if (emptyTarget?.sectionIdx === sectionIdx && emptyTarget?.measureIdx === measureIdx && emptyTarget?.endingIdx === endingIdx) {
       cancelEdit();
@@ -174,7 +204,7 @@ export function ProgressionEditor({
   function handleAddMeasure() {
     const layout = ensureLayout();
     const updated = insertEmptyMeasure(layout, editIdx ?? undefined);
-    setChartLayout(updated);
+    setEditorState({ chords, chartLayout: updated });
 
     // Find the newly inserted empty measure and enter insert mode for beat 1
     let targetSi = 0;
@@ -300,8 +330,7 @@ export function ProgressionEditor({
       };
     });
 
-    setChords(newChords);
-    setChartLayout({ sections: newSections, barsPerRow: layout.barsPerRow });
+    setEditorState({ chords: newChords, chartLayout: { sections: newSections, barsPerRow: layout.barsPerRow } });
     setInput('');
     setEmptyTarget(null);
   }
@@ -311,7 +340,7 @@ export function ProgressionEditor({
   function ensureLayout(): ChartLayout {
     if (chartLayout) return chartLayout;
     const derived = deriveChartLayout(chords);
-    setChartLayout(derived);
+    // Don't push to undo stack — just ensure layout exists
     return derived;
   }
 
@@ -327,7 +356,7 @@ export function ProgressionEditor({
       if (!newLabel) return; // can't clear label inside ending
       let updated = splitSectionAtEnding(layout, info.sectionIdx, info.endingIdx, info.measureIdx);
       updated = renameSection(updated, info.sectionIdx + 1, newLabel);
-      setChartLayout(updated);
+      setEditorState({ chords, chartLayout: updated });
       return;
     }
 
@@ -335,15 +364,15 @@ export function ProgressionEditor({
       // Already at section start — rename or merge
       if (!newLabel && info.sectionIdx > 0) {
         // Empty label on non-first section → merge with previous
-        setChartLayout(mergeSections(layout, info.sectionIdx - 1));
+        setEditorState({ chords, chartLayout: mergeSections(layout, info.sectionIdx - 1) });
       } else {
-        setChartLayout(renameSection(layout, info.sectionIdx, newLabel));
+        setEditorState({ chords, chartLayout: renameSection(layout, info.sectionIdx, newLabel) });
       }
     } else if (newLabel) {
       // Mid-section with a label → split here and name the new section
       let updated = splitSection(layout, info.sectionIdx, info.measureIdx);
       updated = renameSection(updated, info.sectionIdx + 1, newLabel);
-      setChartLayout(updated);
+      setEditorState({ chords, chartLayout: updated });
     }
   }
 
@@ -361,14 +390,14 @@ export function ProgressionEditor({
       const sections = layout.sections.map((s, i) =>
         i === info.sectionIdx ? { ...s, repeats: hasRepeat ? undefined : 1 } : s,
       );
-      setChartLayout({ ...layout, sections });
+      setEditorState({ chords, chartLayout: { ...layout, sections } });
     } else {
       // Split section here, then add repeat to the new (second) section
       let newLayout = splitSection(layout, info.sectionIdx, info.measureIdx);
       const sections = newLayout.sections.map((s, i) =>
         i === info.sectionIdx + 1 ? { ...s, repeats: 1 } : s,
       );
-      setChartLayout({ ...newLayout, sections });
+      setEditorState({ chords, chartLayout: { ...newLayout, sections } });
     }
   }
 
@@ -387,14 +416,14 @@ export function ProgressionEditor({
       const sections = layout.sections.map((s, i) =>
         i === info.sectionIdx ? { ...s, repeats: hasRepeat ? undefined : 1 } : s,
       );
-      setChartLayout({ ...layout, sections });
+      setEditorState({ chords, chartLayout: { ...layout, sections } });
     } else {
       // Split after this measure, set repeat on first part
       let newLayout = splitSection(layout, info.sectionIdx, info.measureIdx + 1);
       const sections = newLayout.sections.map((s, i) =>
         i === info.sectionIdx ? { ...s, repeats: 1 } : s,
       );
-      setChartLayout({ ...newLayout, sections });
+      setEditorState({ chords, chartLayout: { ...newLayout, sections } });
     }
   }
 
@@ -406,8 +435,7 @@ export function ProgressionEditor({
 
     if (info.endingIdx === 0) {
       // Already in volta 1 → remove endings
-      let updated = removeEndings(layout, info.sectionIdx);
-      setChartLayout(updated);
+      setEditorState({ chords, chartLayout: removeEndings(layout, info.sectionIdx) });
     } else if (info.endingIdx == null && info.measureIdx > 0) {
       // Set volta starting at this measure
       let updated = layout;
@@ -416,7 +444,7 @@ export function ProgressionEditor({
         updated = removeEndings(updated, info.sectionIdx);
       }
       updated = splitEndings(updated, info.sectionIdx, info.measureIdx);
-      setChartLayout(updated);
+      setEditorState({ chords, chartLayout: updated });
     }
   }
 
@@ -441,7 +469,7 @@ export function ProgressionEditor({
     }
 
     if (endFlatIdx >= 1) {
-      setChartLayout(adjustEndingSplit(layout, info.sectionIdx, endFlatIdx));
+      setEditorState({ chords, chartLayout: adjustEndingSplit(layout, info.sectionIdx, endFlatIdx) });
     }
   }
 
@@ -464,8 +492,7 @@ export function ProgressionEditor({
     onSelectProg(copy.length - 1);
     setName('New');
     setSongKey(undefined);
-    setChords([]);
-    setChartLayout(undefined);
+    resetEditorState({ chords: [], chartLayout: undefined });
     cancelEdit();
   }
 
@@ -481,8 +508,7 @@ export function ProgressionEditor({
     onSelectProg(copy.length - 1);
     setName(current.name);
     setSongKey(current.songKey);
-    setChords([...current.chords]);
-    setChartLayout(current.chartLayout);
+    resetEditorState({ chords: [...current.chords], chartLayout: current.chartLayout });
     cancelEdit();
   }
 
@@ -494,8 +520,7 @@ export function ProgressionEditor({
       onSelectProg(0);
       setName('New');
       setSongKey(undefined);
-      setChords([]);
-      setChartLayout(undefined);
+      resetEditorState({ chords: [], chartLayout: undefined });
       cancelEdit();
       return;
     }
@@ -504,34 +529,34 @@ export function ProgressionEditor({
     onSelectProg(newIdx);
     setName(copy[newIdx].name);
     setSongKey(copy[newIdx].songKey);
-    setChords([...copy[newIdx].chords]);
-    setChartLayout(copy[newIdx].chartLayout);
+    resetEditorState({ chords: [...copy[newIdx].chords], chartLayout: copy[newIdx].chartLayout });
     cancelEdit();
   }
 
   function handleLoadPreset(preset: Progression) {
     setName(preset.name);
     setSongKey(preset.songKey);
-    setChords([...preset.chords]);
-    setChartLayout(preset.chartLayout);
+    resetEditorState({ chords: [...preset.chords], chartLayout: preset.chartLayout });
     cancelEdit();
   }
 
   function handleImport(imported: Progression) {
     setName(imported.name);
     setSongKey(imported.songKey);
-    setChords([...imported.chords]);
-    setChartLayout(imported.chartLayout);
+    resetEditorState({ chords: [...imported.chords], chartLayout: imported.chartLayout });
     setShowImporter(false);
     cancelEdit();
   }
 
   function handleSongKeyChange(newKey: SongKey | undefined) {
     setSongKey(newKey);
-    setChords(chords.map(c => {
-      if (c.modeConfirmed) return c;
-      return { ...c, modeIdx: suggestMode(c.rootName, c.quality, newKey) };
-    }));
+    setEditorState({
+      chords: chords.map(c => {
+        if (c.modeConfirmed) return c;
+        return { ...c, modeIdx: suggestMode(c.rootName, c.quality, newKey) };
+      }),
+      chartLayout,
+    });
   }
 
   function handleSelectProg(idx: number) {
@@ -540,8 +565,7 @@ export function ProgressionEditor({
     const p = progressions[idx];
     setName(p.name);
     setSongKey(p.songKey);
-    setChords([...p.chords]);
-    setChartLayout(p.chartLayout);
+    resetEditorState({ chords: [...p.chords], chartLayout: p.chartLayout });
     cancelEdit();
   }
 
@@ -709,6 +733,28 @@ export function ProgressionEditor({
             インポート
           </button>
           <span className="text-[9px] text-text-dim mx-0.5">|</span>
+          <button onClick={undo} disabled={!canUndo} className={btnBase}
+            style={{
+              border: `1px solid ${canUndo ? '#888' : '#333'}`,
+              background: '#1a1a1a',
+              color: canUndo ? '#AAA' : '#444',
+              opacity: canUndo ? 1 : 0.5,
+              cursor: canUndo ? 'pointer' : 'default',
+            }}
+            title="元に戻す (Ctrl+Z)">
+            ↩
+          </button>
+          <button onClick={redo} disabled={!canRedo} className={btnBase}
+            style={{
+              border: `1px solid ${canRedo ? '#888' : '#333'}`,
+              background: '#1a1a1a',
+              color: canRedo ? '#AAA' : '#444',
+              opacity: canRedo ? 1 : 0.5,
+              cursor: canRedo ? 'pointer' : 'default',
+            }}
+            title="やり直す (Ctrl+Y)">
+            ↪
+          </button>
           <button onClick={handleSave} className={btnBase}
             style={{ border: '1px solid #2980B9', background: '#1a1a1a', color: '#2980B9' }}>
             保存
