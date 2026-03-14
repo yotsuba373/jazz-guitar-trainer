@@ -70,6 +70,8 @@ interface LickPanelProps {
   singleLickCount: number;
   vChordQuality?: string;
   vChordRootSemitone?: number;
+  favorites: Set<string>;
+  onToggleFavorite: (lickId: string) => void;
   highOctave: boolean;
   onToggleOctave: () => void;
   canHighOctave: boolean;
@@ -82,6 +84,7 @@ export function LickPanel({
   licks, selectedIdx, onSelect, onPlay, onStop, isPlaying, lickType, onClear,
   quality, rootSemitone, iiV, singleLickCount,
   vChordQuality, vChordRootSemitone,
+  favorites, onToggleFavorite,
   highOctave, onToggleOctave, canHighOctave,
   highInstance, onToggleInstance, canHighInstance,
 }: LickPanelProps) {
@@ -90,6 +93,13 @@ export function LickPanel({
   const hasSelection = selectedIdx != null;
   const listRef = useRef<HTMLDivElement>(null);
   const iiVLickCount = licks.length - singleLickCount;
+
+  // Snapshot favorites when the panel opens (avoid re-sort while browsing)
+  const sortFavoritesRef = useRef(favorites);
+  const prevOpenRef = useRef(open);
+  if (open && !prevOpenRef.current) sortFavoritesRef.current = favorites;
+  prevOpenRef.current = open;
+  const sortFavorites = sortFavoritesRef.current;
 
   // Auto-scroll to selected item — need to account for separator in DOM
   useEffect(() => {
@@ -140,26 +150,44 @@ export function LickPanel({
     });
   }, [licks, quality, rootSemitone, iiV, vChordQuality, vChordRootSemitone]);
 
-  // Filter licks by search query (matches id, source display name, mode names, degrees, ii-V badge)
+  // Filter licks by search query, sort favorites first
   const filtered = useMemo(() => {
-    if (!query.trim()) return licks.map((l, i) => ({ lick: l, origIdx: i }));
-    const q = query.trim().toLowerCase();
-    return licks.reduce<{ lick: LickEntry; origIdx: number }[]>((acc, lick, i) => {
-      const id = (lick.id ?? '').toLowerCase();
-      const src = lick.source
-        ? (SOURCE_DISPLAY_NAMES[lick.source] ?? lick.source).toLowerCase()
-        : '';
-      const meta = `${lick.noteCount}音 ${lick.beats}拍`;
-      const m = lickMeta[i];
-      const modeStr = m ? m.modeNames.join(' ').toLowerCase() : '';
-      const noteStr = m ? `${m.startDeg} ${m.endDeg} ${m.startNote} ${m.endNote}`.toLowerCase() : '';
-      const badgeStr = m?.badge ? m.badge.label.toLowerCase() : '';
-      if (id.includes(q) || src.includes(q) || meta.includes(q) || modeStr.includes(q) || noteStr.includes(q) || badgeStr.includes(q) || 'ii-v'.includes(q) && m?.isIiV) {
-        acc.push({ lick, origIdx: i });
-      }
-      return acc;
-    }, []);
-  }, [licks, query, lickMeta]);
+    let items: { lick: LickEntry; origIdx: number }[];
+    if (!query.trim()) {
+      items = licks.map((l, i) => ({ lick: l, origIdx: i }));
+    } else {
+      const q = query.trim().toLowerCase();
+      items = licks.reduce<{ lick: LickEntry; origIdx: number }[]>((acc, lick, i) => {
+        const id = (lick.id ?? '').toLowerCase();
+        const src = lick.source
+          ? (SOURCE_DISPLAY_NAMES[lick.source] ?? lick.source).toLowerCase()
+          : '';
+        const meta = `${lick.noteCount}音 ${lick.beats}拍`;
+        const m = lickMeta[i];
+        const modeStr = m ? m.modeNames.join(' ').toLowerCase() : '';
+        const noteStr = m ? `${m.startDeg} ${m.endDeg} ${m.startNote} ${m.endNote}`.toLowerCase() : '';
+        const badgeStr = m?.badge ? m.badge.label.toLowerCase() : '';
+        if (id.includes(q) || src.includes(q) || meta.includes(q) || modeStr.includes(q) || noteStr.includes(q) || badgeStr.includes(q) || 'ii-v'.includes(q) && m?.isIiV) {
+          acc.push({ lick, origIdx: i });
+        }
+        return acc;
+      }, []);
+    }
+    // Sort favorites to top (within single / ii-V groups respectively)
+    // Uses sortFavorites snapshot so order doesn't shift while panel is open
+    if (sortFavorites.size > 0) {
+      items.sort((a, b) => {
+        const aFav = sortFavorites.has(a.lick.id ?? '') ? 1 : 0;
+        const bFav = sortFavorites.has(b.lick.id ?? '') ? 1 : 0;
+        // Keep ii-V items after single items
+        const aIiV = lickMeta[a.origIdx]?.isIiV ? 1 : 0;
+        const bIiV = lickMeta[b.origIdx]?.isIiV ? 1 : 0;
+        if (aIiV !== bIiV) return aIiV - bIiV;
+        return bFav - aFav;
+      });
+    }
+    return items;
+  }, [licks, query, lickMeta, sortFavorites]);
 
   // Build items with separator insertion
   const listItems = useMemo(() => {
@@ -406,6 +434,14 @@ export function LickPanel({
                     >
                       {lick.id ?? `#${origIdx + 1}`}
                     </span>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); if (lick.id) onToggleFavorite(lick.id); }}
+                      className="flex-shrink-0 cursor-pointer bg-transparent border-none p-0 leading-none"
+                      title={favorites.has(lick.id ?? '') ? 'お気に入り解除' : 'お気に入り'}
+                      style={{ color: favorites.has(lick.id ?? '') ? '#F1C40F' : '#555', fontSize: 12 }}
+                    >
+                      {favorites.has(lick.id ?? '') ? '\u2605' : '\u2606'}
+                    </button>
                     {meta?.badge && (
                       <span
                         className="text-[8px] font-mono flex-shrink-0 rounded px-1"
