@@ -115,10 +115,21 @@ function getStrumNotes(
 }
 
 export default function App() {
-  const [rootName, setRootName] = useState<RootName>('C');
-  const [modeIdx, setModeIdx] = useState(0);
-  const [selPosIds, setSelPosIds] = useState<number[]>([]);
-  const [overlay, setOverlay] = useState(false);
+  const [rootName, setRootName] = useState<RootName>(() => {
+    const saved = localStorage.getItem('dictRootName');
+    return (saved && ROOTS.some(r => r.name === saved) ? saved : 'C') as RootName;
+  });
+  const [modeIdx, setModeIdx] = useState(() => {
+    const saved = parseInt(localStorage.getItem('dictModeIdx') ?? '', 10);
+    return isNaN(saved) || saved < 0 || saved >= MODE_TEMPLATES.length ? 0 : saved;
+  });
+  const [selPosIds, setSelPosIds] = useState<number[]>(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('dictSelPosIds') ?? '[]');
+      return Array.isArray(saved) ? saved.filter((n: unknown) => typeof n === 'number' && n >= 1 && n <= 7) : [];
+    } catch { return []; }
+  });
+  const [overlay, setOverlay] = useState(() => localStorage.getItem('dictOverlay') === 'true');
   const [showCT, setShowCT] = useState(true);
   const [labelMode, setLabelMode] = useState<LabelMode>('note');
   const [chordPrefs, setChordPrefs] = useState<ChordNotationPrefs>(() => loadChordNotationPrefs());
@@ -727,6 +738,12 @@ export default function App() {
   useEffect(() => { instrumentRef.current = instrument; localStorage.setItem('phraseInstrument', instrument); }, [instrument]);
   useEffect(() => { swingEnabledRef.current = swingEnabled; localStorage.setItem('swingEnabled', String(swingEnabled)); }, [swingEnabled]);
   useEffect(() => { swingAmountRef.current = swingAmount; localStorage.setItem('swingAmount', String(swingAmount)); }, [swingAmount]);
+
+  // Persist dictionary mode selections to localStorage
+  useEffect(() => { localStorage.setItem('dictRootName', rootName); }, [rootName]);
+  useEffect(() => { localStorage.setItem('dictModeIdx', String(modeIdx)); }, [modeIdx]);
+  useEffect(() => { localStorage.setItem('dictSelPosIds', JSON.stringify(selPosIds)); }, [selPosIds]);
+  useEffect(() => { localStorage.setItem('dictOverlay', String(overlay)); }, [overlay]);
   /** Find a lick from any DB section by ID */
   function findLickById(lickId: string): LickEntry | null {
     if (!lickDB) return null;
