@@ -918,23 +918,21 @@ export default function App() {
       playPosRef.current = pos >= 0 ? pos : 0;
       chordStartRef.current = performance.now();
 
-      // Cancel any previously pending next-chord audio
+      // Cancel pending + active audio, then schedule current chord
       cancelPendingNext();
-
-      // Schedule audio for the current chord on playback start
-      if (isPlaybackStart) {
-        activeStrumRef.current?.stop();
-        activePhraseStopRef.current?.stop();
-        stopSongMetronome();
-        const cumBeats = computeCumBeats(seq, playPosRef.current);
-        const result = scheduleChordAudio(activeChordIdx, activeProg, ctx.currentTime, cumBeats);
-        activeStrumRef.current = result.strumHandle;
-        activePhraseStopRef.current = result.phraseHandle;
-        songMetRef.current = result.metNodes;
-        if (result.phrase) {
-          setAutoPlayPhrase(result.phrase);
-          setPhraseAnimKey(k => k + 1);
-        }
+      activeStrumRef.current?.stop();
+      activePhraseStopRef.current?.stop();
+      stopSongMetronome();
+      const cumBeats = computeCumBeats(seq, playPosRef.current);
+      const result = scheduleChordAudio(activeChordIdx, activeProg, ctx.currentTime, cumBeats);
+      activeStrumRef.current = result.strumHandle;
+      activePhraseStopRef.current = result.phraseHandle;
+      songMetRef.current = result.metNodes;
+      if (result.phrase) {
+        setAutoPlayPhrase(result.phrase);
+        setPhraseAnimKey(k => k + 1);
+      } else if (!isPlaybackStart) {
+        setAutoPlayPhrase(null);
       }
     }
     wasAutoAdvanceRef.current = false;
@@ -949,7 +947,10 @@ export default function App() {
     const nextPos = (playPosRef.current + 1) % seq.length;
     const nextChordIdx = seq[nextPos].chordIdx;
     const audioStartAt = ctx.currentTime + delay / 1000;
-    const cumBeatsNext = computeCumBeats(seq, nextPos);
+    // On loop, carry total beats so metronome accent stays consistent
+    const cumBeatsNext = nextPos === 0
+      ? computeCumBeats(seq, seq.length)
+      : computeCumBeats(seq, nextPos);
     const nextResult = scheduleChordAudio(nextChordIdx, activeProg, audioStartAt, cumBeatsNext);
     pendingNextRef.current = nextResult;
 
@@ -1146,22 +1147,25 @@ export default function App() {
       }
     }
 
-    // ii→V fretboard switch + V chord strum
+    // ii→V fretboard switch + V chord strum (pre-scheduled on Web Audio timeline)
     if (switchToVPart) {
-      const switchDelay = (iiBeats ?? 4) * 2 * eighthDur * 1000;
+      const switchSec = (iiBeats ?? 4) * 2 * eighthDur;
+      const switchDelay = switchSec * 1000;
+      // Pre-schedule V chord strum at exact switch time
+      if (chordAudioOnRef.current && activeProg) {
+        previewStrumRef.current?.stop();
+        const vIdx = activeChordIdx + 1;
+        const strumNotes = getStrumNotes(vIdx, activeProg.chords, activeProg.songKey);
+        if (strumNotes.length > 0) {
+          previewStrumRef.current = playChordStrum(ctx, strumNotes, chordVolumeRef.current, startAt + switchSec);
+        }
+      }
+      // setTimeout for React state update (fretboard display switch)
       iiVSwitchTimerRef.current = setTimeout(() => {
         justStartedPlayRef.current = true;
         setIiVDisplayPhrase(switchToVPart);
         setPhraseAnimKey(k => k + 1);
         iiVSwitchTimerRef.current = null;
-        if (chordAudioOnRef.current && activeProg) {
-          previewStrumRef.current?.stop();
-          const vIdx = activeChordIdx + 1;
-          const strumNotes = getStrumNotes(vIdx, activeProg.chords, activeProg.songKey);
-          if (strumNotes.length > 0) {
-            previewStrumRef.current = playChordStrum(ctx, strumNotes, chordVolumeRef.current, ctx.currentTime);
-          }
-        }
       }, switchDelay);
     }
 
@@ -1171,7 +1175,7 @@ export default function App() {
       stopPreviewMetronome();
       setIsPhraseAudioPlaying(false);
     }, result.totalDuration * 1000 + 200);
-  });
+  }, [phraseAnimKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Stop playback when activePhrase changes (e.g. chord navigation).
   // Skipped on the render that started playback (justStartedPlayRef guard).
