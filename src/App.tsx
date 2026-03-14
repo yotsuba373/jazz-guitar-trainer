@@ -173,7 +173,7 @@ export default function App() {
   const chordVolumeRef = useRef(chordVolume);
   const chordAudioOnRef = useRef(chordAudioOn);
   const activeStrumRef = useRef<{ stop: () => void } | null>(null);   // auto-play strum
-  const previewStrumRef = useRef<{ stop: () => void } | null>(null);  // preview strum (separate to avoid auto-advance cleanup)
+  const previewStrumRef = useRef<{ stop: () => void }[]>([]);  // preview strums (separate to avoid auto-advance cleanup)
   const previewMetRef = useRef<OscillatorNode[]>([]);                  // pre-scheduled metronome clicks for preview
   const songMetRef = useRef<OscillatorNode[]>([]);                    // pre-scheduled metronome clicks for song playback
   const pendingNextRef = useRef<{                                     // pre-scheduled next chord audio (look-ahead)
@@ -1266,7 +1266,8 @@ export default function App() {
   const playPhraseAudio = useCallback((phrase: GeneratedPhrase, switchToVPart?: GeneratedPhrase | null, iiBeats?: number) => {
     manualPhraseRef.current?.stop();
     if (manualPhraseTimer.current) clearTimeout(manualPhraseTimer.current);
-    previewStrumRef.current?.stop();
+    previewStrumRef.current.forEach(s => s.stop());
+    previewStrumRef.current = [];
     stopPreviewMetronome();
     clearIiVSwitchTimer();
     setIiVDisplayPhrase(null);
@@ -1299,7 +1300,7 @@ export default function App() {
       if (progMode && activeProg) {
         const strumNotes = getStrumNotes(activeChordIdx, activeProg.chords, activeProg.songKey);
         if (strumNotes.length > 0) {
-          previewStrumRef.current = playChordStrum(ctx, strumNotes, chordVolumeRef.current, startAt);
+          previewStrumRef.current.push(playChordStrum(ctx, strumNotes, chordVolumeRef.current, startAt));
         }
       } else if (selPos && selPos.instances.length > 0) {
         const inst = selPos.instances[0];
@@ -1313,7 +1314,7 @@ export default function App() {
           if (strumNotes.length >= 4) break;
         }
         if (strumNotes.length > 0) {
-          previewStrumRef.current = playChordStrum(ctx, strumNotes, chordVolumeRef.current, startAt);
+          previewStrumRef.current.push(playChordStrum(ctx, strumNotes, chordVolumeRef.current, startAt));
         }
       }
     }
@@ -1331,20 +1332,31 @@ export default function App() {
       }
     }
 
-    // ii→V fretboard switch + V chord strum (pre-scheduled on Web Audio timeline)
-    if (switchToVPart) {
-      const switchSec = (iiBeats ?? 4) * 2 * eighthDur;
+    // Overflow strums: schedule chord strums for all subsequent chords the lick spans
+    if (switchToVPart && activeProg) {
+      const layout = getChartLayout(activeProg);
+      const firstChordBeats = iiBeats ?? 4;
+      const switchSec = firstChordBeats * 2 * eighthDur;
       const switchDelay = switchSec * 1000;
-      // Pre-schedule V chord strum at exact switch time
-      if (chordAudioOnRef.current && activeProg) {
-        previewStrumRef.current?.stop();
-        const vIdx = activeChordIdx + 1;
-        const strumNotes = getStrumNotes(vIdx, activeProg.chords, activeProg.songKey);
-        if (strumNotes.length > 0) {
-          previewStrumRef.current = playChordStrum(ctx, strumNotes, chordVolumeRef.current, startAt + switchSec);
+
+      // Schedule strums for all overflow chords (2nd, 3rd, ...)
+      if (chordAudioOnRef.current) {
+        const totalSec = result.totalDuration;
+        let accBeats = firstChordBeats; // quarter-note beats accumulated
+        let ci = activeChordIdx + 1;
+        while (ci < activeProg.chords.length) {
+          const strumSec = accBeats * 2 * eighthDur; // convert quarter→eighth→seconds
+          if (strumSec >= totalSec) break;
+          const strumNotes = getStrumNotes(ci, activeProg.chords, activeProg.songKey);
+          if (strumNotes.length > 0) {
+            previewStrumRef.current.push(playChordStrum(ctx, strumNotes, chordVolumeRef.current, startAt + strumSec));
+          }
+          accBeats += getChordBeatCount(layout, ci);
+          ci++;
         }
       }
-      // setTimeout for React state update (fretboard display switch)
+
+      // setTimeout for React state update (fretboard display switch at 2nd chord)
       iiVSwitchTimerRef.current = setTimeout(() => {
         justStartedPlayRef.current = true;
         setIiVDisplayPhrase(switchToVPart);
@@ -1371,6 +1383,8 @@ export default function App() {
     manualPhraseRef.current?.stop();
     manualPhraseRef.current = null;
     if (manualPhraseTimer.current) clearTimeout(manualPhraseTimer.current);
+    previewStrumRef.current.forEach(s => s.stop());
+    previewStrumRef.current = [];
     stopPreviewMetronome();
     setIsPhraseAudioPlaying(false);
   }, [activePhrase]);
@@ -1645,6 +1659,8 @@ export default function App() {
                       manualPhraseRef.current?.stop();
                       manualPhraseRef.current = null;
                       if (manualPhraseTimer.current) clearTimeout(manualPhraseTimer.current);
+                      previewStrumRef.current.forEach(s => s.stop());
+                      previewStrumRef.current = [];
                       stopPreviewMetronome();
                       clearIiVSwitchTimer();
                       setIiVDisplayPhrase(null);
