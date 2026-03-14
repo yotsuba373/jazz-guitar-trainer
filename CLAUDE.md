@@ -14,7 +14,7 @@ npm install
 npm run dev       # 開発サーバー起動 → http://localhost:5173
 npm run build     # tsc + vite build
 npm run lint      # ESLint
-npm test          # vitest run (731 テスト)
+npm test          # vitest run (732 テスト)
 ```
 
 Node.js が未インストールの場合は fnm を使用:
@@ -54,7 +54,7 @@ fnm install --lts && fnm default lts-latest
 src/
 ├── App.tsx                          — 状態管理ハブ (通常モード + 進行モード + BPM自動再生)
 ├── types/
-│   └── music.ts                     — ChordSlot (lickIiVType, lickIiVPart フィールド含む), Progression, ChartMeasure, ChartLayout, ModeTemplate, PoolNote 等
+│   └── music.ts                     — ChordSlot (lickBeatOffset フィールド含む), Progression, ChartMeasure, ChartLayout, ModeTemplate, PoolNote 等
 ├── constants/
 │   └── music.ts                     — MODE_TEMPLATES(18 + description), ROOTS, STRING_DEG_OFFSETS, POS_COLORS, MODE_COLORS
 ├── utils/
@@ -65,7 +65,7 @@ src/
 │   ├── jazzStandards.ts             — fetchJazzStandards(), extractStructuredChords(), songToProgression()
 │   ├── chartLayout.ts               — deriveChartLayout(), getChartLayout(), buildChordRows(), removeChordFromLayout(), insertChordAtBeat(), computeInsertFlatIndex(), insertEmptyMeasure(), splitSection(), mergeSections(), splitEndings(), removeEndings(), findChordMeasure()
 │   ├── chordForms.ts                — findVoicingsInPosition(), VOICING_TEMPLATES, formatVoicingLabel()
-│   ├── lickEngine.ts                — absolutePitch(), buildNotePool(), loadLickDB(), transposeLick(), mapLickToFretboard(), lickToGeneratedPhrase(), inferModeFromLick(), inferModeCandidates(), findBestPositionForLick(), selectBestInstance(), buildLickContext(), detectIiVPattern(), isIiVLickId(), buildIiVLickContext(), splitIiVLongLick()
+│   ├── lickEngine.ts                — absolutePitch(), buildNotePool(), loadLickDB(), transposeLick(), mapLickToFretboard(), lickToGeneratedPhrase(), inferModeFromLick(), inferModeCandidates(), findBestPositionForLick(), selectBestInstance(), buildLickContext(), detectIiVPattern(), isIiVLickId(), buildIiVLickContext(), sliceLick()
 │   ├── phraseAnalysis.ts            — analyzePhrase(), computeSummary()
 │   ├── swing.ts                     — swingBeatStart(), swingVolumeMult(), swingDurMult()
 │   └── __tests__/
@@ -77,7 +77,7 @@ src/
 │       ├── chordForms.test.ts       — 36 tests (Drop 2/3ボイシング検索、テンプレート構造検証)
 │       ├── audioEngine.test.ts      — 14 tests (Karplus-Strong, サクソフォン, エレピ, コードストラム)
 │       ├── swing.test.ts            — 25 tests (タイミング/ダイナミクス/アーティキュレーション/テンポ補正)
-│       └── lickEngine.test.ts       — 60 tests (リックDB読込・移調・指板マッピング・モード推定・ポジション選択・インスタンス選択・8音スケール・GeneratedPhrase変換・ii-V検出・ii-V-long分割)
+│       └── lickEngine.test.ts       — 61 tests (リックDB読込・移調・指板マッピング・モード推定・ポジション選択・インスタンス選択・8音スケール・GeneratedPhrase変換・ii-V検出・sliceLick汎用分割)
 └── components/
     ├── Fretboard/                   — SVG指板描画 (Fretboard, FretboardNote, GhostNote, PhrasePath)
     ├── Controls/                    — RootSelector, ModeSelector, PositionSelector, OptionBar, VoicingGrid, PhraseAnalysisPanel, PianoRoll, GlobalAudioControls, LickPanel
@@ -424,7 +424,8 @@ Footer
 - コードストラム: エレピ音 (Sine加算合成, 2nd/3rd倍音)
 - スウィングモード: 多次元スウィング (タイミング+ダイナミクス+アーティキュレーション)、0-100%連続制御、テンポ補正 (>200BPM)、PhrasePath/PianoRoll視覚同期、localStorage永続化
 - リック練習UI (練習モード): ChordChart直下の折りたたみパネル (LickPanel) にコード品質に合うリック一覧表示、安定ID(署名ハッシュ)+SVGコンター+音数/拍数+開始・終了度数&実音名+ソース名+モード候補(最大3, MODE_COLORSカラー)、テキスト検索(モード名・度数も対象)、選択→指板表示+自動再生、モード/ポジション自動推定、分析パネル対応、**リック選択をChordSlotに永続化** (lickId+lickHighOctave+lickHighInstance→コード切替時復元+進行再生時自動再生)、**8va** (同一インスタンス内オクターブ上)・**Hi** (ハイポジションインスタンス切替) 独立トグル。ルールベースフレーズ生成は削除済み (リック練習に一本化)
-- **ii-V リック対応**: `detectIiVPattern()` で連続コード (m7→7) の ii-V パターンを検出。ii コード選択時に ii-V タイプのリック (`maj-ii-v-short`, `maj-ii-v-long`, `min-ii-v-short`) を表示。ii-V-long (8拍) は `splitIiVLongLick()` で ii 部分 (前半4拍) と V 部分 (後半4拍) に分割し、各 ChordSlot に独立割当 (`lickIiVPart: 'ii'|'V'`)。ii-V-short (4拍) は ii コードのみに割当。ii コードクリア時は V コードも連動クリア。`ChordSlot.lickIiVType` に選択タイプを永続化
+- **リックオーバーフロー分割**: リックの拍数がコードの拍数を超える場合、`sliceLick()` でコード拍境界で分割し後続コードに連鎖割当 (`ChordSlot.lickBeatOffset`)。ii-V リックも通常リックも同じロジックで処理。3コード以上の跨ぎにも対応。先頭コードクリア時は全継続コードも連動クリア
+- **ii-V リック対応**: `detectIiVPattern()` で連続コード (m7→7) の ii-V パターンを検出。ii コード選択時に ii-V タイプのリック (`maj-ii-v-short`, `maj-ii-v-long`, `min-ii-v-short`) を表示
 
 ---
 
@@ -448,7 +449,8 @@ GeneratedPhrase → PhrasePath / PianoRoll / PhraseAnalysisPanel
 - `m7` → `min7` (D root)
 - `maj7` → `maj7` (C root)
 - `m7♭5` → `m7b5` (D root)
-- ii-V パターン検出: `detectIiVPattern(chords, idx)` — `chords[idx]` が m7 かつ `chords[idx+1]` が 7 の場合に `'major'|'minor'` を返す。LickPanel で ii コード選択時に ii-V タイプ (`maj-ii-v-short`, `maj-ii-v-long`, `min-ii-v-short`) のリックを追加表示。ii-V-long (8拍) は `splitIiVLongLick()` で前半4拍 (ii) と後半4拍 (V) に分割し、各 ChordSlot に独立割当。ii-V-short (4拍) は `buildIiVLickContext()` で ii コードのみに割当
+- ii-V パターン検出: `detectIiVPattern(chords, idx)` — `chords[idx]` が m7 かつ `chords[idx+1]` が 7 の場合に `'major'|'minor'` を返す。LickPanel で ii コード選択時に ii-V タイプのリックを追加表示
+- リックオーバーフロー: リック拍数 > コード拍数の場合、`sliceLick()` でコード拍境界で分割し後続コードに `lickBeatOffset` 付きで連鎖割当。ii-V・通常リック共通ロジック
 
 ### 自動推定
 

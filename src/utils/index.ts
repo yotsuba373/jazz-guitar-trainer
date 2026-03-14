@@ -45,6 +45,7 @@ export {
   adjustEndingSplit,
   splitSectionAtEnding,
   insertEmptyMeasure,
+  getChordBeatCount,
 } from './chartLayout';
 export type { ChordMeasureInfo } from './chartLayout';
 export {
@@ -67,7 +68,7 @@ export {
   playNote,
   schedulePhrase,
 } from './audioEngine';
-export { absolutePitch, buildNotePool, hasAlternateOctave, detectIiVPattern, isIiVLickId, buildIiVLickContext, getIiVTransposeSemitones, splitIiVLongLick } from './lickEngine';
+export { absolutePitch, buildNotePool, hasAlternateOctave, detectIiVPattern, isIiVLickId, buildIiVLickContext, getIiVTransposeSemitones, sliceLick } from './lickEngine';
 export type { IiVType, IiVDetection } from './lickEngine';
 export { analyzePhrase } from './phraseAnalysis';
 export { swingBeatStart, swingVolumeMult, swingDurMult } from './swing';

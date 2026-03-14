@@ -18,7 +18,7 @@ import {
   isIiVLickId,
   buildIiVLickContext,
   getIiVTransposeSemitones,
-  splitIiVLongLick,
+  sliceLick,
 } from '../lickEngine';
 import { MODE_TEMPLATES } from '../../constants';
 import { resolveMode } from '../noteSpelling';
@@ -580,8 +580,8 @@ describe('buildIiVLickContext', () => {
   });
 });
 
-describe('splitIiVLongLick', () => {
-  const longLick: LickEntry = {
+describe('sliceLick', () => {
+  const lick8: LickEntry = {
     id: 'IL-test',
     notes: [
       { pitch: 62, beatStart: 0, duration: 0.5 },
@@ -592,7 +592,7 @@ describe('splitIiVLongLick', () => {
       { pitch: 67, beatStart: 2.5, duration: 0.5 },
       { pitch: 65, beatStart: 3, duration: 0.5 },
       { rest: true, beatStart: 3.5, duration: 0.5 },
-      // V part (beats 4-7)
+      // Second half (beats 4-7)
       { pitch: 67, beatStart: 4, duration: 0.5 },
       { pitch: 65, beatStart: 4.5, duration: 0.5 },
       { pitch: 64, beatStart: 5, duration: 0.5 },
@@ -607,71 +607,107 @@ describe('splitIiVLongLick', () => {
     source: 'test',
   };
 
-  it('splits 8-beat lick into ii (4 beats) and V (4 beats)', () => {
-    const { iiLick, vLick } = splitIiVLongLick(longLick);
-    expect(iiLick.beats).toBe(4);
-    expect(vLick.beats).toBe(4);
-  });
-
-  it('ii part contains only notes before beat 4', () => {
-    const { iiLick } = splitIiVLongLick(longLick);
-    expect(iiLick.notes.length).toBe(8); // 7 pitched + 1 rest
-    for (const n of iiLick.notes) {
+  it('slices first 4 beats of 8-beat lick', () => {
+    const first = sliceLick(lick8, 0, 4);
+    expect(first.beats).toBe(4);
+    expect(first.notes.length).toBe(8); // 7 pitched + 1 rest
+    for (const n of first.notes) {
       expect(n.beatStart).toBeLessThan(4);
     }
   });
 
-  it('V part contains notes from beat 4 onward with shifted beatStart', () => {
-    const { vLick } = splitIiVLongLick(longLick);
-    expect(vLick.notes.length).toBe(8);
-    expect(vLick.notes[0].beatStart).toBe(0); // was 4, now shifted
-    expect(vLick.notes[7].beatStart).toBe(3.5); // was 7.5
+  it('slices last 4 beats with shifted beatStart', () => {
+    const second = sliceLick(lick8, 4, 4);
+    expect(second.beats).toBe(4);
+    expect(second.notes.length).toBe(8);
+    expect(second.notes[0].beatStart).toBe(0); // was 4
+    expect(second.notes[7].beatStart).toBe(3.5); // was 7.5
   });
 
   it('recalculates noteCount (excluding rests)', () => {
-    const { iiLick, vLick } = splitIiVLongLick(longLick);
-    expect(iiLick.noteCount).toBe(7); // 7 pitched notes, 1 rest
-    expect(vLick.noteCount).toBe(8); // all pitched
+    const first = sliceLick(lick8, 0, 4);
+    const second = sliceLick(lick8, 4, 4);
+    expect(first.noteCount).toBe(7); // 7 pitched, 1 rest
+    expect(second.noteCount).toBe(8); // all pitched
   });
 
-  it('boundary note at exactly beat 4 goes to V part', () => {
-    const { iiLick, vLick } = splitIiVLongLick(longLick);
-    // Note at beatStart=4 should be in V part as beatStart=0
-    const iiBeats = iiLick.notes.map(n => n.beatStart);
-    expect(iiBeats).not.toContain(4);
-    expect(vLick.notes[0].beatStart).toBe(0);
-    expect(vLick.notes[0].pitch).toBe(67);
+  it('boundary note at exactly offset goes to the slice', () => {
+    const second = sliceLick(lick8, 4, 4);
+    expect(second.notes[0].beatStart).toBe(0);
+    expect(second.notes[0].pitch).toBe(67);
+    const first = sliceLick(lick8, 0, 4);
+    const firstBeats = first.notes.map(n => n.beatStart);
+    expect(firstBeats).not.toContain(4);
   });
 
-  it('preserves original id on both halves', () => {
-    const { iiLick, vLick } = splitIiVLongLick(longLick);
-    expect(iiLick.id).toBe('IL-test');
-    expect(vLick.id).toBe('IL-test');
+  it('preserves original id', () => {
+    const s = sliceLick(lick8, 0, 4);
+    expect(s.id).toBe('IL-test');
   });
 
-  it('V part has no anacrusis', () => {
-    const lickWithAnacrusis = { ...longLick, anacrusis: 1 };
-    const { iiLick, vLick } = splitIiVLongLick(lickWithAnacrusis);
-    expect(iiLick.anacrusis).toBe(1); // preserved
-    expect(vLick.anacrusis).toBeUndefined();
+  it('preserves anacrusis only for offset 0', () => {
+    const lickA = { ...lick8, anacrusis: 1 };
+    const first = sliceLick(lickA, 0, 4);
+    const second = sliceLick(lickA, 4, 4);
+    expect(first.anacrusis).toBe(1);
+    expect(second.anacrusis).toBeUndefined();
   });
 
-  it('V part produces valid phrase via buildIiVLickContext', () => {
-    const { vLick } = splitIiVLongLick(longLick);
-    // Dm7 → G7 in C: keyCenterSemitone = 0, V = G7
-    const result = buildIiVLickContext(vLick, 0, '7', 'G', 7);
+  it('sliced V part produces valid phrase via buildIiVLickContext', () => {
+    const vSlice = sliceLick(lick8, 4, 4);
+    const result = buildIiVLickContext(vSlice, 0, '7', 'G', 7);
     expect(result).not.toBeNull();
     expect(result!.phrase.notes.length).toBeGreaterThan(0);
     expect(result!.phrase.totalBeats).toBe(4);
   });
 
-  it('V part produces valid phrase via buildLickContext with overrideTranspose', () => {
-    const { vLick } = splitIiVLongLick(longLick);
-    // Use buildLickContext with override for V chord (G7, rootSemi=7)
-    const overrideTranspose = getIiVTransposeSemitones(0); // C key center = 0
-    const result = buildLickContext(vLick, '7', 'G', 7, false, false, overrideTranspose);
+  it('sliced V part produces valid phrase via buildLickContext with overrideTranspose', () => {
+    const vSlice = sliceLick(lick8, 4, 4);
+    const overrideTranspose = getIiVTransposeSemitones(0);
+    const result = buildLickContext(vSlice, '7', 'G', 7, false, false, overrideTranspose);
     expect(result).not.toBeNull();
     expect(result!.phrase.notes.length).toBeGreaterThan(0);
     expect(result!.phrase.totalBeats).toBe(4);
+  });
+
+  // 2-beat slicing (e.g. 4-beat lick on 2-beat chord)
+  it('slices 4-beat lick into 2+2', () => {
+    const lick4: LickEntry = {
+      id: 'D-test',
+      notes: [
+        { pitch: 62, beatStart: 0, duration: 0.5 },
+        { pitch: 64, beatStart: 0.5, duration: 0.5 },
+        { pitch: 65, beatStart: 1, duration: 0.5 },
+        { rest: true, beatStart: 1.5, duration: 0.5 },
+        { pitch: 67, beatStart: 2, duration: 0.5 },
+        { pitch: 65, beatStart: 2.5, duration: 0.5 },
+        { pitch: 64, beatStart: 3, duration: 0.5 },
+        { pitch: 62, beatStart: 3.5, duration: 0.5 },
+      ],
+      noteCount: 7,
+      beats: 4,
+      source: 'test',
+    };
+    const first = sliceLick(lick4, 0, 2);
+    const second = sliceLick(lick4, 2, 2);
+    expect(first.beats).toBe(2);
+    expect(second.beats).toBe(2);
+    expect(first.notes.length).toBe(4); // 3 pitched + 1 rest
+    expect(second.notes.length).toBe(4);
+    expect(first.noteCount).toBe(3);
+    expect(second.noteCount).toBe(4);
+    expect(second.notes[0].beatStart).toBe(0); // was 2
+    expect(second.notes[3].beatStart).toBe(1.5); // was 3.5
+  });
+
+  // 3-chord spanning (8-beat lick on 2+2+4 chords → sliced at 0, 2, 4)
+  it('supports 3-chord spanning via successive slices', () => {
+    const s1 = sliceLick(lick8, 0, 2);
+    const s2 = sliceLick(lick8, 2, 2);
+    const s3 = sliceLick(lick8, 4, 4);
+    expect(s1.beats).toBe(2);
+    expect(s2.beats).toBe(2);
+    expect(s3.beats).toBe(4);
+    expect(s1.noteCount + s2.noteCount + s3.noteCount).toBe(15); // 4+3+8 (rest in s2 excluded)
   });
 });
