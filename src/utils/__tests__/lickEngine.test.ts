@@ -20,7 +20,7 @@ import {
   getIiVTransposeSemitones,
   sliceLick,
 } from '../lickEngine';
-import { MODE_TEMPLATES } from '../../constants';
+import { MODE_TEMPLATES, NOTE_TO_SEMI } from '../../constants';
 import { resolveMode } from '../noteSpelling';
 import { buildFretMap, generatePositions } from '../fretboard';
 import { buildNotePool } from '../lickEngine';
@@ -122,19 +122,19 @@ describe('inferRhythmType', () => {
 });
 
 describe('getTransposeSemitones', () => {
-  it('dom7: G root (7) stored, target C (0) → -7', () => {
-    expect(getTransposeSemitones('7', 0)).toBe(-7);
+  it('licks stored at C root, target C (0) → 0', () => {
+    expect(getTransposeSemitones('7', 0)).toBe(0);
   });
 
-  it('dom7: G root (7) stored, target G (7) → 0', () => {
-    expect(getTransposeSemitones('7', 7)).toBe(0);
+  it('licks stored at C root, target G (7) → +7', () => {
+    expect(getTransposeSemitones('7', 7)).toBe(7);
   });
 
-  it('min7: D root (2) stored, target A (9) → +7', () => {
-    expect(getTransposeSemitones('m7', 9)).toBe(7);
+  it('licks stored at C root, target A (9) → +9', () => {
+    expect(getTransposeSemitones('m7', 9)).toBe(9);
   });
 
-  it('maj7: C root (0) stored, target F (5) → +5', () => {
+  it('licks stored at C root, target F (5) → +5', () => {
     expect(getTransposeSemitones('maj7', 5)).toBe(5);
   });
 });
@@ -422,17 +422,13 @@ describe('detectIiVPattern', () => {
 
   it('detects major ii-V in all 12 keys', () => {
     // ii-V pairs for all keys: ii root = key + 2 semitones, V root = key + 7 semitones
-    const ROOTS_SEMI: Record<string, number> = {
-      'C': 0, 'D♭': 1, 'D': 2, 'E♭': 3, 'E': 4, 'F': 5,
-      'G♭': 6, 'G': 7, 'A♭': 8, 'A': 9, 'B♭': 10, 'B': 11,
-    };
-    const ROOT_NAMES = Object.keys(ROOTS_SEMI);
+    const ROOT_NAMES = Object.keys(NOTE_TO_SEMI).filter(k => !k.includes('#'));
     for (const keyRoot of ROOT_NAMES) {
-      const keySemi = ROOTS_SEMI[keyRoot];
+      const keySemi = NOTE_TO_SEMI[keyRoot];
       const iiSemi = (keySemi + 2) % 12;
       const vSemi = (keySemi + 7) % 12;
-      const iiName = ROOT_NAMES.find(r => ROOTS_SEMI[r] === iiSemi)!;
-      const vName = ROOT_NAMES.find(r => ROOTS_SEMI[r] === vSemi)!;
+      const iiName = ROOT_NAMES.find(r => NOTE_TO_SEMI[r] === iiSemi)!;
+      const vName = ROOT_NAMES.find(r => NOTE_TO_SEMI[r] === vSemi)!;
       const chords = [
         { quality: 'm7', rootName: iiName },
         { quality: '7', rootName: vName },

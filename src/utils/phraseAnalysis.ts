@@ -1,4 +1,5 @@
 import type { GeneratedPhrase, Mode, PhraseNote, NoteAnalysis, PhraseAnalysis, PhraseAnalysisSummary, ApproachType } from '../types';
+import { CHROMATIC_DEGREE, NOTE_TO_SEMI } from '../constants';
 import { absolutePitch } from './lickEngine';
 
 // ---------------------------------------------------------------------------
@@ -21,23 +22,12 @@ function intervalLabel(semitones: number, direction: 'up' | 'down' | 'unison'): 
 // Scale degree computation
 // ---------------------------------------------------------------------------
 
-/** Chromatic degree labels indexed by semitone distance from root */
-const CHROMATIC_DEGREE: Record<number, string> = {
-  0: '1', 1: '♭2', 2: '2', 3: '♭3', 4: '3', 5: '4',
-  6: '♭5', 7: '5', 8: '♭6', 9: '6', 10: '♭7', 11: '7',
-};
-
 function getScaleDegree(noteName: string, mode: Mode): string {
   // In-scale notes use mode.degrees directly
   if (mode.degrees[noteName]) return mode.degrees[noteName];
   // Chromatic notes: compute from root semitone
   const rootSemi = mode.semi[0];
-  const SEMI_MAP: Record<string, number> = {
-    'C': 0, 'D♭': 1, 'D': 2, 'E♭': 3, 'E': 4, 'F': 5,
-    'G♭': 6, 'G': 7, 'A♭': 8, 'A': 9, 'B♭': 10, 'B': 11,
-    'C#': 1, 'D#': 3, 'F#': 6, 'G#': 8, 'A#': 10,
-  };
-  const noteSemi = SEMI_MAP[noteName];
+  const noteSemi = NOTE_TO_SEMI[noteName];
   if (noteSemi === undefined) return 'chr.';
   const interval = ((noteSemi - rootSemi) + 12) % 12;
   return CHROMATIC_DEGREE[interval] ?? 'chr.';

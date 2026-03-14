@@ -2,7 +2,7 @@ import type {
   LickDB, LickEntry, LickNote, PoolNote, PhraseNote,
   GeneratedPhrase, RhythmType, Mode, Position, FretMap,
 } from '../types';
-import { MODE_TEMPLATES, OPEN_STRINGS } from '../constants';
+import { MODE_TEMPLATES, OPEN_STRINGS, CHROMATIC_NAMES, NOTE_TO_SEMI } from '../constants';
 import { QUALITY_TO_MODES } from './progression';
 import { resolveMode } from './noteSpelling';
 import { buildFretMap, generatePositions, generateDimPositions } from './fretboard';
@@ -54,7 +54,7 @@ export function buildNotePool(
           const allScaleSemis = new Set(mode.semi);
           if (!allScaleSemis.has(semi)) {
             seen.add(key);
-            const CHROMATIC_NAMES = ['C', 'D♭', 'D', 'E♭', 'E', 'F', 'G♭', 'G', 'A♭', 'A', 'B♭', 'B'];
+
             pool.push({ noteName: CHROMATIC_NAMES[semi], stringIdx: s, fret, semitone: semi, isChordTone: false, isApproach: true });
           }
         }
@@ -98,16 +98,9 @@ export const SOURCE_DISPLAY_NAMES: Record<string, string> = {
   wes: 'Wes Montgomery',
 };
 
-/** Root semitone values for each lick type (what key licks are stored in) */
-const TYPE_ROOT_SEMITONE: Record<string, number> = {
-  'dom7': 7,    // G (G7)
-  'min7': 2,    // D (Dm7)
-  'maj7': 0,    // C (Cmaj7)
-  'm7b5': 2,    // D (Dm7b5)
-  'maj-ii-v-short': 0,  // C (ii-V in C major)
-  'maj-ii-v-long': 0,
-  'min-ii-v-short': 0,
-};
+/** Lick DB stores all pitches relative to C root (semitone 0).
+ *  parse_licks.py already transposes from the performance key to C.
+ *  So transposition to a target chord = just targetRootSemitone. */
 
 // ---------------------------------------------------------------------------
 // DB loading
@@ -187,7 +180,7 @@ function mapPitchToFret(
   }
 
   // Fallback: calculate fret on each string, pick best
-  const CHROMATIC_NAMES = ['C', 'D♭', 'D', 'E♭', 'E', 'F', 'G♭', 'G', 'A♭', 'A', 'B♭', 'B'];
+
   const semitone = ((midiPitch % 12) + 12) % 12;
   const noteName = CHROMATIC_NAMES[semitone];
 
@@ -323,26 +316,17 @@ export function inferModeFromLick(
   if (!candidates || candidates.length === 0) return 0;
   if (candidates.length === 1) return candidates[0];
 
-  // Get the lick's stored root semitone
-  const lickType = QUALITY_TO_LICK_TYPE[quality] ?? quality;
-  const storedRootSemitone = TYPE_ROOT_SEMITONE[lickType] ?? 0;
-  const transposeSemitones = targetRootSemitone - storedRootSemitone;
-
   // Extract pitch classes from lick (transposed to target key)
   const pitchClasses = new Set<number>();
   for (const n of lick.notes) {
     if (n.rest || n.pitch == null) continue;
-    pitchClasses.add(((n.pitch + transposeSemitones) % 12 + 12) % 12);
+    pitchClasses.add(((n.pitch + targetRootSemitone) % 12 + 12) % 12);
   }
 
   // Score each candidate mode by how many lick pitch classes are in the scale
-  const ROOTS_MAP: Record<string, number> = {
-    'C': 0, 'D♭': 1, 'D': 2, 'E♭': 3, 'E': 4, 'F': 5,
-    'G♭': 6, 'G': 7, 'A♭': 8, 'A': 9, 'B♭': 10, 'B': 11,
-  };
 
   // Find root name from target semitone
-  const CHROMATIC_NAMES = ['C', 'D♭', 'D', 'E♭', 'E', 'F', 'G♭', 'G', 'A♭', 'A', 'B♭', 'B'];
+
   const rootName = CHROMATIC_NAMES[targetRootSemitone % 12];
 
   let bestIdx = candidates[0];
@@ -350,7 +334,7 @@ export function inferModeFromLick(
 
   for (const modeIdx of candidates) {
     const template = MODE_TEMPLATES[modeIdx];
-    const scaleSemis = new Set(template.semi.map(s => (s + (ROOTS_MAP[rootName] ?? 0)) % 12));
+    const scaleSemis = new Set(template.semi.map(s => (s + (NOTE_TO_SEMI[rootName] ?? 0)) % 12));
     let score = 0;
     for (const pc of pitchClasses) {
       if (scaleSemis.has(pc)) score++;
@@ -374,10 +358,6 @@ export function inferModeCandidates(
   const candidates = QUALITY_TO_MODES[quality];
   if (!candidates || candidates.length === 0) return [];
 
-  const lickType = QUALITY_TO_LICK_TYPE[quality] ?? quality;
-  const storedRootSemitone = TYPE_ROOT_SEMITONE[lickType] ?? 0;
-  const transposeSemitones = targetRootSemitone - storedRootSemitone;
-
   // Compute average duration for weighting
   const pitched = lick.notes.filter(n => !n.rest && n.pitch != null);
   if (pitched.length === 0) return candidates.slice(0, 3).map(m => ({ modeIdx: m, score: 0, total: 0 }));
@@ -385,7 +365,7 @@ export function inferModeCandidates(
 
   // Precompute per-note weight and pitch class
   const noteData = pitched.map(n => {
-    const pc = ((n.pitch! + transposeSemitones) % 12 + 12) % 12;
+    const pc = ((n.pitch! + targetRootSemitone) % 12 + 12) % 12;
     const onBeat = Number.isInteger(n.beatStart);
     const longNote = n.duration >= avgDur;
     const w = (onBeat ? 2 : 1) * (longNote ? 2 : 1);
@@ -393,13 +373,9 @@ export function inferModeCandidates(
   });
   const totalWeight = noteData.reduce((s, d) => s + d.w, 0);
 
-  const CHROMATIC_NAMES = ['C', 'D♭', 'D', 'E♭', 'E', 'F', 'G♭', 'G', 'A♭', 'A', 'B♭', 'B'];
+
   const rootName = CHROMATIC_NAMES[targetRootSemitone % 12];
-  const ROOTS_MAP: Record<string, number> = {
-    'C': 0, 'D♭': 1, 'D': 2, 'E♭': 3, 'E': 4, 'F': 5,
-    'G♭': 6, 'G': 7, 'A♭': 8, 'A': 9, 'B♭': 10, 'B': 11,
-  };
-  const rootOffset = ROOTS_MAP[rootName] ?? 0;
+  const rootOffset = NOTE_TO_SEMI[rootName] ?? 0;
 
   const scored = candidates.map(modeIdx => {
     const scaleSemis = new Set(MODE_TEMPLATES[modeIdx].semi.map(s => (s + rootOffset) % 12));
@@ -618,11 +594,9 @@ export function sliceLick(lick: LickEntry, offset: number, beats: number): LickE
 // Full pipeline: chord → transposed lick → GeneratedPhrase
 // ---------------------------------------------------------------------------
 
-/** Compute transposition semitones from lick's stored key to target chord root. */
-export function getTransposeSemitones(quality: string, targetRootSemitone: number): number {
-  const lickType = QUALITY_TO_LICK_TYPE[quality] ?? quality;
-  const storedRootSemitone = TYPE_ROOT_SEMITONE[lickType] ?? 0;
-  return targetRootSemitone - storedRootSemitone;
+/** Compute transposition semitones from lick's stored key (C root) to target chord root. */
+export function getTransposeSemitones(_quality: string, targetRootSemitone: number): number {
+  return targetRootSemitone;
 }
 
 /** Compute transposition semitones for ii-V lick.
@@ -724,12 +698,8 @@ export function detectIiVPattern(
   const V = chords[idx + 1];
   if (!DOM7_QUALITIES.has(V.quality)) return null;
 
-  const ROOTS_SEMI: Record<string, number> = {
-    'C': 0, 'D♭': 1, 'D': 2, 'E♭': 3, 'E': 4, 'F': 5,
-    'G♭': 6, 'G': 7, 'A♭': 8, 'A': 9, 'B♭': 10, 'B': 11,
-  };
-  const iiRoot = ROOTS_SEMI[ii.rootName];
-  const vRoot = ROOTS_SEMI[V.rootName];
+  const iiRoot = NOTE_TO_SEMI[ii.rootName];
+  const vRoot = NOTE_TO_SEMI[V.rootName];
   if (iiRoot == null || vRoot == null) return null;
 
   // ii root should be P5 (7 semitones) above V root (e.g., Dm7→G7: D-G = 7)

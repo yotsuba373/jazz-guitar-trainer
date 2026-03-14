@@ -2,6 +2,22 @@ import type { ModeTemplate, RootName } from '../types';
 
 export const OPEN_STRINGS: number[] = [4, 11, 7, 2, 9, 4]; // 1E, 2B, 3G, 4D, 5A, 6E
 
+/** Chromatic note names indexed by semitone (0=C .. 11=B), using flats */
+export const CHROMATIC_NAMES = ['C', 'D♭', 'D', 'E♭', 'E', 'F', 'G♭', 'G', 'A♭', 'A', 'B♭', 'B'] as const;
+
+/** Note name → semitone lookup (includes sharp aliases) */
+export const NOTE_TO_SEMI: Record<string, number> = {
+  'C': 0, 'D♭': 1, 'D': 2, 'E♭': 3, 'E': 4, 'F': 5,
+  'G♭': 6, 'G': 7, 'A♭': 8, 'A': 9, 'B♭': 10, 'B': 11,
+  'C#': 1, 'D#': 3, 'F#': 6, 'G#': 8, 'A#': 10,
+};
+
+/** Chromatic degree labels indexed by semitone distance from root (0='R') */
+export const CHROMATIC_DEGREE: Record<number, string> = {
+  0: 'R', 1: '♭2', 2: '2', 3: '♭3', 4: '3', 5: '4',
+  6: '♭5', 7: '5', 8: '♭6', 9: '6', 10: '♭7', 11: '7',
+};
+
 export const STR_LABELS: string[] = ['e', 'B', 'G', 'D', 'A', 'E'];
 
 export const MODE_TEMPLATES: ModeTemplate[] = [

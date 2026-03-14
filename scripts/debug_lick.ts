@@ -8,7 +8,7 @@
  */
 
 import { buildFretMap, generatePositions, generateDimPositions } from '../src/utils/fretboard';
-import { MODE_TEMPLATES, ROOTS } from '../src/constants/music';
+import { MODE_TEMPLATES, ROOTS, CHROMATIC_NAMES } from '../src/constants/music';
 import {
   buildNotePool, absolutePitch,
   selectBestInstance, mapLickToFretboard, hasAlternateOctave,
@@ -32,20 +32,8 @@ if (!lickId) {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-const MIDI_NAMES = ['C', 'D♭', 'D', 'E♭', 'E', 'F', 'G♭', 'G', 'A♭', 'A', 'B♭', 'B'];
 const ROOTS_SEMI: Record<string, number> = {};
 ROOTS.forEach(r => { ROOTS_SEMI[r.name] = r.semitone; });
-
-/** dom7→G(7), min7→D(2), maj7→C(0), m7b5→D(2) */
-const TYPE_ROOT_SEMI: Record<string, number> = {
-  dom7: 7, min7: 2, maj7: 0, m7b5: 2,
-  'maj-ii-v-short': 0, 'maj-ii-v-long': 0, 'min-ii-v-short': 0,
-};
-
-function getTransposeSemitones(lickType: string, targetRootSemi: number): number {
-  const storedRoot = TYPE_ROOT_SEMI[lickType] ?? 0;
-  return targetRootSemi - storedRoot;
-}
 
 function analyzeMapping(
   label: string,
@@ -90,7 +78,7 @@ function analyzeCoverages(
     }
     const viable = cov >= total * 0.5 ? 'VIABLE' : '';
     const missedStr = missed.length > 0
-      ? `  missed: [${[...new Set(missed)].sort((a,b) => a-b).map(m => `${MIDI_NAMES[((m%12)+12)%12]}(${m})`)}]`
+      ? `  missed: [${[...new Set(missed)].sort((a,b) => a-b).map(m => `${CHROMATIC_NAMES[((m%12)+12)%12]}(${m})`)}]`
       : '';
     console.log(`  shift ${shift >= 0 ? '+' : ''}${shift}: cov=${cov}/${total} ${viable}`);
     if (missedStr) console.log(`  ${missedStr}`);
@@ -123,7 +111,7 @@ async function main() {
   const pitched = lick.notes.filter(n => !n.rest && n.pitch != null);
   console.log(`=== Lick: ${lickId} (type: ${lickType}) ===`);
   console.log(`Notes: ${pitched.length}, Beats: ${lick.beats}`);
-  console.log(`Pitches: [${pitched.map(n => `${MIDI_NAMES[((n.pitch!%12)+12)%12]}(${n.pitch})`)}]`);
+  console.log(`Pitches: [${pitched.map(n => `${CHROMATIC_NAMES[((n.pitch!%12)+12)%12]}(${n.pitch})`)}]`);
   console.log(`Range: MIDI ${Math.min(...pitched.map(n=>n.pitch!))} - ${Math.max(...pitched.map(n=>n.pitch!))}`);
 
   // --- Mode: auto or specified ---
@@ -135,8 +123,9 @@ async function main() {
       dom7: '7', min7: 'm7', maj7: 'maj7', m7b5: 'm7♭5',
     };
     const quality = qualityMap[lickType] ?? '7';
-    const rootSemi = TYPE_ROOT_SEMI[lickType] ?? 0;
-    const rootName = ROOTS.find(r => r.semitone === rootSemi)?.name ?? 'C';
+    // Licks are stored at C root (semitone 0)
+    const rootSemi = 0;
+    const rootName = 'C';
 
     for (const altOct of [false, true]) {
       for (const hiInst of [false, true]) {
@@ -173,10 +162,10 @@ async function main() {
     ? generateDimPositions(fm, modeObj.semi[0])
     : generatePositions(fm, modeObj.notes);
 
-  const transposeSemitones = getTransposeSemitones(lickType, rootSemi);
+  const transposeSemitones = rootSemi;  // licks stored at C root
   console.log(`\nRoot: ${root} (semi=${rootSemi}), Mode: ${modeName}`);
   console.log(`TransposeSemitones: ${transposeSemitones}`);
-  console.log(`Transposed pitches: [${pitched.map(n => `${MIDI_NAMES[(((n.pitch!+transposeSemitones)%12)+12)%12]}(${n.pitch!+transposeSemitones})`)}]`);
+  console.log(`Transposed pitches: [${pitched.map(n => `${CHROMATIC_NAMES[(((n.pitch!+transposeSemitones)%12)+12)%12]}(${n.pitch!+transposeSemitones})`)}]`);
 
   const targetPositions = posId != null
     ? positions.filter(p => p.id === posId)

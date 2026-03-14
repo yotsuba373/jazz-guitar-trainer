@@ -1,4 +1,5 @@
 import type { GeneratedPhrase, NoteAnalysis, PhraseNote, RhythmType } from '../../types';
+import { CHROMATIC_NAMES } from '../../constants';
 import { absolutePitch } from '../../utils/lickEngine';
 
 interface PianoRollProps {
@@ -61,10 +62,9 @@ export function PianoRoll({ phrase, noteAnalysis }: PianoRollProps) {
   const yScale = (pitch: number) => margin.top + (maxPitch + 1 - pitch) * rowH;
 
   // Note name from MIDI-like pitch
-  const CHROMATIC = ['C', 'D♭', 'D', 'E♭', 'E', 'F', 'G♭', 'G', 'A♭', 'A', 'B♭', 'B'];
   const pitchName = (p: number) => {
     const oct = Math.floor(p / 12) - 1;
-    return `${CHROMATIC[p % 12]}${oct}`;
+    return `${CHROMATIC_NAMES[p % 12]}${oct}`;
   };
 
   return (

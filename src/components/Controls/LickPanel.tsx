@@ -1,8 +1,8 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import type { LickEntry } from '../../types';
 import type { IiVDetection } from '../../utils';
-import { SOURCE_DISPLAY_NAMES, inferModeCandidates, QUALITY_TO_LICK_TYPE, isIiVLickId, getIiVTransposeSemitones } from '../../utils';
-import { MODE_TEMPLATES, MODE_COLORS } from '../../constants';
+import { SOURCE_DISPLAY_NAMES, inferModeCandidates, isIiVLickId, getIiVTransposeSemitones } from '../../utils';
+import { MODE_TEMPLATES, MODE_COLORS, CHROMATIC_NAMES, CHROMATIC_DEGREE } from '../../constants';
 
 /** Tiny SVG contour preview of a lick's melody */
 function LickContourMini({ notes, selected }: { notes: LickEntry['notes']; selected: boolean }) {
@@ -36,17 +36,6 @@ function LickContourMini({ notes, selected }: { notes: LickEntry['notes']; selec
   );
 }
 
-/** Root semitone values for each lick type (what key licks are stored in) */
-const TYPE_ROOT_SEMITONE: Record<string, number> = {
-  'dom7': 7, 'min7': 2, 'maj7': 0, 'm7b5': 2,
-  'maj-ii-v-short': 0, 'maj-ii-v-long': 0, 'min-ii-v-short': 0,
-};
-
-const CHROMATIC_DEGREE: Record<number, string> = {
-  0: 'R', 1: '♭2', 2: '2', 3: '♭3', 4: '3', 5: '4',
-  6: '♭5', 7: '5', 8: '♭6', 9: '6', 10: '♭7', 11: '7',
-};
-const CHROMATIC_NAMES = ['C','D♭','D','E♭','E','F','G♭','G','A♭','A','B♭','B'];
 
 /** ii-V type display badge */
 const IIV_BADGE: Record<string, { label: string; color: string }> = {
@@ -124,9 +113,7 @@ export function LickPanel({
       const modeKeys = modes.map(m => MODE_TEMPLATES[m.modeIdx].key);
 
       // For degree/note display, ii-V licks use keyCenterSemitone for transposition
-      const lt = isIiV ? iiVType! : (QUALITY_TO_LICK_TYPE[quality] ?? quality);
-      const storedRoot = TYPE_ROOT_SEMITONE[lt] ?? 0;
-      const transpose = isIiV && iiV ? getIiVTransposeSemitones(iiV.keyCenterSemitone) : (rootSemitone - storedRoot);
+      const transpose = isIiV && iiV ? getIiVTransposeSemitones(iiV.keyCenterSemitone) : rootSemitone;
       const degRef = isIiV && vChordRootSemitone != null ? vChordRootSemitone : rootSemitone;
 
       const pitched = lick.notes.filter(n => !n.rest && n.pitch != null);
