@@ -4,6 +4,7 @@ import type { SelectedBeatInfo } from './ChordChart';
 import { ROOTS } from '../../constants';
 import { parseChordSymbol, buildChordSlot, suggestMode, displayChordName, PRESET_PROGRESSIONS, removeChordFromLayout, computeInsertFlatIndex, insertChordAtBeat, deriveChartLayout, splitSection, mergeSections, splitEndings, removeEndings, renameSection, findChordMeasure, adjustEndingSplit, splitSectionAtEnding, insertEmptyMeasure } from '../../utils';
 import { SongImporter } from './SongImporter';
+import { ChordAutocomplete } from '../Controls';
 
 interface ProgressionEditorProps {
   progressions: Progression[];
@@ -628,12 +629,12 @@ export function ProgressionEditor({
             const inputDisabled = !hasTarget;
             return (
               <>
-                <input
-                  ref={inputRef}
-                  type="text"
+                <ChordAutocomplete
+                  inputRef={inputRef}
                   value={input}
-                  onChange={e => { setInput(e.target.value); setError(''); }}
-                  onKeyDown={e => { if (e.key === 'Enter') handleSubmit(); if (e.key === 'Escape') cancelEdit(); }}
+                  onChange={v => { setInput(v); setError(''); }}
+                  onSubmit={handleSubmit}
+                  onCancel={cancelEdit}
                   disabled={inputDisabled}
                   placeholder={emptyTarget ? `${emptyTarget.beat}拍目に挿入` : insertBeat != null ? `${insertBeat}拍目に挿入` : isEditing ? `コード #${editIdx! + 1} を編集` : 'グリッドの + を選択'}
                   className="bg-[#111] rounded text-[11px] font-mono px-2 py-1 w-32"

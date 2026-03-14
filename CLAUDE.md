@@ -80,7 +80,7 @@ src/
 │       └── lickEngine.test.ts       — 61 tests (リックDB読込・移調・指板マッピング・モード推定・ポジション選択・インスタンス選択・8音スケール・GeneratedPhrase変換・ii-V検出・sliceLick汎用分割)
 └── components/
     ├── Fretboard/                   — SVG指板描画 (Fretboard, FretboardNote, GhostNote, PhrasePath)
-    ├── Controls/                    — RootSelector, ModeSelector, PositionSelector, OptionBar, VoicingGrid, PhraseAnalysisPanel, PianoRoll, GlobalAudioControls, LickPanel
+    ├── Controls/                    — RootSelector, ModeSelector, PositionSelector, OptionBar, VoicingGrid, PhraseAnalysisPanel, PianoRoll, GlobalAudioControls, LickPanel, ChordAutocomplete
     ├── Footer.tsx
     ├── PositionDetail.tsx           — (未使用: モード説明セクションに置換済み)
     ├── PositionGrid.tsx
@@ -304,6 +304,16 @@ const songMetRef = useRef([]);        // 曲再生メトロノームの予約済
 
 自動再生中の音声: コードストラム + 各コードに保存されたリック (`ChordSlot.lickId`) を自動再生。ルールベースフレーズ生成は削除済み。
 
+### カウントイン
+
+再生開始前にメトロノームクリックでテンポを提示。「停止→再生」時のみ発動 (auto-advance 中は鳴らない)。
+
+- `countInEnabled` / `countInBars` (1 or 2) / `countInVolume` — 全て localStorage 永続化
+- ON/OFF + 小節数はミキサー内ボタンのサイクル切替: `2小節 → OFF → 1小節 → 2小節 → ...`
+- カウントイン中は `isCountingIn = true` → auto-advance effect 早期リターン + `activePhrase = null` (フレーズ表示抑制)
+- タイマー完了時に `chordStartRef = performance.now()` をセットしてから `setIsCountingIn(false)` → effect 再実行時 `isPlaybackStart = false` で再カウントインを防止
+- 停止時は `stopCountIn()` で予約済みクリック音を即座に停止
+
 ---
 
 ## メトロノーム (`App.tsx`)
@@ -357,6 +367,9 @@ function playClick(accent: boolean, ctx: AudioContext, volume: number, at?: numb
 | 楽器 | `instrument` | `phraseInstrument` | 'guitar' | — | 楽器選択 (guitar/saxophone) |
 | スウィング | `swingEnabled` | `swingEnabled` | false | — | ON/OFFトグル |
 | スウィング量 | `swingAmount` | `swingAmount` | 0.2 | — | 0-1 (デフォルト20%) |
+| カウントイン | `countInEnabled` | `countInEnabled` | true | サイクル切替 | ON/OFF + 小節数 |
+| カウントイン音量 | `countInVolume` | `countInVolume` | 0.5 | volume=0 | `playClick()` |
+| カウントイン小節 | `countInBars` | `countInBars` | 2 | — | 1 or 2 |
 
 - 各チャンネルにミュートボタン: メトロノーム/単音は volume 0⇔復元、コードは `chordAudioOn` トグル
 - タップテンポ: TAPボタン連続タップでBPM設定 (直近8タップ平均、2秒リセット)
@@ -438,7 +451,7 @@ Footer
 - ラベル切替（音名/度数）、コード記法プリファレンス (M7/maj7/△7 等)
 - モード説明セクション: スケール音・コード構成音・フレーバーテキスト（常時表示、Fretboard 下）
 - 2モード: 辞典モード (スケール/ポジション閲覧) + 練習モード (コード進行+リック練習)
-- コード進行: 作成・編集・保存・複製 (localStorage)、近接ポジション提案、キーボードナビ、コードインライン編集、chartLayout差分更新保持、「+ 小節」→ビートグリッド挿入フロー (追加ボタン廃止)、空小節 × 削除、選択ビートハイライト
+- コード進行: 作成・編集・保存・複製 (localStorage)、近接ポジション提案、キーボードナビ、コードインライン編集、chartLayout差分更新保持、「+ 小節」→ビートグリッド挿入フロー (追加ボタン廃止)、空小節 × 削除、選択ビートハイライト、**コード入力オートコンプリート** (ルート+品質サジェスト、↑↓/Enter/Tab/Esc操作、parseChordSymbol検証)
 - ガイドトーン (3rd/7th) 表示: 辞典モード (現モードのみ) + 練習モード (次コード3rd+解決分類)
 - JazzStandards インポート (1382曲)
 - iReal Pro 風譜面: セクションラベル、エンディング、リピート、ビート比例幅
@@ -454,6 +467,7 @@ Footer
 - リック練習UI (練習モード): ChordChart直下の折りたたみパネル (LickPanel) にコード品質に合うリック一覧表示、安定ID(署名ハッシュ)+SVGコンター+音数/拍数+開始・終了度数&実音名+ソース名+モード候補(最大3, MODE_COLORSカラー)、テキスト検索(モード名・度数も対象)、選択→指板表示+自動再生、モード/ポジション自動推定、分析パネル対応、**リック選択をChordSlotに永続化** (lickId+lickHighOctave+lickHighInstance→コード切替時復元+進行再生時自動再生)、**8va** (同一インスタンス内オクターブ上)・**Hi** (ハイポジションインスタンス切替) 独立トグル。ルールベースフレーズ生成は削除済み (リック練習に一本化)
 - **リックオーバーフロー分割**: リックの拍数がコードの拍数を超える場合、`sliceLick()` でコード拍境界で分割し後続コードに連鎖割当 (`ChordSlot.lickBeatOffset`)。ii-V リックも通常リックも同じロジックで処理。3コード以上の跨ぎにも対応。先頭コードクリア時は全継続コードも連動クリア
 - **ii-V リック対応**: `detectIiVPattern()` で連続コード (m7→7) の ii-V パターンを検出。ii コード選択時に ii-V タイプのリック (`maj-ii-v-short`, `maj-ii-v-long`, `min-ii-v-short`) を表示
+- **カウントイン**: 再生開始前に1-2小節クリック、音量調節可、サイクル切替 (2小節→OFF→1小節→2小節)、localStorage 永続化
 - **表示倍率スライダー**: 画面右下固定、CSS `zoom` で100-150% (1%刻み)、localStorage 永続化、リセットボタン付き
 
 ---
