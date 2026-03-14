@@ -49,7 +49,13 @@ export function PositionSelector({
                 color: active ? '#FFF' : c,
                 fontWeight: active ? 700 : 400,
               }}
-            >Pos {p.id}</button>
+            >Pos {p.id}
+              {p.instances[0] && (
+                <span className="ml-1 opacity-60">
+                  (f{p.instances[0].fretMin}-{p.instances[0].fretMax})
+                </span>
+              )}
+            </button>
           );
         })}
 

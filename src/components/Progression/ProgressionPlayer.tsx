@@ -150,6 +150,15 @@ export function ProgressionPlayer({
                         fontWeight: isActive ? 700 : 400,
                       }}>
                       Pos {posId}
+                      {(() => {
+                        const pos = allPos.find(p => p.id === posId);
+                        const inst = pos?.instances[0];
+                        return inst ? (
+                          <span className="ml-1 opacity-60">
+                            (f{inst.fretMin}-{inst.fretMax})
+                          </span>
+                        ) : null;
+                      })()}
                     </button>
                   );
                 })}
