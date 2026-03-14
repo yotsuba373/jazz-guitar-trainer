@@ -304,22 +304,39 @@ const playPosRef = useRef(0);        // playbackSeq 内の現在位置
 
 ### 音生成 (`playClick`)
 
-Web Audio API で単発クリック音を生成。外部依存なし。
+Web Audio API で単発クリック音を生成。外部依存なし。`at` パラメータで Web Audio タイムスタンプ指定可。
 
 ```typescript
-function playClick(accent: boolean, ctx: AudioContext, volume: number) {
+function playClick(accent: boolean, ctx: AudioContext, volume: number, at?: number): OscillatorNode {
   // accent=true: 1200Hz (小節頭アクセント), false: 800Hz (通常クリック)
-  // gain: accent ? volume * 3 : volume * 1.5  (gain > 1.0 で十分な音量)
+  // gain: accent ? volume * 1.5 : volume * 1.0
+  // returns OscillatorNode (プレビューメトロノームのクリーンアップ用)
 }
 ```
 
-### タイミング
+### メトロノーム自動再生 (ボタン廃止)
 
-- 進行モード再生中: ビートグリッド同期 (累積拍から次拍を計算)
-- 通常モード / 非再生時: 単純な `setInterval(60000 / bpm)` でクリック
-- `metBeatRef.current % 4 === 0` でアクセント判定 (小節頭 = 4拍ごと)
-- `metSyncKey` インクリメントで effect 再起動 → リック再生開始と同期
-- `metVolumeRef` (useRef) を通じて volume 変更を setInterval 再起動なしに反映
+`isMetronomeOn` state は廃止。メトロノームは以下の条件で自動的に鳴る:
+- **進行モード自動再生中**: `isPlaying && metVolume > 0` → setInterval でビートグリッド同期
+- **フレーズプレビュー再生中**: phrase-start effect で全クリックを Web Audio タイムラインに一括予約 (`previewMetRef`)
+
+### フレーズプレビュー同期アーキテクチャ
+
+フレーズ・コードストラム・メトロノームの完全同期を保証する2段階設計:
+
+1. **`playPhraseAudio()`** — 音声をスケジュールせず `pendingPhraseRef` にパラメータを保存、state 更新のみ
+2. **phrase-start effect** — React レンダー完了後に起動、`ctx.currentTime` を1回取得し全音声を同一タイムスタンプで予約:
+   - `schedulePhrase(ctx, phrase, startAt, ...)` — フレーズ音声
+   - `playChordStrum(ctx, notes, vol, startAt)` — コードストラム (両モード対応、ii-V の V コード切替にも対応)
+   - `playClick(accent, ctx, vol, startAt + b * beatSec)` × 全拍 — メトロノーム全クリック一括予約
+
+全て `OscillatorNode.start(t)` で Web Audio スケジューラに予約されるため、JS イベントループや React レンダー遅延に一切依存しない。
+停止時は `stopPreviewMetronome()` で予約済み OscillatorNode を全て `.stop()` しリソースリーク防止。
+
+### ストラム分離 (`activeStrumRef` / `previewStrumRef`)
+
+- `activeStrumRef` — 進行モード自動再生用。auto-advance effect が管理・クリーンアップ
+- `previewStrumRef` — フレーズプレビュー用。auto-advance effect の `activeProg` 変更によるクリーンアップの影響を受けない
 
 ### 音量ミキサー (GlobalAudioControls)
 
@@ -335,19 +352,18 @@ function playClick(accent: boolean, ctx: AudioContext, volume: number) {
 | スウィング量 | `swingAmount` | `swingAmount` | 0.2 | — | 0-1 (デフォルト20%) |
 
 - 各チャンネルにミュートボタン: メトロノーム/単音は volume 0⇔復元、コードは `chordAudioOn` トグル
-- メトロノームミュート時はメトロノームボタンもグレーアウト (操作不可)
 - タップテンポ: TAPボタン連続タップでBPM設定 (直近8タップ平均、2秒リセット)
 - 全 state は `useRef` 経由でコールバック内から参照 (再レンダリング不要)
 - パネル外クリックで自動閉じ (`mousedown` リスナー)
 
-### リック再生 (`handlePlayPhrase` / `playPhraseAudio`)
+### リック再生 (`playPhraseAudio`)
 
 リック選択時に自動再生。`▶ Play` / `■ Stop` でトグル再生も可能。
-- テンポ: メトロノーム ON 時は BPM 同期 (`(60/bpm)/2`)、OFF 時は速度スライダー
+- テンポ: 常に BPM 同期 (`(60/bpm)/2`)
 - 音量は `noteVolume` (単音音量) を使用
 - `phraseAnimKey` インクリメントで SVG アニメーションも同時リスタート
 - `schedulePhrase()` で Web Audio API スケジューリング → 自動タイマーで再生完了検出
-- 通常モードで `chordAudioOn` 時、フレーズ再生開始にコードストラムも同時再生
+- `chordAudioOn` 時、フレーズ再生開始にコードストラムも同時再生 (辞典/練習モード両対応)
 
 ### スウィングモード (`swing.ts`)
 

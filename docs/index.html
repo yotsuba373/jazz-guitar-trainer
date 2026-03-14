@@ -348,7 +348,9 @@
     <li><strong>リック練習</strong> — リックDB (MIDI録音) からコード品質に合うリックを選択・再生・練習</li>
     <li><strong>Drop 2/3 ボイシング</strong> — 20テンプレートによるコードフォーム表示</li>
     <li><strong>ガイドトーン表示</strong> — 3rd/7th のボイスリーディング可視化</li>
-    <li><strong>BPM自動再生</strong> — メトロノーム、コード音声、フレーズ再生 (両モード共通)</li>
+    <li><strong>BPM自動再生</strong> — メトロノーム (再生時自動、音量>0で有効)、コード音声、フレーズ再生 (両モード共通)</li>
+    <li><strong>リックお気に入り</strong> — ★ボタンでお気に入り登録、リスト上位にソート、localStorage永続化</li>
+    <li><strong>曲ごとのBPM保存</strong> — 各進行に BPM を保存・復元、曲切替時に自動適用</li>
     <li><strong>スウィングモード</strong> — タイミング+ダイナミクス+アーティキュレーションの多次元スウィング</li>
   </ul>
 </div>
@@ -712,6 +714,14 @@ actualBeats = (beatWidth / sumOfBeatWidths) * 4</pre>
 </table>
 <p>4拍ごと（<code>metBeatRef % 4 === 0</code>）にアクセント。BPM コントローラーとは独立した <code>setInterval</code>。</p>
 
+<div class="callout">
+  <div class="callout-label">メトロノームボタン廃止</div>
+  <p style="margin:4px 0 0">メトロノームの ON/OFF トグルボタン (<code>isMetronomeOn</code>) は廃止されました。
+  メトロノームは再生中 (進行自動再生またはフレーズ再生) かつ <code>metVolume > 0</code> の場合に自動的に鳴ります。
+  <code>GlobalAudioControls</code> から <code>isMetronomeOn</code> / <code>onToggleMetronome</code> props は削除されています。
+  メトロノーム音量スライダーで音量を 0 にすることでミュート可能です。</p>
+</div>
+
 <h2 id="volume-mixer">Volume Mixer</h2>
 <table>
   <tr><th>Channel</th><th>State</th><th>Default</th><th>Target</th></tr>
@@ -722,7 +732,12 @@ actualBeats = (beatWidth / sumOfBeatWidths) * 4</pre>
 </table>
 <p>全て localStorage に永続化。<code>useRef</code> 経由でコールバック内から参照（再レンダリング回避）。
 <code>GlobalAudioControls</code> コンポーネントで練習モードの UI を提供（辞典モードでは非表示）。
-各チャンネルにミュートボタン付き（メトロノーム/コード/単音）。タップテンポ対応（TAPボタン連続タップでBPM設定）。</p>
+各チャンネルにミュートボタン付き（コード/単音、メトロノームは音量0でミュート）。タップテンポ対応（TAPボタン連続タップでBPM設定）。</p>
+
+<h4>フレーズ再生時コードストラム</h4>
+<p><code>playPhraseAudio</code> はフレーズ再生開始時に <code>chordAudioOn</code> であればコードストラムを同時再生します。
+辞典モード・練習モードの両方で動作します。練習モードでは <code>getStrumNotes()</code> で現在のコードのストラム音を取得します。
+ii-V リックの場合、V パートに切り替わるタイミングで V コードのストラムも再生されます。</p>
 
 <h2 id="swing">Swing Mode</h2>
 <p>単一スライダー (0-100%) で制御する多次元スウィング。<code>GlobalAudioControls</code> ドロップダウンパネル内に配置（練習モードのみ表示）。
@@ -882,7 +897,7 @@ Footer</pre>
 
 <h4>練習モード (Practice Mode)</h4>
 <pre>ProgressionEditToolbar (コンパクト2行ツールバー, 編集時のみ)
-GlobalAudioControls (▶/■ + 音量ミキサー, メトロノーム, BPM, タップテンポ, スウィング)
+GlobalAudioControls (▶/■ + 音量ミキサー, BPM, タップテンポ, スウィング)
 ProgressionPlayer (ChordChart + モード/ポジション + VoicingGrid)
 LickPanel (チャート直下, 折りたたみ式, 検索付き)
 OptionBar (CT, ラベル, 記法, ガイドトーン, コードフォーム)
@@ -996,6 +1011,7 @@ interface Progression {
   songKey?: SongKey
   chords: ChordSlot[]
   chartLayout?: ChartLayout
+  bpm?: number              // 曲ごとのBPM保存 (練習モードで変更時に自動保存、曲切替時に復元)
 }</pre>
   </div>
 </details>
@@ -1153,7 +1169,7 @@ GeneratedPhrase
 
 <h3>UIコンポーネント</h3>
 <ul>
-  <li><strong>LickPanel</strong> (<code>src/components/Controls/LickPanel.tsx</code>): ChordChart 直下に折りたたみ式パネルとして配置。ヘッダークリックで展開/折りたたみ。各リックに安定ユニークID + コンターSVG + 音数/拍数 + 開始・終了度数&実音名 + ソース名 + モード候補 (最大3, MODE_COLORS カラー) を表示。選択中リックは左ボーダーでハイライト</li>
+  <li><strong>LickPanel</strong> (<code>src/components/Controls/LickPanel.tsx</code>): ChordChart 直下に折りたたみ式パネルとして配置。ヘッダークリックで展開/折りたたみ。各リックに安定ユニークID + ★お気に入りボタン + コンターSVG + 音数/拍数 + 開始・終了度数&実音名 + ソース名 + モード候補 (最大3, MODE_COLORS カラー) を表示。選択中リックは左ボーダーでハイライト。お気に入りリックはリスト上位にソート (単コード/ii-V グループ内それぞれ)。Props: <code>favorites: Set&lt;string&gt;</code>, <code>onToggleFavorite: (lickId: string) =&gt; void</code></li>
   <li><strong>ii-V セパレーター</strong>: ii コードが選択されており ii-V パターンが検出された場合、単コードリックと ii-V リックの間にセパレーターを表示。各 ii-V リックには種別バッジ (<code>ii-V S</code> / <code>ii-V L</code> / <code>ii-V m</code>) を表示</li>
   <li><strong>検索機能</strong>: テキスト入力でID・アーティスト名・音数・モード名・度数等によるフィルタリング。フィルタ結果件数を表示</li>
 
@@ -1234,6 +1250,8 @@ GeneratedPhrase
   <li>リック選択は <code>ChordSlot.lickId</code> + <code>lickBeatOffset</code> で保存</li>
   <li>オーバーフロー時: 先頭コードに <code>lickBeatOffset: 0</code>、各継続コードに <code>lickBeatOffset: 累積拍数</code> が設定される</li>
   <li>コード切替時に自動復元。先頭コードクリア (✕) 時は全継続コードも連動クリア</li>
+  <li><strong>お気に入り</strong>: <code>lickFavorites: Set&lt;string&gt;</code> を App.tsx で管理。localStorage キー <code>lickFavorites</code> に JSON 配列として永続化。LickPanel の ★ ボタンでトグル。お気に入りリックは一覧の上位にソートされる</li>
+  <li><strong>曲ごとの BPM</strong>: <code>Progression.bpm?: number</code> フィールドに保存。練習モードで BPM を変更すると現在の進行に自動保存。曲を切り替えると保存済み BPM が復元される。初回起動時は最初の進行の保存 BPM を使用</li>
 </ul>
 
 <div class="callout">
@@ -1269,7 +1287,7 @@ GeneratedPhrase
 <!-- Footer -->
 <hr style="border-color: var(--border); margin: 48px 0 24px;">
 <p style="color: var(--text-muted); font-size: 13px;">
-  Jazz Guitar Trainer Documentation — Generated 2026-03-13<br>
+  Jazz Guitar Trainer Documentation — Generated 2026-03-14<br>
   Vite 7 + React 19 + TypeScript 5 + Tailwind CSS v4
 </p>
 

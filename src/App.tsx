@@ -22,17 +22,19 @@ import { PositionGrid } from './components/PositionGrid';
 import { ProgressionEditor, ProgressionPlayer } from './components/Progression';
 import { Footer } from './components/Footer';
 
-function playClick(accent: boolean, ctx: AudioContext, volume: number) {
+function playClick(accent: boolean, ctx: AudioContext, volume: number, at?: number): OscillatorNode {
   if (ctx.state === 'suspended') ctx.resume();
+  const t = at ?? ctx.currentTime;
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
   osc.connect(gain);
   gain.connect(ctx.destination);
   osc.frequency.value = accent ? 1200 : 800;
-  gain.gain.setValueAtTime(accent ? volume * 3 : volume * 1.5, ctx.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.04);
-  osc.start(ctx.currentTime);
-  osc.stop(ctx.currentTime + 0.04);
+  gain.gain.setValueAtTime(accent ? volume * 1.5 : volume * 1.0, t);
+  gain.gain.exponentialRampToValueAtTime(0.001, t + 0.04);
+  osc.start(t);
+  osc.stop(t + 0.04);
+  return osc;
 }
 
 /** Build a flat playback sequence respecting section repeats and volta endings. */
@@ -126,15 +128,13 @@ export default function App() {
   const [activeChordIdx, setActiveChordIdx] = useState(0);
   const [editing, setEditing] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [bpm, setBpm] = useState(120);
-  const [isMetronomeOn, setIsMetronomeOn] = useState(false);
+  const [bpm, setBpm] = useState(() => progressions[0]?.bpm ?? 120);
   const [metVolume, setMetVolume] = useState<number>(() => {
     const saved = parseFloat(localStorage.getItem('metVolume') ?? '');
     return isNaN(saved) ? 0.5 : saved;
   });
   const audioCtxRef = useRef<AudioContext | null>(null);
   const metBeatRef = useRef(0);
-  const [metSyncKey, setMetSyncKey] = useState(0);
   const metVolumeRef = useRef(metVolume);
   // Chord audio state
   const [chordAudioOn, setChordAudioOn] = useState(() => localStorage.getItem('chordAudioOn') === 'true');
@@ -144,8 +144,13 @@ export default function App() {
   });
   const chordVolumeRef = useRef(chordVolume);
   const chordAudioOnRef = useRef(chordAudioOn);
-  const activeStrumRef = useRef<{ stop: () => void } | null>(null);
-  // Drift-free auto-advance: track ideal chord start time + repeat position
+  const activeStrumRef = useRef<{ stop: () => void } | null>(null);   // auto-play strum
+  const previewStrumRef = useRef<{ stop: () => void } | null>(null);  // preview strum (separate to avoid auto-advance cleanup)
+  const previewMetRef = useRef<OscillatorNode[]>([]);                  // pre-scheduled metronome clicks for preview
+  const pendingPhraseRef = useRef<{                                   // deferred phrase start (consumed by phrase-start effect)
+    phrase: GeneratedPhrase; switchToVPart?: GeneratedPhrase | null; iiBeats?: number;
+  } | null>(null);
+  // Drift-free auto-advance
   const chordStartRef = useRef(0);
   const wasAutoAdvanceRef = useRef(false);
   const playPosRef = useRef(0);
@@ -178,6 +183,21 @@ export default function App() {
   const [selectedLickIdx, setSelectedLickIdx] = useState<number | null>(null);
   const [lickHighOctave, setLickHighOctave] = useState(false);
   const [lickHighInstance, setLickHighInstance] = useState(false);
+  // Lick favorites (★ toggle, localStorage-persisted)
+  const [lickFavorites, setLickFavorites] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem('lickFavorites');
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    } catch { return new Set(); }
+  });
+  function handleToggleLickFavorite(lickId: string) {
+    setLickFavorites(prev => {
+      const next = new Set(prev);
+      if (next.has(lickId)) next.delete(lickId); else next.add(lickId);
+      localStorage.setItem('lickFavorites', JSON.stringify([...next]));
+      return next;
+    });
+  }
   // During ii-V-long preview, temporarily show V part on fretboard
   const [iiVDisplayPhrase, setIiVDisplayPhrase] = useState<GeneratedPhrase | null>(null);
   const iiVSwitchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -899,53 +919,52 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [isPlaying, activeChordIdx, bpm, activeProg, progMode]);
 
-  // Metronome: progression mode uses beat-grid alignment; normal mode uses simple interval.
+  // Metronome for progression auto-play: grid-aligned clicks via setInterval.
+  // Phrase preview metronome is handled separately by the phrase-start effect
+  // (all clicks pre-scheduled on the Web Audio timeline for perfect sync).
   useEffect(() => {
-    if (!isMetronomeOn) return;
+    if (!isPlaying || !progMode || !activeProg || metVolume <= 0) return;
 
     if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
     const ctx = audioCtxRef.current;
     const beatMs = 60000 / bpm;
 
-    let delayToNext = 0;
-
-    // Progression mode with active playback: grid-aligned metronome
-    if (isPlaying && progMode && activeProg) {
-      const seq = buildPlaybackSeq(getChartLayout(activeProg));
-      let cumBeats = 0;
-      for (let i = 0; i < playPosRef.current && i < seq.length; i++) {
-        cumBeats += seq[i].beats;
-      }
-      const elapsedMs = chordStartRef.current > 0 ? performance.now() - chordStartRef.current : 0;
-      const globalBeat = cumBeats + elapsedMs / beatMs;
-
-      const nextBeat = Math.ceil(globalBeat - 15 / beatMs);
-      metBeatRef.current = nextBeat;
-      delayToNext = Math.max(0, (nextBeat - globalBeat) * beatMs);
-    } else {
-      // Normal mode (or prog mode not playing): simple metronome
-      metBeatRef.current = 0;
-      delayToNext = 0;
+    const seq = buildPlaybackSeq(getChartLayout(activeProg));
+    let cumBeats = 0;
+    for (let i = 0; i < playPosRef.current && i < seq.length; i++) {
+      cumBeats += seq[i].beats;
     }
+    const elapsedMs = chordStartRef.current > 0 ? performance.now() - chordStartRef.current : 0;
+    const globalBeat = cumBeats + elapsedMs / beatMs;
+    const nextBeat = Math.ceil(globalBeat - 15 / beatMs);
+    metBeatRef.current = nextBeat;
+    const delayToNext = Math.max(0, (nextBeat - globalBeat) * beatMs);
 
-    // Wait until the next beat, then fire + start interval
     let intervalId: ReturnType<typeof setInterval>;
     const timerId = setTimeout(() => {
-      const accent = metBeatRef.current % 4 === 0;
-      playClick(accent, ctx, metVolumeRef.current);
+      playClick(metBeatRef.current % 4 === 0, ctx, metVolumeRef.current);
       metBeatRef.current++;
       intervalId = setInterval(() => {
-        const a = metBeatRef.current % 4 === 0;
-        playClick(a, ctx, metVolumeRef.current);
+        playClick(metBeatRef.current % 4 === 0, ctx, metVolumeRef.current);
         metBeatRef.current++;
       }, beatMs);
     }, delayToNext);
     return () => { clearTimeout(timerId); clearInterval(intervalId); };
-  }, [isPlaying, isMetronomeOn, progMode, bpm, activeProg, metSyncKey]);
+  }, [isPlaying, metVolume, progMode, bpm, activeProg]);
 
   function handleSaveProgressions(progs: Progression[]) {
     setProgressions(progs);
     saveProgressions(progs);
+  }
+
+  // BPM change: update state + save to current progression
+  function handleBpmChange(newBpm: number) {
+    setBpm(newBpm);
+    if (progMode && activeProg) {
+      const copy = [...progressions];
+      copy[activeProgIdx] = { ...copy[activeProgIdx], bpm: newBpm };
+      handleSaveProgressions(copy);
+    }
   }
 
   function handleChordModeChange(chordIdx: number, newModeIdx: number) {
@@ -998,56 +1017,59 @@ export default function App() {
     saveChordNotationPrefs(prefs);
   }
 
-  // Manual phrase playback (single phrase, not auto-play)
+  // --- Manual phrase playback (preview / Play button) ---
   const manualPhraseRef = useRef<{ stop: () => void } | null>(null);
   const manualPhraseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const justStartedPlayRef = useRef(false);
   const [phraseAnimKey, setPhraseAnimKey] = useState(0);
 
-  // Play a phrase with audio + animation sync
+  function stopPreviewMetronome() {
+    for (const osc of previewMetRef.current) { try { osc.stop(); } catch { /* already stopped */ } }
+    previewMetRef.current = [];
+  }
+
+  // Queue a phrase for playback. Audio is NOT scheduled here — the start effect
+  // fires after React renders and starts phrase + strum + metronome at the same
+  // Web Audio timestamp, guaranteeing perfect sync regardless of render latency.
   const playPhraseAudio = useCallback((phrase: GeneratedPhrase, switchToVPart?: GeneratedPhrase | null, iiBeats?: number) => {
-    // Stop any current playback
     manualPhraseRef.current?.stop();
     if (manualPhraseTimer.current) clearTimeout(manualPhraseTimer.current);
+    previewStrumRef.current?.stop();
+    stopPreviewMetronome();
     clearIiVSwitchTimer();
     setIiVDisplayPhrase(null);
-
-    // Prevent the activePhrase-change effect from killing this playback
     justStartedPlayRef.current = true;
+    pendingPhraseRef.current = { phrase, switchToVPart, iiBeats };
+    setIsPhraseAudioPlaying(true);
+    setPhraseAnimKey(k => k + 1);
+  }, []);
+
+  // Phrase-start effect: fires after render, starts all audio at one ctx.currentTime.
+  // Runs every render but no-ops immediately when no pending phrase exists.
+  useEffect(() => {
+    const pending = pendingPhraseRef.current;
+    if (!pending) return;
+    pendingPhraseRef.current = null;
 
     if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
     const ctx = audioCtxRef.current;
     if (ctx.state === 'suspended') ctx.resume();
-    // Always sync phrase to BPM
+    const startAt = ctx.currentTime;
+    const { phrase, switchToVPart, iiBeats } = pending;
     const eighthDur = (60 / bpm) / 2;
-    const result = schedulePhrase(ctx, phrase, ctx.currentTime, eighthDur, noteVolumeRef.current, 99, instrumentRef.current, swingEnabledRef.current ? swingAmountRef.current : 0, bpm);
+
+    // Phrase audio
+    const result = schedulePhrase(ctx, phrase, startAt, eighthDur, noteVolumeRef.current, 99, instrumentRef.current, swingEnabledRef.current ? swingAmountRef.current : 0, bpm);
     manualPhraseRef.current = result;
-    setIsPhraseAudioPlaying(true);
-    setPhraseAnimKey(k => k + 1);
 
-    // Schedule ii→V fretboard switch at the split point
-    if (switchToVPart) {
-      const switchDelay = (iiBeats ?? 4) * 2 * eighthDur * 1000;
-      iiVSwitchTimerRef.current = setTimeout(() => {
-        justStartedPlayRef.current = true; // prevent playback stop on activePhrase change
-        setIiVDisplayPhrase(switchToVPart);
-        setPhraseAnimKey(k => k + 1);
-        iiVSwitchTimerRef.current = null;
-      }, switchDelay);
-    }
-
-    manualPhraseTimer.current = setTimeout(() => {
-      manualPhraseRef.current = null;
-      setIsPhraseAudioPlaying(false);
-    }, result.totalDuration * 1000 + 200);
-
-    // Restart metronome interval to sync downbeat with phrase start
-    if (isMetronomeOn) setMetSyncKey(k => k + 1);
-
-    // Normal mode chord strum on phrase play
-    if (!progMode && chordAudioOnRef.current) {
-      activeStrumRef.current?.stop();
-      // Build strum from current position's chord tones
-      if (selPos && selPos.instances.length > 0) {
+    // Chord strum (same startAt)
+    if (chordAudioOnRef.current) {
+      if (progMode && activeProg) {
+        const strumNotes = getStrumNotes(activeChordIdx, activeProg.chords, activeProg.songKey);
+        if (strumNotes.length > 0) {
+          previewStrumRef.current = playChordStrum(ctx, strumNotes, chordVolumeRef.current, startAt);
+        }
+      } else if (selPos && selPos.instances.length > 0) {
         const inst = selPos.instances[0];
         const ct = new Set(mode.chordTones);
         const strumNotes: { stringIdx: number; fret: number }[] = [];
@@ -1059,15 +1081,53 @@ export default function App() {
           if (strumNotes.length >= 4) break;
         }
         if (strumNotes.length > 0) {
-          activeStrumRef.current = playChordStrum(ctx, strumNotes, chordVolumeRef.current, ctx.currentTime);
+          previewStrumRef.current = playChordStrum(ctx, strumNotes, chordVolumeRef.current, startAt);
         }
       }
     }
-  }, [progMode, selPos, mode.chordTones, isMetronomeOn, bpm]);
 
-  // Stop manual phrase on context change — but skip if we just started playback
-  // (Generate triggers both activePhrase change and playPhraseAudio in the same tick)
-  const justStartedPlayRef = useRef(false);
+    // Metronome: schedule ALL clicks on the Web Audio timeline for the phrase duration.
+    // This avoids handing off to the metronome setInterval effect, which would drift
+    // by the React render latency between this effect and the metronome effect.
+    stopPreviewMetronome();
+    if (metVolumeRef.current > 0) {
+      const beatSec = 60 / bpm;
+      const totalBeats = Math.ceil(result.totalDuration / beatSec) + 1;
+      for (let b = 0; b < totalBeats; b++) {
+        const osc = playClick(b % 4 === 0, ctx, metVolumeRef.current, startAt + b * beatSec);
+        previewMetRef.current.push(osc);
+      }
+    }
+
+    // ii→V fretboard switch + V chord strum
+    if (switchToVPart) {
+      const switchDelay = (iiBeats ?? 4) * 2 * eighthDur * 1000;
+      iiVSwitchTimerRef.current = setTimeout(() => {
+        justStartedPlayRef.current = true;
+        setIiVDisplayPhrase(switchToVPart);
+        setPhraseAnimKey(k => k + 1);
+        iiVSwitchTimerRef.current = null;
+        if (chordAudioOnRef.current && activeProg) {
+          previewStrumRef.current?.stop();
+          const vIdx = activeChordIdx + 1;
+          const strumNotes = getStrumNotes(vIdx, activeProg.chords, activeProg.songKey);
+          if (strumNotes.length > 0) {
+            previewStrumRef.current = playChordStrum(ctx, strumNotes, chordVolumeRef.current, ctx.currentTime);
+          }
+        }
+      }, switchDelay);
+    }
+
+    // Completion timer
+    manualPhraseTimer.current = setTimeout(() => {
+      manualPhraseRef.current = null;
+      stopPreviewMetronome();
+      setIsPhraseAudioPlaying(false);
+    }, result.totalDuration * 1000 + 200);
+  });
+
+  // Stop playback when activePhrase changes (e.g. chord navigation).
+  // Skipped on the render that started playback (justStartedPlayRef guard).
   useEffect(() => {
     if (justStartedPlayRef.current) {
       justStartedPlayRef.current = false;
@@ -1076,6 +1136,7 @@ export default function App() {
     manualPhraseRef.current?.stop();
     manualPhraseRef.current = null;
     if (manualPhraseTimer.current) clearTimeout(manualPhraseTimer.current);
+    stopPreviewMetronome();
     setIsPhraseAudioPlaying(false);
   }, [activePhrase]);
 
@@ -1123,9 +1184,7 @@ export default function App() {
         {/* Global audio controls — practice mode only */}
         {progMode && <GlobalAudioControls
           bpm={bpm}
-          onBpmChange={setBpm}
-          isMetronomeOn={isMetronomeOn}
-          onToggleMetronome={() => setIsMetronomeOn(p => !p)}
+          onBpmChange={handleBpmChange}
           chordAudioOn={chordAudioOn}
           onToggleChordAudio={() => setChordAudioOn(p => !p)}
           metVolume={metVolume}
@@ -1167,7 +1226,7 @@ export default function App() {
                 chordPrefs={chordPrefs}
                 activeChordIdx={activeChordIdx}
                 onSave={handleSaveProgressions}
-                onSelectProg={(idx) => { setActiveProgIdx(idx); setActiveChordIdx(0); setIsPlaying(false); }}
+                onSelectProg={(idx) => { setActiveProgIdx(idx); setActiveChordIdx(0); setIsPlaying(false); setBpm(progressions[idx]?.bpm ?? 120); }}
                 onClose={() => setEditing(false)}
               >
                 {(editingChords, onRemoveChord, editChartLayout, onInsertAtBeat, onEmptyMeasureBeat, onRemoveEmptyMeasure, selectedBeat) => (editingChords.length > 0 || editChartLayout) && (
@@ -1315,6 +1374,7 @@ export default function App() {
                       manualPhraseRef.current?.stop();
                       manualPhraseRef.current = null;
                       if (manualPhraseTimer.current) clearTimeout(manualPhraseTimer.current);
+                      stopPreviewMetronome();
                       clearIiVSwitchTimer();
                       setIiVDisplayPhrase(null);
                       setIsPhraseAudioPlaying(false);
@@ -1347,6 +1407,8 @@ export default function App() {
                     singleLickCount={filteredLicks.singleLickCount}
                     vChordQuality={activeProg.chords[activeChordIdx + 1]?.quality}
                     vChordRootSemitone={ROOTS.find(r => r.name === activeProg.chords[activeChordIdx + 1]?.rootName)?.semitone}
+                    favorites={lickFavorites}
+                    onToggleFavorite={handleToggleLickFavorite}
                     highOctave={lickHighOctave}
                     canHighOctave={canHighOctave}
                     onToggleOctave={() => {

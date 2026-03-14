@@ -123,6 +123,7 @@ export interface Progression {
   songKey?: SongKey;    // song key for smart mode suggestion
   chords: ChordSlot[];
   chartLayout?: ChartLayout;  // optional chart display layout
+  bpm?: number;               // per-song BPM (restored on song switch)
 }
 
 /** Raw song entry from JazzStandards.json */

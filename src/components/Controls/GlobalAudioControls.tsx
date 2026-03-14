@@ -4,8 +4,6 @@ import type { InstrumentType } from '../../types';
 interface GlobalAudioControlsProps {
   bpm: number;
   onBpmChange: (bpm: number) => void;
-  isMetronomeOn: boolean;
-  onToggleMetronome: () => void;
   chordAudioOn: boolean;
   onToggleChordAudio: () => void;
   metVolume: number;
@@ -58,7 +56,6 @@ function MuteBtn({ muted, onToggle, color }: { muted: boolean; onToggle: () => v
 
 export function GlobalAudioControls({
   bpm, onBpmChange,
-  isMetronomeOn, onToggleMetronome,
   chordAudioOn, onToggleChordAudio,
   metVolume, onMetVolumeChange,
   chordVolume, onChordVolumeChange,
@@ -245,24 +242,6 @@ export function GlobalAudioControls({
           </div>
         )}
       </div>
-      <button
-        onClick={onToggleMetronome}
-        title={metMuted ? 'メトロノーム（ミュート中）' : 'メトロノーム'}
-        className={btnBase}
-        style={{
-          border: `1px solid ${metMuted ? '#333' : isMetronomeOn ? '#F1C40F' : '#444'}`,
-          background: metMuted ? '#151515' : isMetronomeOn ? '#2a2a1a' : '#1a1a1a',
-          color: metMuted ? '#444' : isMetronomeOn ? '#F1C40F' : '#888',
-          opacity: metMuted ? 0.5 : 1,
-          pointerEvents: metMuted ? 'none' : undefined,
-        }}
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-          <path d="M14.153 8.188l-.72 -3.236a2.493 2.493 0 0 0 -4.867 0l-3.025 13.614a2 2 0 0 0 1.952 2.434h7.014a2 2 0 0 0 1.952 -2.434l-.524 -2.357m-4.935 1.791l9 -13" />
-          <path d="M19 5a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />
-        </svg>
-      </button>
       <button
         onClick={() => onBpmChange(Math.max(40, bpm - 1))}
         className={btnBase}
