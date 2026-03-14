@@ -504,6 +504,7 @@ export function lickToGeneratedPhrase(
         beatPosition: Math.floor(n.beatStart * 2) + 1,
         isStrong: n.beatStart % 1 === 0 && (Math.floor(n.beatStart) % 2 === 0),
         duration: inferRhythmType(n.duration),
+        durationBeats: n.duration,
         beatStart: n.beatStart,
       };
     }
@@ -519,6 +520,7 @@ export function lickToGeneratedPhrase(
       beatPosition: beatPos,
       isStrong: n.beatStart % 1 === 0 && (Math.floor(n.beatStart) % 2 === 0),
       duration: inferRhythmType(n.duration),
+      durationBeats: n.duration,
       beatStart: n.beatStart,
     };
   });

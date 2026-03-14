@@ -196,6 +196,7 @@ export interface PhraseNote {
   approachGroup?: ApproachGroupInfo;
   isRest?: boolean;                      // true for rest (no sound, gap in phrase path)
   duration?: RhythmType;                // note duration (default 'e' = eighth note)
+  durationBeats?: number;              // exact duration in beats (from lick data, overrides duration)
   beatStart?: number;                   // absolute beat position (0-based, fractional)
 }
 

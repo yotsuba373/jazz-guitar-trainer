@@ -353,7 +353,7 @@ export function schedulePhrase(
     const swungBeat = swingBeatStart(bs, d, swingAmount, bpm);
     const volMult = swingVolumeMult(bs, d, swingAmount);
     const durMult = swingDurMult(bs, d, swingAmount);
-    const rhythmDur = RHYTHM_BEATS[d] * beatDurSec;
+    const rhythmDur = (n.durationBeats ?? RHYTHM_BEATS[d]) * beatDurSec;
     // Use swung beatStart for timing so audio reflects swing feel
     const noteStart = startTime + swungBeat * beatDurSec;
     // Last note sustains longer; others get slight overlap for legato
@@ -366,7 +366,7 @@ export function schedulePhrase(
   const lastBs = lastNote?.beatStart ?? 0;
   const lastD = lastNote?.duration ?? 'e';
   const lastSwung = swingBeatStart(lastBs, lastD, swingAmount, bpm);
-  const lastDur = RHYTHM_BEATS[lastD] * beatDurSec;
+  const lastDur = (lastNote?.durationBeats ?? RHYTHM_BEATS[lastD]) * beatDurSec;
   const totalDuration = lastSwung * beatDurSec + lastDur * swingDurMult(lastBs, lastD, swingAmount);
 
   return {
