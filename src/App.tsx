@@ -1240,27 +1240,38 @@ export default function App() {
         </p>
 
         {/* Mode toggle */}
-        <div className="flex gap-1 mb-3">
+        <div className="flex mb-3">
           <button
             onClick={() => { setProgMode(false); setEditing(false); setIsPlaying(false); }}
-            className="rounded cursor-pointer text-[10px] font-mono px-2.5 h-[24px] inline-flex items-center"
+            className="rounded-l cursor-pointer text-[12px] font-mono px-4 h-[30px] inline-flex items-center gap-1.5 relative"
             style={{
-              border: `1px solid ${!progMode ? '#FFF' : '#444'}`,
-              background: !progMode ? '#3a3a3a' : '#1a1a1a',
-              color: !progMode ? '#FFF' : '#888',
+              border: `1px solid ${!progMode ? '#3498DB' : '#444'}`,
+              marginRight: -1,
+              zIndex: !progMode ? 1 : 0,
+              background: !progMode ? '#1a2a3a' : '#1a1a1a',
+              color: !progMode ? '#3498DB' : '#666',
               fontWeight: !progMode ? 700 : 400,
             }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
+              <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+            </svg>
             辞典モード
           </button>
           <button
             onClick={() => { setProgMode(true); setActiveChordIdx(0); setIsPlaying(false); }}
-            className="rounded cursor-pointer text-[10px] font-mono px-2.5 h-[24px] inline-flex items-center"
+            className="rounded-r cursor-pointer text-[12px] font-mono px-4 h-[30px] inline-flex items-center gap-1.5 relative"
             style={{
-              border: `1px solid ${progMode ? '#FFF' : '#444'}`,
-              background: progMode ? '#3a3a3a' : '#1a1a1a',
-              color: progMode ? '#FFF' : '#888',
+              border: `1px solid ${progMode ? '#27AE60' : '#444'}`,
+              zIndex: progMode ? 1 : 0,
+              background: progMode ? '#1a2a1a' : '#1a1a1a',
+              color: progMode ? '#27AE60' : '#666',
               fontWeight: progMode ? 700 : 400,
             }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 18V5l12-2v13"/>
+              <circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
+            </svg>
             練習モード
           </button>
         </div>
