@@ -60,6 +60,12 @@ function buildPlaybackSeq(layout: ChartLayout): { chordIdx: number; beats: numbe
   return seq;
 }
 
+function computeCumBeats(seq: { beats: number }[], upToIdx: number): number {
+  let cum = 0;
+  for (let i = 0; i < upToIdx && i < seq.length; i++) cum += seq[i].beats;
+  return cum;
+}
+
 /** Determine which notes to strum for a given chord in the progression. */
 function getStrumNotes(
   chordIdx: number,
@@ -134,7 +140,6 @@ export default function App() {
     return isNaN(saved) ? 0.5 : saved;
   });
   const audioCtxRef = useRef<AudioContext | null>(null);
-  const metBeatRef = useRef(0);
   const metVolumeRef = useRef(metVolume);
   // Chord audio state
   const [chordAudioOn, setChordAudioOn] = useState(() => localStorage.getItem('chordAudioOn') === 'true');
@@ -147,6 +152,13 @@ export default function App() {
   const activeStrumRef = useRef<{ stop: () => void } | null>(null);   // auto-play strum
   const previewStrumRef = useRef<{ stop: () => void } | null>(null);  // preview strum (separate to avoid auto-advance cleanup)
   const previewMetRef = useRef<OscillatorNode[]>([]);                  // pre-scheduled metronome clicks for preview
+  const songMetRef = useRef<OscillatorNode[]>([]);                    // pre-scheduled metronome clicks for song playback
+  const pendingNextRef = useRef<{                                     // pre-scheduled next chord audio (look-ahead)
+    strumHandle: { stop: () => void } | null;
+    phraseHandle: { stop: () => void } | null;
+    phrase: GeneratedPhrase | null;
+    metNodes: OscillatorNode[];
+  } | null>(null);
   const pendingPhraseRef = useRef<{                                   // deferred phrase start (consumed by phrase-start effect)
     phrase: GeneratedPhrase; switchToVPart?: GeneratedPhrase | null; iiBeats?: number;
   } | null>(null);
@@ -822,7 +834,63 @@ export default function App() {
     return null;
   }
 
-  // BPM auto-advance: drift-free, respects section repeats and volta endings
+  /** Schedule strum + lick + metronome for a chord at a Web Audio timestamp. */
+  function scheduleChordAudio(
+    chordIdx: number,
+    prog: Progression,
+    startAt: number,
+    globalBeatOffset: number,
+  ): {
+    strumHandle: { stop: () => void } | null;
+    phraseHandle: { stop: () => void } | null;
+    phrase: GeneratedPhrase | null;
+    metNodes: OscillatorNode[];
+  } {
+    if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
+    const ctx = audioCtxRef.current;
+    if (ctx.state === 'suspended') ctx.resume();
+
+    let strumHandle: { stop: () => void } | null = null;
+    let phraseHandle: { stop: () => void } | null = null;
+    let phrase: GeneratedPhrase | null = null;
+    const metNodes: OscillatorNode[] = [];
+
+    // Strum
+    if (chordAudioOnRef.current) {
+      const strumNotes = getStrumNotes(chordIdx, prog.chords, prog.songKey);
+      if (strumNotes.length > 0) {
+        strumHandle = playChordStrum(ctx, strumNotes, chordVolumeRef.current, startAt);
+      }
+    }
+
+    // Lick
+    if (chordHasSavedLick(chordIdx, prog)) {
+      phrase = playLickForChord(chordIdx, prog);
+      if (phrase) {
+        const eighthDur = (60 / bpm) / 2;
+        phraseHandle = schedulePhrase(ctx, phrase, startAt, eighthDur, noteVolumeRef.current, 99, instrumentRef.current, swingEnabledRef.current ? swingAmountRef.current : 0, bpm);
+      }
+    }
+
+    // Metronome
+    if (metVolumeRef.current > 0) {
+      const layout = getChartLayout(prog);
+      const chordBeats = getChordBeatCount(layout, chordIdx);
+      const beatSec = 60 / bpm;
+      for (let b = 0; b < chordBeats; b++) {
+        const accent = (globalBeatOffset + b) % 4 === 0;
+        const osc = playClick(accent, ctx, metVolumeRef.current, startAt + b * beatSec);
+        metNodes.push(osc);
+      }
+    }
+
+    return { strumHandle, phraseHandle, phrase, metNodes };
+  }
+
+  // BPM auto-advance: drift-free with look-ahead audio scheduling.
+  // Audio (strum + lick + metronome) for the NEXT chord is pre-scheduled on the
+  // Web Audio timeline immediately, so it plays at sample-accurate timing.
+  // The setTimeout only handles React state updates (chord highlight, animation).
   useEffect(() => {
     if (!isPlaying || !progMode || !activeProg) {
       chordStartRef.current = 0;
@@ -831,10 +899,16 @@ export default function App() {
       activeStrumRef.current = null;
       activePhraseStopRef.current?.stop();
       activePhraseStopRef.current = null;
+      stopSongMetronome();
+      cancelPendingNext();
       return;
     }
     const seq = buildPlaybackSeq(getChartLayout(activeProg));
     if (!seq.length) return;
+
+    if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
+    const ctx = audioCtxRef.current;
+    if (ctx.state === 'suspended') ctx.resume();
 
     // On playback start, BPM change, or user navigation: find position in sequence.
     // On auto-advance: playPosRef was already incremented in the timeout callback.
@@ -844,28 +918,22 @@ export default function App() {
       playPosRef.current = pos >= 0 ? pos : 0;
       chordStartRef.current = performance.now();
 
-      // Play strum for the initial chord on playback start
-      if (isPlaybackStart && chordAudioOnRef.current) {
+      // Cancel any previously pending next-chord audio
+      cancelPendingNext();
+
+      // Schedule audio for the current chord on playback start
+      if (isPlaybackStart) {
         activeStrumRef.current?.stop();
-        if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
-        const ctx = audioCtxRef.current;
-        if (ctx.state === 'suspended') ctx.resume();
-        const strumNotes = getStrumNotes(activeChordIdx, activeProg.chords, activeProg.songKey);
-        if (strumNotes.length > 0) {
-          activeStrumRef.current = playChordStrum(ctx, strumNotes, chordVolumeRef.current, ctx.currentTime);
-        }
-      }
-      // Schedule saved lick for initial chord on playback start
-      if (isPlaybackStart && (chordHasSavedLick(activeChordIdx, activeProg))) {
         activePhraseStopRef.current?.stop();
-        const phrase = playLickForChord(activeChordIdx, activeProg);
-        if (phrase) {
-          setAutoPlayPhrase(phrase);
+        stopSongMetronome();
+        const cumBeats = computeCumBeats(seq, playPosRef.current);
+        const result = scheduleChordAudio(activeChordIdx, activeProg, ctx.currentTime, cumBeats);
+        activeStrumRef.current = result.strumHandle;
+        activePhraseStopRef.current = result.phraseHandle;
+        songMetRef.current = result.metNodes;
+        if (result.phrase) {
+          setAutoPlayPhrase(result.phrase);
           setPhraseAnimKey(k => k + 1);
-          if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
-          const ctx = audioCtxRef.current;
-          const eighthDur = (60 / bpm) / 2;
-          activePhraseStopRef.current = schedulePhrase(ctx, phrase, ctx.currentTime, eighthDur, noteVolumeRef.current, 99, instrumentRef.current, swingEnabledRef.current ? swingAmountRef.current : 0, bpm);
         }
       }
     }
@@ -877,80 +945,45 @@ export default function App() {
     const targetAt = chordStartRef.current + (60000 / bpm) * step.beats;
     const delay = Math.max(0, targetAt - performance.now());
 
+    // Pre-schedule next chord's audio on the Web Audio timeline (look-ahead)
+    const nextPos = (playPosRef.current + 1) % seq.length;
+    const nextChordIdx = seq[nextPos].chordIdx;
+    const audioStartAt = ctx.currentTime + delay / 1000;
+    const cumBeatsNext = computeCumBeats(seq, nextPos);
+    const nextResult = scheduleChordAudio(nextChordIdx, activeProg, audioStartAt, cumBeatsNext);
+    pendingNextRef.current = nextResult;
+
     const timer = setTimeout(() => {
       wasAutoAdvanceRef.current = true;
       chordStartRef.current = targetAt;
-      const nextPos = (playPosRef.current + 1) % seq.length;
       playPosRef.current = nextPos;
-      const nextChordIdx = seq[nextPos].chordIdx;
 
-      // Play chord strum on auto-advance
-      if (chordAudioOnRef.current && activeProg) {
-        activeStrumRef.current?.stop();
-        if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
-        const ctx = audioCtxRef.current;
-        if (ctx.state === 'suspended') ctx.resume();
-        const strumNotes = getStrumNotes(nextChordIdx, activeProg.chords, activeProg.songKey);
-        if (strumNotes.length > 0) {
-          activeStrumRef.current = playChordStrum(ctx, strumNotes, chordVolumeRef.current, ctx.currentTime);
-        }
-      }
+      // Transfer pre-scheduled handles from pendingNextRef to active refs
+      activeStrumRef.current?.stop();
+      activePhraseStopRef.current?.stop();
+      stopSongMetronome();
+      activeStrumRef.current = pendingNextRef.current?.strumHandle ?? null;
+      activePhraseStopRef.current = pendingNextRef.current?.phraseHandle ?? null;
+      songMetRef.current = pendingNextRef.current?.metNodes ?? [];
+      const nextPhrase = pendingNextRef.current?.phrase ?? null;
+      pendingNextRef.current = null;
 
-      // Generate + schedule phrase for the next chord on auto-advance
-      if (activeProg && chordHasSavedLick(nextChordIdx, activeProg)) {
-        activePhraseStopRef.current?.stop();
-        const phrase = playLickForChord(nextChordIdx, activeProg);
-        if (phrase) {
-          setAutoPlayPhrase(phrase);
-          setPhraseAnimKey(k => k + 1);
-          if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
-          const ctx = audioCtxRef.current;
-          const eighthDur = (60 / bpm) / 2;
-          activePhraseStopRef.current = schedulePhrase(ctx, phrase, ctx.currentTime, eighthDur, noteVolumeRef.current, 99, instrumentRef.current, swingEnabledRef.current ? swingAmountRef.current : 0, bpm);
-        }
+      if (nextPhrase) {
+        setAutoPlayPhrase(nextPhrase);
+        setPhraseAnimKey(k => k + 1);
       } else {
-        activePhraseStopRef.current?.stop();
-        activePhraseStopRef.current = null;
         setAutoPlayPhrase(null);
       }
 
       setActiveChordIdx(nextChordIdx);
     }, delay);
-    return () => clearTimeout(timer);
+
+    return () => {
+      clearTimeout(timer);
+      // If timeout hasn't fired yet, cancel the pre-scheduled next chord audio
+      cancelPendingNext();
+    };
   }, [isPlaying, activeChordIdx, bpm, activeProg, progMode]);
-
-  // Metronome for progression auto-play: grid-aligned clicks via setInterval.
-  // Phrase preview metronome is handled separately by the phrase-start effect
-  // (all clicks pre-scheduled on the Web Audio timeline for perfect sync).
-  useEffect(() => {
-    if (!isPlaying || !progMode || !activeProg || metVolume <= 0) return;
-
-    if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
-    const ctx = audioCtxRef.current;
-    const beatMs = 60000 / bpm;
-
-    const seq = buildPlaybackSeq(getChartLayout(activeProg));
-    let cumBeats = 0;
-    for (let i = 0; i < playPosRef.current && i < seq.length; i++) {
-      cumBeats += seq[i].beats;
-    }
-    const elapsedMs = chordStartRef.current > 0 ? performance.now() - chordStartRef.current : 0;
-    const globalBeat = cumBeats + elapsedMs / beatMs;
-    const nextBeat = Math.ceil(globalBeat - 15 / beatMs);
-    metBeatRef.current = nextBeat;
-    const delayToNext = Math.max(0, (nextBeat - globalBeat) * beatMs);
-
-    let intervalId: ReturnType<typeof setInterval>;
-    const timerId = setTimeout(() => {
-      playClick(metBeatRef.current % 4 === 0, ctx, metVolumeRef.current);
-      metBeatRef.current++;
-      intervalId = setInterval(() => {
-        playClick(metBeatRef.current % 4 === 0, ctx, metVolumeRef.current);
-        metBeatRef.current++;
-      }, beatMs);
-    }, delayToNext);
-    return () => { clearTimeout(timerId); clearInterval(intervalId); };
-  }, [isPlaying, metVolume, progMode, bpm, activeProg]);
 
   function handleSaveProgressions(progs: Progression[]) {
     setProgressions(progs);
@@ -1026,6 +1059,20 @@ export default function App() {
   function stopPreviewMetronome() {
     for (const osc of previewMetRef.current) { try { osc.stop(); } catch { /* already stopped */ } }
     previewMetRef.current = [];
+  }
+
+  function stopSongMetronome() {
+    for (const osc of songMetRef.current) { try { osc.stop(); } catch { /* already stopped */ } }
+    songMetRef.current = [];
+  }
+
+  function cancelPendingNext() {
+    if (pendingNextRef.current) {
+      pendingNextRef.current.strumHandle?.stop();
+      pendingNextRef.current.phraseHandle?.stop();
+      for (const osc of pendingNextRef.current.metNodes) { try { osc.stop(); } catch {} }
+      pendingNextRef.current = null;
+    }
   }
 
   // Queue a phrase for playback. Audio is NOT scheduled here — the start effect

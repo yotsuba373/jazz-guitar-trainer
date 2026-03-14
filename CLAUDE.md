@@ -281,18 +281,24 @@ const seq = buildPlaybackSeq(getChartLayout(activeProg));
 - `section.endings[0]` → 1番括弧（1回目の pass に追加）、`[1]` → 2番括弧（2回目の pass）
 - `beatWidths` はフレックス比率 → `(bw / bwSum) * 4` で4拍基準の拍数に変換
 
-### ドリフトフリータイミング
+### ドリフトフリータイミング + Look-ahead スケジューリング
 
-`setTimeout` の遅延は実際の発火時刻から次を計算するとイベントループ遅延が累積する問題を修正:
+コードチェンジ時の音声を Web Audio タイムラインに事前予約 (look-ahead) することで、サンプル精度のタイミングを実現:
 
 ```typescript
 const chordStartRef = useRef(0);     // 現コードの「理想開始時刻」
 const wasAutoAdvanceRef = useRef(false); // 自動進行か手動ナビかを区別
 const playPosRef = useRef(0);        // playbackSeq 内の現在位置
+const pendingNextRef = useRef(null);  // 事前スケジュール済み次コードの音声ハンドル
+const songMetRef = useRef([]);        // 曲再生メトロノームの予約済み OscillatorNode
 
-// 自動進行時: targetAt (理想時刻) を次コードの anchor に
-// 手動ナビ / BPM変更 / 再生開始時: performance.now() に再アンカー
+// effect 実行時: 次コードの音声を ctx.currentTime + delay/1000 で即座にスケジュール
+// setTimeout: React state 更新のみ (コードハイライト、アニメーション)
+// pendingNextRef パターン: timeout 発火→ref移管→null化、cleanup時はnullなら何もしない
 ```
+
+`scheduleChordAudio()` ヘルパーがストラム + リック + メトロノームを一括スケジュール。
+メトロノームの setInterval は廃止、全て Web Audio タイムラインに事前予約。
 
 停止トリガー: 通常モード切替 / 進行モード切替 / 編集ボタン / 進行選択変更
 
@@ -317,7 +323,7 @@ function playClick(accent: boolean, ctx: AudioContext, volume: number, at?: numb
 ### メトロノーム自動再生 (ボタン廃止)
 
 `isMetronomeOn` state は廃止。メトロノームは以下の条件で自動的に鳴る:
-- **進行モード自動再生中**: `isPlaying && metVolume > 0` → setInterval でビートグリッド同期
+- **進行モード自動再生中**: `isPlaying && metVolume > 0` → `scheduleChordAudio()` 内で Web Audio タイムラインに事前予約 (`songMetRef`)
 - **フレーズプレビュー再生中**: phrase-start effect で全クリックを Web Audio タイムラインに一括予約 (`previewMetRef`)
 
 ### フレーズプレビュー同期アーキテクチャ
@@ -333,10 +339,11 @@ function playClick(accent: boolean, ctx: AudioContext, volume: number, at?: numb
 全て `OscillatorNode.start(t)` で Web Audio スケジューラに予約されるため、JS イベントループや React レンダー遅延に一切依存しない。
 停止時は `stopPreviewMetronome()` で予約済み OscillatorNode を全て `.stop()` しリソースリーク防止。
 
-### ストラム分離 (`activeStrumRef` / `previewStrumRef`)
+### ストラム・メトロノーム分離
 
-- `activeStrumRef` — 進行モード自動再生用。auto-advance effect が管理・クリーンアップ
-- `previewStrumRef` — フレーズプレビュー用。auto-advance effect の `activeProg` 変更によるクリーンアップの影響を受けない
+- `activeStrumRef` / `songMetRef` — 進行モード自動再生用。auto-advance effect が管理・クリーンアップ
+- `previewStrumRef` / `previewMetRef` — フレーズプレビュー用。auto-advance effect の `activeProg` 変更によるクリーンアップの影響を受けない
+- `pendingNextRef` — 事前スケジュール済み次コード音声。timeout 発火時に active refs に移管、cleanup 時にキャンセル
 
 ### 音量ミキサー (GlobalAudioControls)
 
