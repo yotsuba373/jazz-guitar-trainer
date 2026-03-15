@@ -66,6 +66,7 @@ export {
   playChordStrum,
   playEPNote,
   playNote,
+  playClick,
   schedulePhrase,
 } from './audioEngine';
 export { absolutePitch, buildNotePool, hasAlternateOctave, detectIiVPattern, isIiVLickId, buildIiVLickContext, getIiVTransposeSemitones, sliceLick } from './lickEngine';
@@ -80,3 +81,11 @@ export {
   getTransposeSemitones, buildLickContext, selectBestInstance,
   inferRhythmType,
 } from './lickEngine';
+export { buildPlaybackSeq, computeCumBeats } from './playbackSeq';
+export type { PlaybackStep } from './playbackSeq';
+export {
+  findLickById, findOriginatorIdx, chordHasSavedLick,
+  resolveChordPositions, computeTransposeSemitones,
+  buildPhraseForLick, playLickForChord, buildAnacrusisPhrase,
+  isLickOriginator, getStrumNotes,
+} from './lickPlayback';

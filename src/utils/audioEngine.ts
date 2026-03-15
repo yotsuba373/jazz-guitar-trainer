@@ -12,6 +12,22 @@
 import type { GeneratedPhrase, InstrumentType } from '../types';
 import { swingBeatStart, swingVolumeMult, swingDurMult } from './swing';
 
+/** Play a metronome click sound at the given Web Audio timestamp. */
+export function playClick(accent: boolean, ctx: AudioContext, volume: number, at?: number): OscillatorNode {
+  if (ctx.state === 'suspended') ctx.resume();
+  const t = at ?? ctx.currentTime;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.frequency.value = accent ? 1200 : 800;
+  gain.gain.setValueAtTime(accent ? volume * 1.5 : volume * 1.0, t);
+  gain.gain.exponentialRampToValueAtTime(0.001, t + 0.04);
+  osc.start(t);
+  osc.stop(t + 0.04);
+  return osc;
+}
+
 /** Guitar open-string MIDI note numbers (stringIdx 0 = 1E … 5 = 6E) */
 export const OPEN_STRING_MIDI: readonly number[] = [64, 59, 55, 50, 45, 40];
 

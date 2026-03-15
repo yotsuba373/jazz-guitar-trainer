@@ -371,17 +371,17 @@
 <pre>npm install       # 依存インストール
 npm run dev       # 開発サーバー → http://localhost:5173
 npm run build     # tsc + vite build
-npm test          # vitest run (701 tests)
+npm test          # vitest run (732 tests)
 npm run lint      # ESLint</pre>
 
 <h2 id="architecture">Architecture</h2>
 <p><code>App.tsx</code> が単一の状態管理ハブとして機能し、全コンポーネントに props を配布する Lifting State Up パターンを採用。</p>
 
 <div class="diagram">┌─────────────────────────────────────────────────────┐
-│                     App.tsx                          │
+│                     App.tsx (~1270行)                │
 │  ┌────────────────────────────────────────────────┐  │
 │  │  State: root, mode, positions, progression,    │  │
-│  │         phrases, playback, audio volumes       │  │
+│  │         phrases, lickDB, audio volumes         │  │
 │  └──────────────┬─────────────────────────────────┘  │
 │                 │                                     │
 │    ┌────────────┼──────────────┐                     │
@@ -396,18 +396,32 @@ npm run lint      # ESLint</pre>
 │ └ Analysis  │                                        │
 └─────────────────────────────────────────────────────┘
 
+Hooks Layer (audio state management):
+┌──────────────┬──────────────────┬──────────────┐
+│useAudioCtx   │usePreviewPlayback│useAutoPlay   │
+│(AudioContext  │(リック手動再生    │(BPM自動再生   │
+│ +ref同期)     │ ii-V切替)        │ カウントイン)  │
+└──────────────┴──────────────────┴──────────────┘
+
 Utils Layer (pure functions):
 ┌──────────┬──────────┬───────────┬─────────────┐
 │fretboard │guideTones│chordForms │lickEngine   │
-│noteSpell │progress  │chartLayout│phraseAnalyse│
+│noteSpell │progress  │chartLayout│lickPlayback │
+│audioEng  │          │playbackSeq│phraseAnalyse│
 │          │          │           │swing        │
 └──────────┴──────────┴───────────┴─────────────┘</div>
 
 <h2 id="file-structure">File Structure</h2>
 <pre>src/
-├── App.tsx                       — 状態管理ハブ (辞典モード + 練習モード + BPM自動再生)
+├── App.tsx                       — 状態管理ハブ (UI state + フック統合, ~1270行)
 ├── types/music.ts                — 全型定義 (30+ types)
 ├── constants/music.ts            — MODE_TEMPLATES(18), ROOTS(12), STRING_DEG_OFFSETS, 色定義
+├── hooks/
+│   ├── useTimer.ts               — setTimeout ref管理フック (自動クリア)
+│   ├── useAudioContext.ts        — AudioContext共有 + 音量/設定ref同期 + AudioHandle
+│   ├── usePreviewPlayback.ts     — リック手動プレビュー再生 (ii-V切替, メトロノーム)
+│   ├── useAutoPlay.ts            — 進行モード自動再生 (BPM, カウントイン, ループ, アナクルーシス)
+│   └── useUndoRedo.ts            — 汎用 Undo/Redo フック
 ├── utils/
 │   ├── fretboard.ts              — buildFretMap(), generatePositions(), generateDimPositions()
 │   ├── noteSpelling.ts           — spellScale(), buildDegreeMap(), resolveMode()
@@ -416,10 +430,13 @@ Utils Layer (pure functions):
 │   ├── jazzStandards.ts          — fetchJazzStandards(), songToProgression()
 │   ├── chartLayout.ts            — deriveChartLayout(), getChartLayout(), buildChordRows(), appendChordToLayout(), removeChordFromLayout(), insertChordAtBeat(), computeInsertFlatIndex(), getMeasureBeatInfo(), splitSection(), mergeSections(), splitEndings(), removeEndings()
 │   ├── chordForms.ts             — findVoicingsInPosition(), VOICING_TEMPLATES(20)
+│   ├── audioEngine.ts            — playClick(), playKSNote(), playSaxNote(), playEPNote(), playChordStrum(), schedulePhrase()
 │   ├── lickEngine.ts             — absolutePitch(), buildNotePool(), loadLickDB(), transposeLick(), mapLickToFretboard(), buildLickContext(), detectIiVPattern(), isIiVLickId(), buildIiVLickContext(), sliceLick()
+│   ├── lickPlayback.ts           — findLickById(), playLickForChord(), buildAnacrusisPhrase(), getStrumNotes(), resolveChordPositions()
+│   ├── playbackSeq.ts            — buildPlaybackSeq(), computeCumBeats()
 │   ├── phraseAnalysis.ts         — analyzePhrase(), computeSummary()
 │   ├── swing.ts                  — swingBeatStart(), swingVolumeMult(), swingDurMult()
-│   └── __tests__/                — 708 テスト
+│   └── __tests__/                — 732 テスト
 ├── components/
 │   ├── Fretboard/                — SVG指板 (Fretboard, FretboardNote, GhostNote, PhrasePath)
 │   ├── Controls/                 — 全コントロールUI
@@ -688,6 +705,8 @@ degree ラベル、フレーバーテキストを持ちます。</p>
 </ul>
 
 <h2 id="bpm-playback">BPM Auto-Playback</h2>
+<p>自動再生ロジックは <code>useAutoPlay</code> フックに集約。プレビュー再生は <code>usePreviewPlayback</code> フック。
+再生シーケンス生成 (<code>buildPlaybackSeq</code>) とリック再生ヘルパー (<code>playLickForChord</code> 等) は純粋関数として <code>utils/</code> に配置。</p>
 
 <h3>Keyboard Shortcuts</h3>
 <table>
@@ -707,8 +726,9 @@ const seq = buildPlaybackSeq(getChartLayout(activeProg));</pre>
 actualBeats = (beatWidth / sumOfBeatWidths) * 4</pre>
 
 <h3>Drift-Free Timing</h3>
-<p><code>setTimeout</code> の累積ドリフトを防ぐため、理想時刻ベースでタイミングを計算:</p>
+<p><code>setTimeout</code> の累積ドリフトを防ぐため、理想時刻ベースでタイミングを計算 (<code>useAutoPlay</code> 内部):</p>
 <pre>// chordStartRef: 現コードの「理想開始時刻」
+// advanceOriginRef: 'stopped'|'start'|'user-nav'|'auto' — 状態マシンで遷移を管理
 // 自動進行時: targetAt (理想時刻) を次コードの anchor に
 // 手動ナビ / BPM変更 / 再生開始時: performance.now() に再アンカー</pre>
 
@@ -767,7 +787,7 @@ actualBeats = (beatWidth / sumOfBeatWidths) * 4</pre>
   <tr><td>Count-In</td><td><code>countInVolume</code></td><td>0.5</td><td><code>playClick()</code> (カウントイン専用)</td></tr>
   <tr><td>Instrument</td><td><code>phraseInstrument</code></td><td>'guitar'</td><td>楽器選択 (guitar/saxophone)</td></tr>
 </table>
-<p>全て localStorage に永続化。<code>useRef</code> 経由でコールバック内から参照（再レンダリング回避）。
+<p>全て localStorage に永続化。<code>useAudioContext</code> フックが ref 同期と localStorage 永続化を一括管理 (App.tsx から9個の useEffect を移動)。
 <code>GlobalAudioControls</code> コンポーネントで練習モードの UI を提供（辞典モードでは非表示）。
 各チャンネルにミュートボタン付き（コード/単音、メトロノームは音量0でミュート）。タップテンポ対応（TAPボタン連続タップでBPM設定）。</p>
 
@@ -1246,6 +1266,22 @@ GeneratedPhrase
   <tr><td>isIiVLickId()</td><td>リックIDが ii-V タイプ (<code>maj-ii-v-short</code> / <code>maj-ii-v-long</code> / <code>min-ii-v-short</code>) かどうかを判定</td></tr>
   <tr><td>buildIiVLickContext()</td><td>ii-V リック用のパイプライン。キーセンターから移調し、V コードのモード/ポジションで GeneratedPhrase を生成</td></tr>
   <tr><td>sliceLick()</td><td>リックの一部を抽出。<code>sliceLick(lick, offset, beats)</code> → offset から beats 分のノートを抽出し beatStart をシフト。リックオーバーフロー分割に使用</td></tr>
+</table>
+
+<h3>リック再生ヘルパー (<code>src/utils/lickPlayback.ts</code>)</h3>
+<p>App.tsx から抽出された純粋関数群。リック再生に必要なフレーズ構築・移調計算・ストラム音取得を担当。</p>
+<table>
+  <tr><th>関数</th><th>責務</th></tr>
+  <tr><td>findLickById()</td><td>LickDB 全セクションからIDでリック検索</td></tr>
+  <tr><td>findOriginatorIdx()</td><td>オーバーフロー継続コードの元コード位置を逆探索</td></tr>
+  <tr><td>chordHasSavedLick()</td><td>コードに保存済みリックがあるか判定</td></tr>
+  <tr><td>resolveChordPositions()</td><td>コードのルート+モードからポジション一覧を生成</td></tr>
+  <tr><td>buildPhraseForLick()</td><td>リック+ポジション→GeneratedPhrase構築</td></tr>
+  <tr><td>computeTransposeSemitones()</td><td>コードのリック用移調量計算 (通常/ii-V/継続コード対応)</td></tr>
+  <tr><td>playLickForChord()</td><td>コードの保存リックからGeneratedPhraseを構築 (自動再生用)</td></tr>
+  <tr><td>buildAnacrusisPhrase()</td><td>アウフタクト部分のフレーズ構築 (カウントイン/look-ahead用)</td></tr>
+  <tr><td>isLickOriginator()</td><td>オーバーフロー連鎖の先頭コード判定</td></tr>
+  <tr><td>getStrumNotes()</td><td>コードのストラム音取得 (ボイシング優先、フォールバック)</td></tr>
 </table>
 
 <h3>辞典モードの変更</h3>

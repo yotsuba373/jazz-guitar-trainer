@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import type { LabelMode, RootName, Progression, ChordNotationPrefs, ChartLayout, SongKey, ChordSlot, GeneratedPhrase, InstrumentType, LickDB, LickEntry, Position, FretMap } from './types';
+import type { LabelMode, RootName, Progression, ChordNotationPrefs, GeneratedPhrase, InstrumentType, LickDB, LickEntry, Position, FretMap } from './types';
 import { MODE_TEMPLATES, ROOTS, MODE_COLORS } from './constants';
 import {
   buildFretMap, generatePositions, generateDimPositions, resolveMode,
@@ -9,122 +9,19 @@ import {
   getChartLayout, buildChordRows,
   getGuideTones, findNoteLocations, classifyResolution,
   findVoicingsInPosition,
-  playChordStrum,
-  buildNotePool, schedulePhrase,
+  buildNotePool,
   loadLickDB, QUALITY_TO_LICK_TYPE, buildLickContext, getTransposeSemitones,
-  lickToGeneratedPhrase, selectBestInstance, hasAlternateOctave,
+  selectBestInstance, hasAlternateOctave,
   detectIiVPattern, isIiVLickId, buildIiVLickContext, getIiVTransposeSemitones,
   sliceLick, getChordBeatCount,
+  findLickById, findOriginatorIdx, resolveChordPositions, buildPhraseForLick,
 } from './utils';
+import { useAudioContext, usePreviewPlayback, useAutoPlay } from './hooks';
 import { Fretboard } from './components/Fretboard';
 import { RootSelector, ModeSelector, PositionSelector, OptionBar, PhraseAnalysisPanel, GlobalAudioControls, LickPanel } from './components/Controls';
 import { PositionGrid } from './components/PositionGrid';
 import { ProgressionEditor, ProgressionPlayer } from './components/Progression';
 import { Footer } from './components/Footer';
-
-function playClick(accent: boolean, ctx: AudioContext, volume: number, at?: number): OscillatorNode {
-  if (ctx.state === 'suspended') ctx.resume();
-  const t = at ?? ctx.currentTime;
-  const osc = ctx.createOscillator();
-  const gain = ctx.createGain();
-  osc.connect(gain);
-  gain.connect(ctx.destination);
-  osc.frequency.value = accent ? 1200 : 800;
-  gain.gain.setValueAtTime(accent ? volume * 1.5 : volume * 1.0, t);
-  gain.gain.exponentialRampToValueAtTime(0.001, t + 0.04);
-  osc.start(t);
-  osc.stop(t + 0.04);
-  return osc;
-}
-
-/** Build a flat playback sequence respecting section repeats and volta endings.
- *  Each entry includes `measureFlatIdx` — the visual measure index on the chart
- *  (consistent with ChordChart's flat index computation). */
-function buildPlaybackSeq(layout: ChartLayout): { chordIdx: number; beats: number; measureFlatIdx: number }[] {
-  const seq: { chordIdx: number; beats: number; measureFlatIdx: number }[] = [];
-  let flatBase = 0;
-  function addMeasure(m: { chordIndices: number[]; beatWidths?: number[] }, mfi: number) {
-    const count = m.chordIndices.length;
-    const bwSum = m.beatWidths ? m.beatWidths.reduce((a, b) => a + b, 0) : count;
-    m.chordIndices.forEach((ci, i) => {
-      const bw = m.beatWidths?.[i] ?? 1;
-      seq.push({ chordIdx: ci, beats: (bw / bwSum) * 4, measureFlatIdx: mfi });
-    });
-  }
-  for (const section of layout.sections) {
-    const mainStart = flatBase;
-    flatBase += section.measures.length;
-    const endingStarts: number[] = [];
-    if (section.endings) {
-      for (const ending of section.endings) {
-        endingStarts.push(flatBase);
-        flatBase += ending.length;
-      }
-    }
-    const passes = (section.repeats ?? 0) + 1;
-    for (let pass = 0; pass < passes; pass++) {
-      section.measures.forEach((m, mi) => addMeasure(m, mainStart + mi));
-      if (section.endings?.[pass]) {
-        section.endings[pass].forEach((m, mi) => addMeasure(m, endingStarts[pass] + mi));
-      }
-    }
-  }
-  return seq;
-}
-
-function computeCumBeats(seq: { beats: number }[], upToIdx: number): number {
-  let cum = 0;
-  for (let i = 0; i < upToIdx && i < seq.length; i++) cum += seq[i].beats;
-  return cum;
-}
-
-/** Determine which notes to strum for a given chord in the progression. */
-function getStrumNotes(
-  chordIdx: number,
-  chords: ChordSlot[],
-  songKey?: SongKey,
-): { stringIdx: number; fret: number }[] {
-  const effAll = computeEffectiveSelections(chords, songKey);
-  const chord = chords[chordIdx];
-  const eff = effAll[chordIdx];
-  if (!chord || !eff || !QUALITY_TO_MODES[chord.quality]) return [];
-
-  const chordMode = resolveMode(chord.rootName, MODE_TEMPLATES[eff.modeIdx]);
-  const chordFretMap = buildFretMap(chordMode.semi, chordMode.notes);
-  const is8 = chordMode.notes.length > 7;
-  const positions = is8
-    ? generateDimPositions(chordFretMap, chordMode.semi[0])
-    : generatePositions(chordFretMap, chordMode.notes);
-  const pos = positions.find(p => p.id === eff.posId);
-
-  // Prefer voicing if set
-  if (chord.voicingKey && pos && !is8 && eff.modeIdx <= 6) {
-    const voicings = findVoicingsInPosition(pos, chordMode);
-    for (const v of voicings) {
-      const key = `${v.template.type}-${v.template.inversion}-${v.template.stringIndices.join(',')}`;
-      if (key === chord.voicingKey) {
-        return v.notes.map(n => ({ stringIdx: n.stringIdx, fret: n.fret }));
-      }
-    }
-  }
-
-  // Fallback: pick one chord tone per string from the position
-  if (pos && pos.instances.length > 0) {
-    const inst = pos.instances[0];
-    const ct = new Set(chordMode.chordTones);
-    const notes: { stringIdx: number; fret: number }[] = [];
-    for (let s = 5; s >= 0; s--) {
-      const strNotes = inst.strings[s];
-      if (!strNotes) continue;
-      const ctNote = strNotes.find(([n]) => ct.has(n));
-      if (ctNote) notes.push({ stringIdx: s, fret: ctNote[1] });
-      if (notes.length >= 4) break;
-    }
-    return notes;
-  }
-
-  return [];
-}
 
 export default function App() {
   const [rootName, setRootName] = useState<RootName>(() => {
@@ -162,48 +59,23 @@ export default function App() {
     const saved = parseFloat(localStorage.getItem('metVolume') ?? '');
     return isNaN(saved) ? 0.5 : saved;
   });
-  const audioCtxRef = useRef<AudioContext | null>(null);
-  const metVolumeRef = useRef(metVolume);
   // Chord audio state
   const [chordAudioOn, setChordAudioOn] = useState(() => localStorage.getItem('chordAudioOn') === 'true');
   const [chordVolume, setChordVolume] = useState<number>(() => {
     const saved = parseFloat(localStorage.getItem('chordVolume') ?? '');
     return isNaN(saved) ? 0.5 : saved;
   });
-  const chordVolumeRef = useRef(chordVolume);
-  const chordAudioOnRef = useRef(chordAudioOn);
-  const activeStrumRef = useRef<{ stop: () => void } | null>(null);   // auto-play strum
-  const previewStrumRef = useRef<{ stop: () => void }[]>([]);  // preview strums (separate to avoid auto-advance cleanup)
-  const previewMetRef = useRef<OscillatorNode[]>([]);                  // pre-scheduled metronome clicks for preview
-  const songMetRef = useRef<OscillatorNode[]>([]);                    // pre-scheduled metronome clicks for song playback
-  const pendingNextRef = useRef<{                                     // pre-scheduled next chord audio (look-ahead)
-    strumHandle: { stop: () => void } | null;
-    phraseHandle: { stop: () => void } | null;
-    phrase: GeneratedPhrase | null;
-    metNodes: OscillatorNode[];
-  } | null>(null);
-  const pendingPhraseRef = useRef<{                                   // deferred phrase start (consumed by phrase-start effect)
-    phrase: GeneratedPhrase; switchToVPart?: GeneratedPhrase | null; iiBeats?: number;
-  } | null>(null);
-  // Drift-free auto-advance
-  const chordStartRef = useRef(0);
-  const wasAutoAdvanceRef = useRef(false);
-  const playPosRef = useRef(0);
-  const [advanceTick, setAdvanceTick] = useState(0);  // force effect re-run on same chordIdx
 
   // Single-note volume: shared between fretboard clicks and phrase playback
   const [noteVolume, setNoteVolume] = useState<number>(() => {
     const s = parseFloat(localStorage.getItem('noteVolume') ?? localStorage.getItem('phraseVolume') ?? '');
     return isNaN(s) ? 0.4 : s;
   });
-  const noteVolumeRef = useRef(noteVolume);
   // Instrument selection for phrase/note playback
   const [instrument, setInstrument] = useState<InstrumentType>(() => {
     const s = localStorage.getItem('phraseInstrument');
     return s === 'saxophone' ? s : 'guitar';
   });
-  const instrumentRef = useRef(instrument);
-  // Swing state
   // Count-in state
   const [countInEnabled, setCountInEnabled] = useState(
     () => localStorage.getItem('countInEnabled') !== 'false' // default ON
@@ -212,21 +84,14 @@ export default function App() {
     const saved = parseFloat(localStorage.getItem('countInVolume') ?? '');
     return isNaN(saved) ? 0.5 : saved;
   });
-  const countInVolumeRef = useRef(countInVolume);
   const [countInBars, setCountInBars] = useState(() => {
     const saved = parseInt(localStorage.getItem('countInBars') ?? '', 10);
     return (saved === 1 || saved === 2) ? saved : 2;
   });
-  const [isCountingIn, setIsCountingIn] = useState(false);
-  const countInTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const countInNodesRef = useRef<OscillatorNode[]>([]);
-
   // Loop range (measure-based): null = full playback, set = loop only specified measures
   const [loopRange, setLoopRange] = useState<{ start: number; end: number } | null>(
     () => progressions[0]?.loopRange ?? null
   );
-  const loopRangeRef = useRef(loopRange);
-  useEffect(() => { loopRangeRef.current = loopRange; }, [loopRange]);
   const [loopSelecting, setLoopSelecting] = useState(false);
 
   const [swingEnabled, setSwingEnabled] = useState(
@@ -235,12 +100,6 @@ export default function App() {
   const [swingAmount, setSwingAmount] = useState(
     () => Number(localStorage.getItem('swingAmount')) || 0.2
   );
-  const swingEnabledRef = useRef(swingEnabled);
-  const swingAmountRef = useRef(swingAmount);
-  const activePhraseStopRef = useRef<{ stop: () => void } | null>(null);
-  const anacrusisDisplayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const anacrusisAudioRef = useRef<{ stop: () => void } | null>(null);
-  const [autoPlayPhrase, setAutoPlayPhrase] = useState<GeneratedPhrase | null>(null);
   // Lick practice state
   const [lickDB, setLickDB] = useState<LickDB | null>(null);
   const [selectedLickIdx, setSelectedLickIdx] = useState<number | null>(null);
@@ -267,9 +126,6 @@ export default function App() {
       return next;
     });
   }
-  // During ii-V-long preview, temporarily show V part on fretboard
-  const [iiVDisplayPhrase, setIiVDisplayPhrase] = useState<GeneratedPhrase | null>(null);
-  const iiVSwitchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const template = MODE_TEMPLATES[modeIdx];
   const mode = useMemo(() => resolveMode(rootName, template), [rootName, modeIdx]);
   const is8Note = mode.notes.length > 7;
@@ -282,7 +138,6 @@ export default function App() {
 
   // Chord form voicings (only when exactly 1 position selected)
   const canShowChordForms = selPosIds.length === 1 && !overlay && !is8Note && modeIdx <= 6;
-
   const selPos = selPosIds.length === 1 ? allPos.find(p => p.id === selPosIds[0]) ?? null : null;
 
   const availableVoicings = useMemo(() => {
@@ -324,6 +179,28 @@ export default function App() {
 
   // Sync display state from active chord in progression mode
   const activeProg = progressions[activeProgIdx];
+
+  // --- Audio hooks ---
+  const audio = useAudioContext({
+    metVolume, chordVolume, chordAudioOn, noteVolume,
+    countInVolume, instrument, swingEnabled, swingAmount,
+  });
+
+  const {
+    playPhraseAudio, stopPreview, isPhraseAudioPlaying,
+    iiVDisplayPhrase, setIiVDisplayPhrase, phraseAnimKey, clearIiVSwitchTimer, bumpAnimKey,
+  } = usePreviewPlayback({
+    bpm, audio, progMode, activeProg, activeChordIdx,
+    songKey: activeProg?.songKey, selPos, mode,
+  });
+
+  const { autoPlayPhrase, isCountingIn } = useAutoPlay({
+    isPlaying, progMode, activeProg, activeChordIdx, bpm, lickDB, audio,
+    countIn: { enabled: countInEnabled, bars: countInBars },
+    loopRange,
+    onAdvance: (idx) => setActiveChordIdx(idx),
+    onPhraseAnimKey: bumpAnimKey,
+  });
 
   // Space key toggles play/stop in progression mode
   useEffect(() => {
@@ -525,7 +402,7 @@ export default function App() {
 
     // Continuation chord: look up by lickId directly
     if (isContinuation && chord.lickId) {
-      lick = findLickById(chord.lickId);
+      lick = lickDB ? findLickById(lickDB, chord.lickId!) : null;
       if (lick) {
         const iiVType = isIiVLickId(lick.id);
         if (iiVType) {
@@ -538,7 +415,7 @@ export default function App() {
       lick = filteredLicks.licks[selectedLickIdx];
       if (filteredLicks.iiV) keyCenterSemi = filteredLicks.iiV.keyCenterSemitone;
     } else if (chord.lickId) {
-      lick = findLickById(chord.lickId);
+      lick = lickDB ? findLickById(lickDB, chord.lickId!) : null;
       if (lick) {
         const iiVType = isIiVLickId(lick.id);
         if (iiVType && chord.lickBeatOffset === (chord.lickAnacrusis ?? 0)) {
@@ -722,8 +599,6 @@ export default function App() {
     }
   }, [canHighOctave, canHighInstance]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const [isPhraseAudioPlaying, setIsPhraseAudioPlaying] = useState(false);
-
   const activePhrase = useMemo(() => {
     if (isCountingIn) return autoPlayPhrase ?? null;  // during count-in, only show anacrusis or nothing
     if (iiVDisplayPhrase) return iiVDisplayPhrase;
@@ -770,454 +645,17 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleKeyDown]);
 
-  // Keep metVolumeRef in sync and persist to localStorage
+  // Persist countIn settings to localStorage (not in useAudioContext)
   useEffect(() => {
-    metVolumeRef.current = metVolume;
-    localStorage.setItem('metVolume', String(metVolume));
-  }, [metVolume]);
-
-  // Chord audio volume + toggle refs
-  useEffect(() => {
-    chordVolumeRef.current = chordVolume;
-    localStorage.setItem('chordVolume', String(chordVolume));
-  }, [chordVolume]);
-  useEffect(() => { chordAudioOnRef.current = chordAudioOn; localStorage.setItem('chordAudioOn', String(chordAudioOn)); }, [chordAudioOn]);
-
-  // Note volume ref + persistence (covers fretboard clicks + phrase playback)
-  useEffect(() => { noteVolumeRef.current = noteVolume; localStorage.setItem('noteVolume', String(noteVolume)); }, [noteVolume]);
-  useEffect(() => { instrumentRef.current = instrument; localStorage.setItem('phraseInstrument', instrument); }, [instrument]);
-  useEffect(() => { countInVolumeRef.current = countInVolume; }, [countInVolume]);
-  useEffect(() => {
-    localStorage.setItem('countInVolume', String(countInVolume));
     localStorage.setItem('countInEnabled', String(countInEnabled));
     localStorage.setItem('countInBars', String(countInBars));
-  }, [countInVolume, countInEnabled, countInBars]);
-  useEffect(() => { swingEnabledRef.current = swingEnabled; localStorage.setItem('swingEnabled', String(swingEnabled)); }, [swingEnabled]);
-  useEffect(() => { swingAmountRef.current = swingAmount; localStorage.setItem('swingAmount', String(swingAmount)); }, [swingAmount]);
+  }, [countInEnabled, countInBars]);
 
   // Persist dictionary mode selections to localStorage
   useEffect(() => { localStorage.setItem('dictRootName', rootName); }, [rootName]);
   useEffect(() => { localStorage.setItem('dictModeIdx', String(modeIdx)); }, [modeIdx]);
   useEffect(() => { localStorage.setItem('dictSelPosIds', JSON.stringify(selPosIds)); }, [selPosIds]);
   useEffect(() => { localStorage.setItem('dictOverlay', String(overlay)); }, [overlay]);
-  /** Find a lick from any DB section by ID */
-  function findLickById(lickId: string): LickEntry | null {
-    if (!lickDB) return null;
-    for (const type of Object.keys(lickDB)) {
-      const found = lickDB[type].find(l => l.id === lickId);
-      if (found) return found;
-    }
-    return null;
-  }
-
-  /** Find the originator chord index for a continuation chord (scan backward for same lickId with offset matching anacrusis). */
-  function findOriginatorIdx(chords: ChordSlot[], continuationIdx: number): number {
-    const lickId = chords[continuationIdx].lickId;
-    for (let i = continuationIdx - 1; i >= 0; i--) {
-      if (chords[i].lickId !== lickId) break;
-      const ana = chords[i].lickAnacrusis ?? 0;
-      if (chords[i].lickBeatOffset === ana) return i;
-    }
-    return continuationIdx;
-  }
-
-  // Check if a chord has a saved lick that should be played during auto-advance
-  function chordHasSavedLick(chordIdx: number, prog: Progression): boolean {
-    const chord = prog.chords[chordIdx];
-    if (!chord?.lickId || !lickDB) return false;
-    return findLickById(chord.lickId) != null;
-  }
-
-  /** Clear the ii-V fretboard switch timer. */
-  function clearIiVSwitchTimer() {
-    if (iiVSwitchTimerRef.current) {
-      clearTimeout(iiVSwitchTimerRef.current);
-      iiVSwitchTimerRef.current = null;
-    }
-  }
-
-  /** Resolve mode → fretMap → positions for a chord's root and mode index. */
-  function resolveChordPositions(chordRootName: RootName, chordModeIdx: number) {
-    const t = MODE_TEMPLATES[chordModeIdx];
-    const m = resolveMode(chordRootName, t);
-    const fm = buildFretMap(m.semi, m.notes);
-    const positions = m.notes.length > 7
-      ? generateDimPositions(fm, m.semi[0])
-      : generatePositions(fm, m.notes);
-    return { template: t, mode: m, fretMap: fm, positions };
-  }
-
-  /** Build a GeneratedPhrase for a lick mapped onto a specific position. */
-  function buildPhraseForLick(
-    lick: LickEntry, chordRootName: RootName, pos: Position,
-    chordModeIdx: number, transposeSemitones: number,
-    highOctave: boolean, highInstance: boolean,
-  ): GeneratedPhrase {
-    const { template, mode: m, fretMap: fm } = resolveChordPositions(chordRootName, chordModeIdx);
-    const lickPitches = lick.notes
-      .filter(n => !n.rest && n.pitch != null)
-      .map(n => n.pitch! + transposeSemitones);
-    const bestInstIdx = selectBestInstance(pos, lickPitches, highInstance);
-    const singleInstPos = { ...pos, instances: [pos.instances[bestInstIdx]] };
-    const pool = buildNotePool(singleInstPos, m, fm, true);
-    return lickToGeneratedPhrase(
-      lick, pos.id, template.key, chordRootName, pool, transposeSemitones, highOctave,
-    );
-  }
-
-  // Play a saved lick for a given chord index (used during auto-advance)
-  function playLickForChord(
-    chordIdx: number,
-    prog: Progression,
-  ): GeneratedPhrase | null {
-    const chords = prog.chords;
-    const effAll = computeEffectiveSelections(chords, prog.songKey);
-    const chord = chords[chordIdx];
-    const eff = effAll[chordIdx];
-    if (!chord || !eff || !QUALITY_TO_MODES[chord.quality]) return null;
-
-    if (chord.lickId && lickDB) {
-      const highOctave = chord.lickHighOctave ?? false;
-      const highInstance = chord.lickHighInstance ?? false;
-
-      const lick = findLickById(chord.lickId);
-      if (!lick) return null;
-
-      const rootSemi = ROOTS.find(r => r.name === chord.rootName)?.semitone ?? 0;
-      const iiVType = isIiVLickId(chord.lickId);
-      const isContinuation = chord.lickBeatOffset != null && chord.lickBeatOffset > (chord.lickAnacrusis ?? 0);
-
-      // Compute transposition
-      let transposeSemitones: number;
-      if (iiVType) {
-        const keyCenterSemi = isContinuation
-          ? (rootSemi + 5) % 12
-          : (() => { const iiV = detectIiVPattern(chords, chordIdx); return iiV?.keyCenterSemitone ?? 0; })();
-        transposeSemitones = getIiVTransposeSemitones(keyCenterSemi);
-      } else if (isContinuation) {
-        const origIdx = findOriginatorIdx(chords, chordIdx);
-        const origChord = chords[origIdx];
-        const origRootSemi = ROOTS.find(r => r.name === origChord.rootName)?.semitone ?? 0;
-        transposeSemitones = getTransposeSemitones(origChord.quality, origRootSemi);
-      } else {
-        transposeSemitones = getTransposeSemitones(chord.quality, rootSemi);
-      }
-
-      // Slice lick for this chord's portion
-      const layout = getChartLayout(prog);
-      const chordBeats = getChordBeatCount(layout, chordIdx);
-      const beatOffset = chord.lickBeatOffset ?? 0;
-      const isOverflow = chord.lickBeatOffset != null;
-      const effectiveLick = isOverflow
-        ? sliceLick(lick, beatOffset, Math.min(chordBeats, lick.beats - beatOffset))
-        : lick;
-
-      // Use the user's effective mode/position for mapping
-      const { positions } = resolveChordPositions(chord.rootName, eff.modeIdx);
-      const pos = positions.find(p => p.id === eff.posId);
-      if (pos) {
-        return buildPhraseForLick(effectiveLick, chord.rootName, pos, eff.modeIdx, transposeSemitones, highOctave, highInstance);
-      }
-    }
-
-    return null;
-  }
-
-  /** Build a GeneratedPhrase for the anacrusis portion (beat 0..anacrusis) of a chord's saved lick. */
-  function buildAnacrusisPhrase(
-    chordIdx: number,
-    prog: Progression,
-    anacrusis: number,
-  ): GeneratedPhrase | null {
-    const chords = prog.chords;
-    const chord = chords[chordIdx];
-    if (!chord?.lickId || !lickDB) return null;
-
-    const lick = findLickById(chord.lickId);
-    if (!lick) return null;
-
-    const anacrusisSlice = sliceLick(lick, 0, anacrusis);
-    const highOctave = chord.lickHighOctave ?? false;
-    const highInstance = chord.lickHighInstance ?? false;
-
-    // Compute transposition (same logic as playLickForChord for originators)
-    const rootSemi = ROOTS.find(r => r.name === chord.rootName)?.semitone ?? 0;
-    const iiVType = isIiVLickId(chord.lickId);
-    let transposeSemitones: number;
-    if (iiVType) {
-      const iiV = detectIiVPattern(chords, chordIdx);
-      transposeSemitones = getIiVTransposeSemitones(iiV?.keyCenterSemitone ?? 0);
-    } else {
-      transposeSemitones = getTransposeSemitones(chord.quality, rootSemi);
-    }
-
-    // Use effective mode/position
-    const effAll = computeEffectiveSelections(chords, prog.songKey);
-    const eff = effAll[chordIdx];
-    if (!eff) return null;
-
-    const { positions } = resolveChordPositions(chord.rootName, eff.modeIdx);
-    const pos = positions.find(p => p.id === eff.posId);
-    if (!pos) return null;
-
-    return buildPhraseForLick(anacrusisSlice, chord.rootName, pos, eff.modeIdx, transposeSemitones, highOctave, highInstance);
-  }
-
-  /** Schedule strum + lick + metronome for a chord at a Web Audio timestamp. */
-  function scheduleChordAudio(
-    chordIdx: number,
-    prog: Progression,
-    startAt: number,
-    globalBeatOffset: number,
-  ): {
-    strumHandle: { stop: () => void } | null;
-    phraseHandle: { stop: () => void } | null;
-    phrase: GeneratedPhrase | null;
-    metNodes: OscillatorNode[];
-  } {
-    if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
-    const ctx = audioCtxRef.current;
-    if (ctx.state === 'suspended') ctx.resume();
-
-    let strumHandle: { stop: () => void } | null = null;
-    let phraseHandle: { stop: () => void } | null = null;
-    let phrase: GeneratedPhrase | null = null;
-    const metNodes: OscillatorNode[] = [];
-
-    // Strum
-    if (chordAudioOnRef.current) {
-      const strumNotes = getStrumNotes(chordIdx, prog.chords, prog.songKey);
-      if (strumNotes.length > 0) {
-        strumHandle = playChordStrum(ctx, strumNotes, chordVolumeRef.current, startAt);
-      }
-    }
-
-    // Lick
-    if (chordHasSavedLick(chordIdx, prog)) {
-      phrase = playLickForChord(chordIdx, prog);
-      if (phrase) {
-        const eighthDur = (60 / bpm) / 2;
-        phraseHandle = schedulePhrase(ctx, phrase, startAt, eighthDur, noteVolumeRef.current, 99, instrumentRef.current, swingEnabledRef.current ? swingAmountRef.current : 0, bpm);
-      }
-    }
-
-    // Metronome
-    if (metVolumeRef.current > 0) {
-      const layout = getChartLayout(prog);
-      const chordBeats = getChordBeatCount(layout, chordIdx);
-      const beatSec = 60 / bpm;
-      for (let b = 0; b < chordBeats; b++) {
-        const accent = (globalBeatOffset + b) % 4 === 0;
-        const osc = playClick(accent, ctx, metVolumeRef.current, startAt + b * beatSec);
-        metNodes.push(osc);
-      }
-    }
-
-    return { strumHandle, phraseHandle, phrase, metNodes };
-  }
-
-  // BPM auto-advance: drift-free with look-ahead audio scheduling.
-  // Audio (strum + lick + metronome) for the NEXT chord is pre-scheduled on the
-  // Web Audio timeline immediately, so it plays at sample-accurate timing.
-  // The setTimeout only handles React state updates (chord highlight, animation).
-  useEffect(() => {
-    if (!isPlaying || !progMode || !activeProg) {
-      chordStartRef.current = 0;
-      wasAutoAdvanceRef.current = false;
-      activeStrumRef.current?.stop();
-      activeStrumRef.current = null;
-      activePhraseStopRef.current?.stop();
-      activePhraseStopRef.current = null;
-      anacrusisAudioRef.current?.stop();
-      anacrusisAudioRef.current = null;
-      if (anacrusisDisplayTimerRef.current) { clearTimeout(anacrusisDisplayTimerRef.current); anacrusisDisplayTimerRef.current = null; }
-      stopSongMetronome();
-      cancelPendingNext();
-      stopCountIn();
-      return;
-    }
-    // During count-in phase, skip normal playback logic
-    if (isCountingIn) return;
-
-    const seq = buildPlaybackSeq(getChartLayout(activeProg));
-    if (!seq.length) return;
-
-    if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
-    const ctx = audioCtxRef.current;
-    if (ctx.state === 'suspended') ctx.resume();
-
-    // On playback start, BPM change, or user navigation: find position in sequence.
-    // On auto-advance: playPosRef was already incremented in the timeout callback.
-    if (!wasAutoAdvanceRef.current || chordStartRef.current === 0) {
-      const isPlaybackStart = chordStartRef.current === 0;
-
-      // Count-in: on fresh playback start only (chordStartRef === 0)
-      if (isPlaybackStart && countInEnabled) {
-        const beatSec = 60 / bpm;
-        const countInBeats = countInBars * 4;
-        const vol = countInVolumeRef.current;
-        const startAt = ctx.currentTime + 0.05;
-        const nodes: OscillatorNode[] = [];
-        for (let b = 0; b < countInBeats; b++) {
-          const osc = playClick(b % 4 === 0, ctx, vol, startAt + b * beatSec);
-          nodes.push(osc);
-        }
-        countInNodesRef.current = nodes;
-        setIsCountingIn(true);
-
-        // Count-in anacrusis: if the start chord has a lick with anacrusis,
-        // schedule the anacrusis portion at the end of the count-in
-        const startChord = activeProg.chords[activeChordIdx];
-        const startAna = startChord?.lickAnacrusis ?? 0;
-        const startIsOriginator = startChord?.lickBeatOffset != null && startChord.lickBeatOffset === startAna;
-        if (startIsOriginator && startAna > 0 && startChord.lickId && lickDB) {
-          const anaPhrase = buildAnacrusisPhrase(activeChordIdx, activeProg, startAna);
-          if (anaPhrase) {
-            const eighthDurCi = (60 / bpm) / 2;
-            const anacStartAt = startAt + (countInBeats - startAna) * beatSec;
-            schedulePhrase(ctx, anaPhrase, anacStartAt, eighthDurCi, noteVolumeRef.current, 99, instrumentRef.current, swingEnabledRef.current ? swingAmountRef.current : 0, bpm, true);
-            // Display anacrusis on fretboard during count-in tail
-            const anacDisplayDelay = (countInBeats - startAna) * beatSec * 1000;
-            anacrusisDisplayTimerRef.current = setTimeout(() => {
-              anacrusisDisplayTimerRef.current = null;
-              setAutoPlayPhrase(anaPhrase);
-              setPhraseAnimKey(k => k + 1);
-            }, anacDisplayDelay);
-          }
-        }
-
-        countInTimerRef.current = setTimeout(() => {
-          countInTimerRef.current = null;
-          countInNodesRef.current = [];
-          // Set chordStartRef non-zero before clearing isCountingIn
-          // so the next effect run sees isPlaybackStart=false → no re-entry
-          chordStartRef.current = performance.now();
-          setIsCountingIn(false);
-        }, countInBeats * beatSec * 1000);
-        return;
-      }
-
-      const pos = seq.findIndex(s => s.chordIdx === activeChordIdx);
-      playPosRef.current = pos >= 0 ? pos : 0;
-      chordStartRef.current = performance.now();
-
-      // Cancel pending + active audio, then schedule current chord
-      cancelPendingNext();
-      activeStrumRef.current?.stop();
-      activePhraseStopRef.current?.stop();
-      stopSongMetronome();
-      const cumBeats = computeCumBeats(seq, playPosRef.current);
-      const result = scheduleChordAudio(activeChordIdx, activeProg, ctx.currentTime, cumBeats);
-      activeStrumRef.current = result.strumHandle;
-      activePhraseStopRef.current = result.phraseHandle;
-      songMetRef.current = result.metNodes;
-      if (result.phrase) {
-        setAutoPlayPhrase(result.phrase);
-        setPhraseAnimKey(k => k + 1);
-      } else if (!isPlaybackStart) {
-        setAutoPlayPhrase(null);
-      }
-    }
-    wasAutoAdvanceRef.current = false;
-
-    const step = seq[playPosRef.current];
-    if (!step) return;
-
-    const targetAt = chordStartRef.current + (60000 / bpm) * step.beats;
-    const delay = Math.max(0, targetAt - performance.now());
-
-    // Pre-schedule next chord's audio on the Web Audio timeline (look-ahead)
-    let nextPos = (playPosRef.current + 1) % seq.length;
-    // Loop boundary check: only wrap when EXITING the loop range
-    // (i.e. current position is inside the loop but next would leave it)
-    const lr = loopRangeRef.current;
-    if (lr && seq[nextPos]) {
-      const curInLoop = step.measureFlatIdx >= lr.start && step.measureFlatIdx <= lr.end;
-      const nextInLoop = seq[nextPos].measureFlatIdx >= lr.start && seq[nextPos].measureFlatIdx <= lr.end;
-      if (curInLoop && !nextInLoop) {
-        const loopStartPos = seq.findIndex(s => s.measureFlatIdx >= lr.start && s.measureFlatIdx <= lr.end);
-        if (loopStartPos >= 0) nextPos = loopStartPos;
-      }
-    }
-    const nextChordIdx = seq[nextPos].chordIdx;
-    const audioStartAt = ctx.currentTime + delay / 1000;
-    // On loop, carry total beats so metronome accent stays consistent
-    const cumBeatsNext = nextPos === 0
-      ? computeCumBeats(seq, seq.length)
-      : computeCumBeats(seq, nextPos);
-    const nextResult = scheduleChordAudio(nextChordIdx, activeProg, audioStartAt, cumBeatsNext);
-    pendingNextRef.current = nextResult;
-
-    // Anacrusis look-ahead: if next chord has a lick with anacrusis, schedule the
-    // anacrusis portion to play at the END of the current chord's time window.
-    anacrusisAudioRef.current?.stop();
-    anacrusisAudioRef.current = null;
-    if (anacrusisDisplayTimerRef.current) { clearTimeout(anacrusisDisplayTimerRef.current); anacrusisDisplayTimerRef.current = null; }
-    const nextChord = activeProg.chords[nextChordIdx];
-    const nextAna = nextChord?.lickAnacrusis ?? 0;
-    const nextIsOriginator = nextChord?.lickBeatOffset != null && nextChord.lickBeatOffset === nextAna;
-    if (nextIsOriginator && nextAna > 0 && nextChord.lickId && lickDB) {
-      const anaPhrase = buildAnacrusisPhrase(nextChordIdx, activeProg, nextAna);
-      if (anaPhrase) {
-        const beatSec = 60 / bpm;
-        // Clamp to current time: if anacrusis is longer than remaining chord,
-        // start immediately (Web Audio handles past-time scheduling gracefully)
-        const anacrusisStartAt = Math.max(ctx.currentTime, audioStartAt - nextAna * beatSec);
-        const eighthDurAna = (60 / bpm) / 2;
-        anacrusisAudioRef.current = schedulePhrase(ctx, anaPhrase, anacrusisStartAt, eighthDurAna, noteVolumeRef.current, 99, instrumentRef.current, swingEnabledRef.current ? swingAmountRef.current : 0, bpm, true);
-        // Display anacrusis on fretboard before chord switch
-        const anacrusisDisplayDelay = Math.max(0, delay - nextAna * beatSec * 1000);
-        if (anacrusisDisplayDelay > 0) {
-          anacrusisDisplayTimerRef.current = setTimeout(() => {
-            anacrusisDisplayTimerRef.current = null;
-            setAutoPlayPhrase(anaPhrase);
-            setPhraseAnimKey(k => k + 1);
-          }, anacrusisDisplayDelay);
-        } else {
-          // Anacrusis starts immediately — show on fretboard now
-          setAutoPlayPhrase(anaPhrase);
-          setPhraseAnimKey(k => k + 1);
-        }
-      }
-    }
-
-    const timer = setTimeout(() => {
-      wasAutoAdvanceRef.current = true;
-      chordStartRef.current = targetAt;
-      playPosRef.current = nextPos;
-
-      // Transfer pre-scheduled handles from pendingNextRef to active refs
-      activeStrumRef.current?.stop();
-      activePhraseStopRef.current?.stop();
-      stopSongMetronome();
-      activeStrumRef.current = pendingNextRef.current?.strumHandle ?? null;
-      activePhraseStopRef.current = pendingNextRef.current?.phraseHandle ?? null;
-      songMetRef.current = pendingNextRef.current?.metNodes ?? [];
-      const nextPhrase = pendingNextRef.current?.phrase ?? null;
-      pendingNextRef.current = null;
-      anacrusisAudioRef.current = null; // anacrusis audio already played, don't stop
-
-      if (nextPhrase) {
-        setAutoPlayPhrase(nextPhrase);
-        setPhraseAnimKey(k => k + 1);
-      } else {
-        setAutoPlayPhrase(null);
-      }
-
-      setActiveChordIdx(nextChordIdx);
-      setAdvanceTick(t => t + 1);  // ensure effect re-runs even if chordIdx unchanged (repeat)
-    }, delay);
-
-    return () => {
-      clearTimeout(timer);
-      if (anacrusisDisplayTimerRef.current) { clearTimeout(anacrusisDisplayTimerRef.current); anacrusisDisplayTimerRef.current = null; }
-      // If timeout hasn't fired yet, cancel the pre-scheduled next chord audio
-      cancelPendingNext();
-      anacrusisAudioRef.current?.stop();
-      anacrusisAudioRef.current = null;
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isPlaying, activeChordIdx, bpm, activeProg, progMode, isCountingIn, advanceTick]);
 
   function handleSaveProgressions(progs: Progression[]) {
     setProgressions(progs);
@@ -1332,172 +770,7 @@ export default function App() {
     saveChordNotationPrefs(prefs);
   }
 
-  // --- Manual phrase playback (preview / Play button) ---
-  const manualPhraseRef = useRef<{ stop: () => void } | null>(null);
-  const manualPhraseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const justStartedPlayRef = useRef(false);
-  const [phraseAnimKey, setPhraseAnimKey] = useState(0);
 
-  function stopPreviewMetronome() {
-    for (const osc of previewMetRef.current) { try { osc.stop(); } catch { /* already stopped */ } }
-    previewMetRef.current = [];
-  }
-
-  function stopSongMetronome() {
-    for (const osc of songMetRef.current) { try { osc.stop(); } catch { /* already stopped */ } }
-    songMetRef.current = [];
-  }
-
-  function stopCountIn() {
-    if (countInTimerRef.current) {
-      clearTimeout(countInTimerRef.current);
-      countInTimerRef.current = null;
-    }
-    for (const osc of countInNodesRef.current) { try { osc.stop(); } catch { /* already stopped */ } }
-    countInNodesRef.current = [];
-    setIsCountingIn(false);
-  }
-
-  function cancelPendingNext() {
-    if (pendingNextRef.current) {
-      pendingNextRef.current.strumHandle?.stop();
-      pendingNextRef.current.phraseHandle?.stop();
-      for (const osc of pendingNextRef.current.metNodes) { try { osc.stop(); } catch {} }
-      pendingNextRef.current = null;
-    }
-  }
-
-  // Queue a phrase for playback. Audio is NOT scheduled here — the start effect
-  // fires after React renders and starts phrase + strum + metronome at the same
-  // Web Audio timestamp, guaranteeing perfect sync regardless of render latency.
-  const playPhraseAudio = useCallback((phrase: GeneratedPhrase, switchToVPart?: GeneratedPhrase | null, iiBeats?: number) => {
-    manualPhraseRef.current?.stop();
-    if (manualPhraseTimer.current) clearTimeout(manualPhraseTimer.current);
-    previewStrumRef.current.forEach(s => s.stop());
-    previewStrumRef.current = [];
-    stopPreviewMetronome();
-    clearIiVSwitchTimer();
-    setIiVDisplayPhrase(null);
-    justStartedPlayRef.current = true;
-    pendingPhraseRef.current = { phrase, switchToVPart, iiBeats };
-    setIsPhraseAudioPlaying(true);
-    setPhraseAnimKey(k => k + 1);
-  }, []);
-
-  // Phrase-start effect: fires after render, starts all audio at one ctx.currentTime.
-  // Runs every render but no-ops immediately when no pending phrase exists.
-  useEffect(() => {
-    const pending = pendingPhraseRef.current;
-    if (!pending) return;
-    pendingPhraseRef.current = null;
-
-    if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
-    const ctx = audioCtxRef.current;
-    if (ctx.state === 'suspended') ctx.resume();
-    const startAt = ctx.currentTime;
-    const { phrase, switchToVPart, iiBeats } = pending;
-    const eighthDur = (60 / bpm) / 2;
-    const anacrusis = phrase.anacrusis ?? 0;
-    const beatDurSec = eighthDur * 2;
-    const anacrusisDur = anacrusis * beatDurSec;
-
-    // Phrase audio
-    const result = schedulePhrase(ctx, phrase, startAt, eighthDur, noteVolumeRef.current, 99, instrumentRef.current, swingEnabledRef.current ? swingAmountRef.current : 0, bpm);
-    manualPhraseRef.current = result;
-
-    // Chord strum (delayed by anacrusis so it aligns with the main beat)
-    if (chordAudioOnRef.current) {
-      if (progMode && activeProg) {
-        const strumNotes = getStrumNotes(activeChordIdx, activeProg.chords, activeProg.songKey);
-        if (strumNotes.length > 0) {
-          previewStrumRef.current.push(playChordStrum(ctx, strumNotes, chordVolumeRef.current, startAt + anacrusisDur));
-        }
-      } else if (selPos && selPos.instances.length > 0) {
-        const inst = selPos.instances[0];
-        const ct = new Set(mode.chordTones);
-        const strumNotes: { stringIdx: number; fret: number }[] = [];
-        for (let s = 5; s >= 0; s--) {
-          const strNotes = inst.strings[s];
-          if (!strNotes) continue;
-          const ctNote = strNotes.find(([n]) => ct.has(n));
-          if (ctNote) strumNotes.push({ stringIdx: s, fret: ctNote[1] });
-          if (strumNotes.length >= 4) break;
-        }
-        if (strumNotes.length > 0) {
-          previewStrumRef.current.push(playChordStrum(ctx, strumNotes, chordVolumeRef.current, startAt + anacrusisDur));
-        }
-      }
-    }
-
-    // Metronome: schedule ALL clicks on the Web Audio timeline for the phrase duration.
-    // This avoids handing off to the metronome setInterval effect, which would drift
-    // by the React render latency between this effect and the metronome effect.
-    stopPreviewMetronome();
-    if (metVolumeRef.current > 0) {
-      const beatSec = 60 / bpm;
-      const totalBeats = Math.ceil(result.totalDuration / beatSec) + 1;
-      for (let b = 0; b < totalBeats; b++) {
-        const osc = playClick(b % 4 === 0, ctx, metVolumeRef.current, startAt + b * beatSec);
-        previewMetRef.current.push(osc);
-      }
-    }
-
-    // Overflow strums: schedule chord strums for all subsequent chords the lick spans
-    if (switchToVPart && activeProg) {
-      const layout = getChartLayout(activeProg);
-      const firstChordBeats = iiBeats ?? 4;
-      const switchSec = (anacrusis + firstChordBeats) * 2 * eighthDur;
-      const switchDelay = switchSec * 1000;
-
-      // Schedule strums for all overflow chords (2nd, 3rd, ...)
-      if (chordAudioOnRef.current) {
-        const totalSec = result.totalDuration;
-        let accBeats = firstChordBeats; // quarter-note beats accumulated
-        let ci = activeChordIdx + 1;
-        while (ci < activeProg.chords.length) {
-          const strumSec = (anacrusis + accBeats) * 2 * eighthDur; // anacrusis offset added
-          if (strumSec >= totalSec) break;
-          const strumNotes = getStrumNotes(ci, activeProg.chords, activeProg.songKey);
-          if (strumNotes.length > 0) {
-            previewStrumRef.current.push(playChordStrum(ctx, strumNotes, chordVolumeRef.current, startAt + strumSec));
-          }
-          accBeats += getChordBeatCount(layout, ci);
-          ci++;
-        }
-      }
-
-      // setTimeout for React state update (fretboard display switch at 2nd chord)
-      iiVSwitchTimerRef.current = setTimeout(() => {
-        justStartedPlayRef.current = true;
-        setIiVDisplayPhrase(switchToVPart);
-        setPhraseAnimKey(k => k + 1);
-        iiVSwitchTimerRef.current = null;
-      }, switchDelay);
-    }
-
-    // Completion timer
-    manualPhraseTimer.current = setTimeout(() => {
-      manualPhraseRef.current = null;
-      stopPreviewMetronome();
-      setIsPhraseAudioPlaying(false);
-    }, result.totalDuration * 1000 + 200);
-  }, [phraseAnimKey]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Stop playback when activePhrase changes (e.g. chord navigation).
-  // Skipped on the render that started playback (justStartedPlayRef guard).
-  useEffect(() => {
-    if (justStartedPlayRef.current) {
-      justStartedPlayRef.current = false;
-      return;
-    }
-    manualPhraseRef.current?.stop();
-    manualPhraseRef.current = null;
-    if (manualPhraseTimer.current) clearTimeout(manualPhraseTimer.current);
-    previewStrumRef.current.forEach(s => s.stop());
-    previewStrumRef.current = [];
-    stopPreviewMetronome();
-    setIsPhraseAudioPlaying(false);
-  }, [activePhrase]);
 
 
   function getLabel(nn: string): string {
@@ -1773,17 +1046,7 @@ export default function App() {
                         playPhraseAudio(p);
                       }
                     }}
-                    onStop={() => {
-                      manualPhraseRef.current?.stop();
-                      manualPhraseRef.current = null;
-                      if (manualPhraseTimer.current) clearTimeout(manualPhraseTimer.current);
-                      previewStrumRef.current.forEach(s => s.stop());
-                      previewStrumRef.current = [];
-                      stopPreviewMetronome();
-                      clearIiVSwitchTimer();
-                      setIiVDisplayPhrase(null);
-                      setIsPhraseAudioPlaying(false);
-                    }}
+                    onStop={stopPreview}
                     onClear={() => {
                       setSelectedLickIdx(null);
                       const copy = [...progressions];

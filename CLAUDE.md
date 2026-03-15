@@ -52,7 +52,7 @@ fnm install --lts && fnm default lts-latest
 
 ```
 src/
-├── App.tsx                          — 状態管理ハブ (通常モード + 進行モード + BPM自動再生)
+├── App.tsx                          — 状態管理ハブ (UI state + フック統合, ~1270行)
 ├── types/
 │   └── music.ts                     — ChordSlot (lickBeatOffset, lickAnacrusis フィールド含む), Progression, ChartMeasure, ChartLayout, ModeTemplate, PoolNote 等
 ├── constants/
@@ -66,6 +66,8 @@ src/
 │   ├── chartLayout.ts               — deriveChartLayout(), getChartLayout(), buildChordRows(), removeChordFromLayout(), insertChordAtBeat(), computeInsertFlatIndex(), insertEmptyMeasure(), splitSection(), mergeSections(), splitEndings(), removeEndings(), findChordMeasure()
 │   ├── chordForms.ts                — findVoicingsInPosition(), VOICING_TEMPLATES, formatVoicingLabel()
 │   ├── lickEngine.ts                — absolutePitch(), buildNotePool(), loadLickDB(), transposeLick(), mapLickToFretboard(), lickToGeneratedPhrase(), inferModeFromLick(), inferModeCandidates(), findBestPositionForLick(), selectBestInstance(), buildLickContext(), detectIiVPattern(), isIiVLickId(), buildIiVLickContext(), sliceLick()
+│   ├── lickPlayback.ts              — findLickById(), playLickForChord(), buildAnacrusisPhrase(), getStrumNotes(), resolveChordPositions(), computeTransposeSemitones(), isLickOriginator()
+│   ├── playbackSeq.ts               — buildPlaybackSeq(), computeCumBeats()
 │   ├── phraseAnalysis.ts            — analyzePhrase(), computeSummary()
 │   ├── swing.ts                     — swingBeatStart(), swingVolumeMult(), swingDurMult()
 │   └── __tests__/
@@ -79,6 +81,10 @@ src/
 │       ├── swing.test.ts            — 25 tests (タイミング/ダイナミクス/アーティキュレーション/テンポ補正)
 │       └── lickEngine.test.ts       — 61 tests (リックDB読込・移調・指板マッピング・モード推定・ポジション選択・インスタンス選択・8音スケール・GeneratedPhrase変換・ii-V検出・sliceLick汎用分割)
 ├── hooks/
+│   ├── useTimer.ts                  — setTimeout ref管理フック (自動クリア)
+│   ├── useAudioContext.ts           — AudioContext共有 + 音量/設定ref同期 + AudioHandle
+│   ├── usePreviewPlayback.ts        — リック手動プレビュー再生 (ii-V切替, メトロノーム)
+│   ├── useAutoPlay.ts               — 進行モード自動再生 (BPM, カウントイン, ループ, アナクルーシス)
 │   └── useUndoRedo.ts               — 汎用 Undo/Redo フック (past/present/future スタック)
 └── components/
     ├── Fretboard/                   — SVG指板描画 (Fretboard, FretboardNote, GhostNote, PhrasePath)
@@ -285,21 +291,21 @@ const seq = buildPlaybackSeq(getChartLayout(activeProg));
 
 ### ドリフトフリータイミング + Look-ahead スケジューリング
 
-コードチェンジ時の音声を Web Audio タイムラインに事前予約 (look-ahead) することで、サンプル精度のタイミングを実現:
+`useAutoPlay` フック内で、コードチェンジ時の音声を Web Audio タイムラインに事前予約 (look-ahead) することで、サンプル精度のタイミングを実現:
 
 ```typescript
+// useAutoPlay 内部の状態管理
+const advanceOriginRef = useRef<'stopped'|'start'|'user-nav'|'auto'>('stopped'); // 明示的状態マシン
 const chordStartRef = useRef(0);     // 現コードの「理想開始時刻」
-const wasAutoAdvanceRef = useRef(false); // 自動進行か手動ナビかを区別
 const playPosRef = useRef(0);        // playbackSeq 内の現在位置
 const pendingNextRef = useRef(null);  // 事前スケジュール済み次コードの音声ハンドル
-const songMetRef = useRef([]);        // 曲再生メトロノームの予約済み OscillatorNode
 
 // effect 実行時: 次コードの音声を ctx.currentTime + delay/1000 で即座にスケジュール
 // setTimeout: React state 更新のみ (コードハイライト、アニメーション)
 // pendingNextRef パターン: timeout 発火→ref移管→null化、cleanup時はnullなら何もしない
 ```
 
-`scheduleChordAudio()` ヘルパーがストラム + リック + メトロノームを一括スケジュール。
+`scheduleChordAudio()` (useAutoPlay 内部関数) がストラム + リック + メトロノームを一括スケジュール。
 メトロノームの setInterval は廃止、全て Web Audio タイムラインに事前予約。
 
 停止トリガー: 通常モード切替 / 進行モード切替 / 編集ボタン / 進行選択変更
@@ -313,8 +319,8 @@ const songMetRef = useRef([]);        // 曲再生メトロノームの予約済
 - `countInEnabled` / `countInBars` (1 or 2) / `countInVolume` — 全て localStorage 永続化
 - ON/OFF + 小節数はミキサー内ボタンのサイクル切替: `2小節 → OFF → 1小節 → 2小節 → ...`
 - カウントイン中は `isCountingIn = true` → auto-advance effect 早期リターン + `activePhrase = null` (フレーズ表示抑制)
-- タイマー完了時に `chordStartRef = performance.now()` をセットしてから `setIsCountingIn(false)` → effect 再実行時 `isPlaybackStart = false` で再カウントインを防止
-- 停止時は `stopCountIn()` で予約済みクリック音を即座に停止
+- `advanceOriginRef === 'stopped'` のときだけカウントインする明確なルール。カウントイン完了後は `advanceOriginRef = 'start'` にセット
+- 停止時は useAutoPlay 内の cleanup でクリック音を即座に停止
 
 ### 小節ループ
 
@@ -346,10 +352,10 @@ function playClick(accent: boolean, ctx: AudioContext, volume: number, at?: numb
 ### メトロノーム自動再生 (ボタン廃止)
 
 `isMetronomeOn` state は廃止。メトロノームは以下の条件で自動的に鳴る:
-- **進行モード自動再生中**: `isPlaying && metVolume > 0` → `scheduleChordAudio()` 内で Web Audio タイムラインに事前予約 (`songMetRef`)
-- **フレーズプレビュー再生中**: phrase-start effect で全クリックを Web Audio タイムラインに一括予約 (`previewMetRef`)
+- **進行モード自動再生中**: `isPlaying && metVolume > 0` → `useAutoPlay` 内の `scheduleChordAudio()` で Web Audio タイムラインに事前予約
+- **フレーズプレビュー再生中**: `usePreviewPlayback` 内の phrase-start effect で全クリックを Web Audio タイムラインに一括予約
 
-### フレーズプレビュー同期アーキテクチャ
+### フレーズプレビュー同期アーキテクチャ (`usePreviewPlayback`)
 
 フレーズ・コードストラム・メトロノームの完全同期を保証する2段階設計:
 
@@ -360,13 +366,13 @@ function playClick(accent: boolean, ctx: AudioContext, volume: number, at?: numb
    - `playClick(accent, ctx, vol, startAt + b * beatSec)` × 全拍 — メトロノーム全クリック一括予約
 
 全て `OscillatorNode.start(t)` で Web Audio スケジューラに予約されるため、JS イベントループや React レンダー遅延に一切依存しない。
-停止時は `stopPreviewMetronome()` で予約済み OscillatorNode を全て `.stop()` しリソースリーク防止。
+停止時は `stopHandle` / `stopHandleArray` (`AudioHandle` インターフェース) で予約済み音声を一括停止。
 
-### ストラム・メトロノーム分離
+### ストラム・メトロノーム分離 (フック間)
 
-- `activeStrumRef` / `songMetRef` — 進行モード自動再生用。auto-advance effect が管理・クリーンアップ
-- `previewStrumRef` / `previewMetRef` — フレーズプレビュー用。auto-advance effect の `activeProg` 変更によるクリーンアップの影響を受けない
-- `pendingNextRef` — 事前スケジュール済み次コード音声。timeout 発火時に active refs に移管、cleanup 時にキャンセル
+- `useAutoPlay` 内: `activeStrumRef` / `songMetRef` / `pendingNextRef` — 進行モード自動再生用
+- `usePreviewPlayback` 内: `previewStrumRef` / `previewMetRef` — フレーズプレビュー用
+- 両フックは互いの refs に干渉せず独立管理。`AudioHandle` + `stopHandle`/`stopHandleArray` で統一的クリーンアップ
 
 ### 音量ミキサー (GlobalAudioControls)
 
@@ -386,7 +392,7 @@ function playClick(accent: boolean, ctx: AudioContext, volume: number, at?: numb
 
 - 各チャンネルにミュートボタン: メトロノーム/単音は volume 0⇔復元、コードは `chordAudioOn` トグル
 - タップテンポ: TAPボタン連続タップでBPM設定 (直近8タップ平均、2秒リセット)
-- 全 state は `useRef` 経由でコールバック内から参照 (再レンダリング不要)
+- 全 state は `useAudioContext` フック内の `useRef` 経由でコールバック内から参照 (再レンダリング不要)。ref 同期 + localStorage 永続化を自動実行
 - パネル外クリックで自動閉じ (`mousedown` リスナー)
 
 ### リック再生 (`playPhraseAudio`)
