@@ -88,7 +88,8 @@ export interface ChordSlot {
   lickId?: string;           // stable lick ID (e.g. "D-3a7f") — saved lick selection
   lickHighOctave?: boolean;  // 8va toggle: +12 semitone shift within same instance
   lickHighInstance?: boolean; // high-position instance toggle
-  lickBeatOffset?: number;   // beat offset into the lick (0 = originator of multi-chord span, >0 = continuation, undefined = no split)
+  lickBeatOffset?: number;   // beat offset into the lick (anacrusis = originator, >anacrusis = continuation, undefined = no split)
+  lickAnacrusis?: number;    // anacrusis beats of the assigned lick (originator identification with anacrusis)
 }
 
 /** Song key with major/minor quality */
@@ -220,6 +221,8 @@ export interface GeneratedPhrase {
   rootName: string;
   /** Total number of beats in the phrase */
   totalBeats: number;
+  /** Anacrusis (pickup) beats — used to delay chord strum in preview playback */
+  anacrusis?: number;
 }
 
 // --- Lick DB Types ---

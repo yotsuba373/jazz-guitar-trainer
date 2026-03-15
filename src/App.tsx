@@ -238,6 +238,8 @@ export default function App() {
   const swingEnabledRef = useRef(swingEnabled);
   const swingAmountRef = useRef(swingAmount);
   const activePhraseStopRef = useRef<{ stop: () => void } | null>(null);
+  const anacrusisDisplayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const anacrusisAudioRef = useRef<{ stop: () => void } | null>(null);
   const [autoPlayPhrase, setAutoPlayPhrase] = useState<GeneratedPhrase | null>(null);
   // Lick practice state
   const [lickDB, setLickDB] = useState<LickDB | null>(null);
@@ -489,7 +491,7 @@ export default function App() {
     if (chord?.lickId) {
       // Continuation chord (overflow from a previous chord): lick isn't in filteredLicks.
       // Set selectedLickIdx to null so the continuation fallback path handles it.
-      if (chord.lickBeatOffset != null && chord.lickBeatOffset > 0) {
+      if (chord.lickBeatOffset != null && chord.lickBeatOffset > (chord.lickAnacrusis ?? 0)) {
         setSelectedLickIdx(null);
         setLickHighOctave(chord.lickHighOctave ?? false);
         setLickHighInstance(chord.lickHighInstance ?? false);
@@ -519,7 +521,7 @@ export default function App() {
     // Determine the lick source
     let lick: LickEntry | null = null;
     let keyCenterSemi: number | undefined;
-    const isContinuation = chord.lickBeatOffset != null && chord.lickBeatOffset > 0;
+    const isContinuation = chord.lickBeatOffset != null && chord.lickBeatOffset > (chord.lickAnacrusis ?? 0);
 
     // Continuation chord: look up by lickId directly
     if (isContinuation && chord.lickId) {
@@ -539,7 +541,7 @@ export default function App() {
       lick = findLickById(chord.lickId);
       if (lick) {
         const iiVType = isIiVLickId(lick.id);
-        if (iiVType && chord.lickBeatOffset === 0) {
+        if (iiVType && chord.lickBeatOffset === (chord.lickAnacrusis ?? 0)) {
           const iiV = detectIiVPattern(activeProg.chords, activeChordIdx);
           if (iiV) keyCenterSemi = iiV.keyCenterSemitone;
         }
@@ -577,8 +579,9 @@ export default function App() {
       const display = buildPhraseForLick(displayLick, chord.rootName, pos, mi, transposeSemitones, lickHighOctave, lickHighInstance);
       const preview = isOverflow ? buildPhraseForLick(lick!, chord.rootName, pos, mi, transposeSemitones, lickHighOctave, lickHighInstance) : display;
       let vPart: GeneratedPhrase | null = null;
-      if (isOverflow && beatOffset === 0 && beatOffset + chordBeats < lick!.beats) {
-        const nextSlice = sliceLick(lick!, chordBeats, Math.min(chordBeats, lick!.beats - chordBeats));
+      const ana = chord.lickAnacrusis ?? 0;
+      if (isOverflow && beatOffset === ana && beatOffset + chordBeats < lick!.beats) {
+        const nextSlice = sliceLick(lick!, beatOffset + chordBeats, Math.min(chordBeats, lick!.beats - beatOffset - chordBeats));
         vPart = buildPhraseForLick(nextSlice, chord.rootName, pos, mi, transposeSemitones, lickHighOctave, lickHighInstance);
       }
       return { activeLickPhrase: display, previewLickPhrase: preview, vPartPhrase: vPart };
@@ -608,8 +611,9 @@ export default function App() {
           ? buildIiVLickContext(lick, keyCenterSemi, vChord.quality, vChord.rootName, vRootSemi, lickHighOctave, lickHighInstance)?.phrase ?? null
           : displayCtx.phrase;
         let vPart: GeneratedPhrase | null = null;
-        if (isOverflow && beatOffset === 0 && beatOffset + chordBeats < lick.beats) {
-          const nextSlice = sliceLick(lick, chordBeats, Math.min(chordBeats, lick.beats - chordBeats));
+        const ana2 = chord.lickAnacrusis ?? 0;
+        if (isOverflow && beatOffset === ana2 && beatOffset + chordBeats < lick.beats) {
+          const nextSlice = sliceLick(lick, beatOffset + chordBeats, Math.min(chordBeats, lick.beats - beatOffset - chordBeats));
           const vCtx = buildIiVLickContext(nextSlice, keyCenterSemi, vChord.quality, vChord.rootName, vRootSemi, lickHighOctave, lickHighInstance);
           vPart = vCtx?.phrase ?? null;
         }
@@ -685,7 +689,7 @@ export default function App() {
   // Skip for continuation chords — they inherit 8va/Hi from the originator
   useEffect(() => {
     const chord = activeProg?.chords[activeChordIdx];
-    if (chord?.lickBeatOffset != null && chord.lickBeatOffset > 0) return;
+    if (chord?.lickBeatOffset != null && chord.lickBeatOffset > (chord.lickAnacrusis ?? 0)) return;
     let changed = false;
     const updates: Partial<{ lickHighOctave: boolean; lickHighInstance: boolean }> = {};
     if (!canHighOctave && lickHighOctave) {
@@ -704,10 +708,11 @@ export default function App() {
       prog.chords[activeChordIdx] = { ...prog.chords[activeChordIdx], ...updates };
       // Propagate to continuation chords
       const curLickId = prog.chords[activeChordIdx].lickId;
+      const autoAna = prog.chords[activeChordIdx].lickAnacrusis ?? 0;
       if (curLickId && prog.chords[activeChordIdx].lickBeatOffset != null) {
         for (let i = activeChordIdx + 1; i < prog.chords.length; i++) {
           const c = prog.chords[i];
-          if (c?.lickId === curLickId && c?.lickBeatOffset != null && c.lickBeatOffset > 0) {
+          if (c?.lickId === curLickId && c?.lickBeatOffset != null && c.lickBeatOffset > autoAna) {
             prog.chords[i] = { ...c, ...updates };
           } else break;
         }
@@ -720,7 +725,7 @@ export default function App() {
   const [isPhraseAudioPlaying, setIsPhraseAudioPlaying] = useState(false);
 
   const activePhrase = useMemo(() => {
-    if (isCountingIn) return null;  // suppress phrase display during count-in
+    if (isCountingIn) return autoPlayPhrase ?? null;  // during count-in, only show anacrusis or nothing
     if (iiVDisplayPhrase) return iiVDisplayPhrase;
     // During manual playback of ii-V-long, show full phrase (not split display)
     if (isPhraseAudioPlaying && previewLickPhrase) return previewLickPhrase;
@@ -805,13 +810,13 @@ export default function App() {
     return null;
   }
 
-  /** Find the originator chord index for a continuation chord (scan backward for same lickId with offset 0). */
+  /** Find the originator chord index for a continuation chord (scan backward for same lickId with offset matching anacrusis). */
   function findOriginatorIdx(chords: ChordSlot[], continuationIdx: number): number {
     const lickId = chords[continuationIdx].lickId;
     for (let i = continuationIdx - 1; i >= 0; i--) {
-      if (chords[i].lickId === lickId && (!chords[i].lickBeatOffset || chords[i].lickBeatOffset === 0)) {
-        return i;
-      }
+      if (chords[i].lickId !== lickId) break;
+      const ana = chords[i].lickAnacrusis ?? 0;
+      if (chords[i].lickBeatOffset === ana) return i;
     }
     return continuationIdx;
   }
@@ -880,7 +885,7 @@ export default function App() {
 
       const rootSemi = ROOTS.find(r => r.name === chord.rootName)?.semitone ?? 0;
       const iiVType = isIiVLickId(chord.lickId);
-      const isContinuation = chord.lickBeatOffset != null && chord.lickBeatOffset > 0;
+      const isContinuation = chord.lickBeatOffset != null && chord.lickBeatOffset > (chord.lickAnacrusis ?? 0);
 
       // Compute transposition
       let transposeSemitones: number;
@@ -916,6 +921,46 @@ export default function App() {
     }
 
     return null;
+  }
+
+  /** Build a GeneratedPhrase for the anacrusis portion (beat 0..anacrusis) of a chord's saved lick. */
+  function buildAnacrusisPhrase(
+    chordIdx: number,
+    prog: Progression,
+    anacrusis: number,
+  ): GeneratedPhrase | null {
+    const chords = prog.chords;
+    const chord = chords[chordIdx];
+    if (!chord?.lickId || !lickDB) return null;
+
+    const lick = findLickById(chord.lickId);
+    if (!lick) return null;
+
+    const anacrusisSlice = sliceLick(lick, 0, anacrusis);
+    const highOctave = chord.lickHighOctave ?? false;
+    const highInstance = chord.lickHighInstance ?? false;
+
+    // Compute transposition (same logic as playLickForChord for originators)
+    const rootSemi = ROOTS.find(r => r.name === chord.rootName)?.semitone ?? 0;
+    const iiVType = isIiVLickId(chord.lickId);
+    let transposeSemitones: number;
+    if (iiVType) {
+      const iiV = detectIiVPattern(chords, chordIdx);
+      transposeSemitones = getIiVTransposeSemitones(iiV?.keyCenterSemitone ?? 0);
+    } else {
+      transposeSemitones = getTransposeSemitones(chord.quality, rootSemi);
+    }
+
+    // Use effective mode/position
+    const effAll = computeEffectiveSelections(chords, prog.songKey);
+    const eff = effAll[chordIdx];
+    if (!eff) return null;
+
+    const { positions } = resolveChordPositions(chord.rootName, eff.modeIdx);
+    const pos = positions.find(p => p.id === eff.posId);
+    if (!pos) return null;
+
+    return buildPhraseForLick(anacrusisSlice, chord.rootName, pos, eff.modeIdx, transposeSemitones, highOctave, highInstance);
   }
 
   /** Schedule strum + lick + metronome for a chord at a Web Audio timestamp. */
@@ -983,6 +1028,9 @@ export default function App() {
       activeStrumRef.current = null;
       activePhraseStopRef.current?.stop();
       activePhraseStopRef.current = null;
+      anacrusisAudioRef.current?.stop();
+      anacrusisAudioRef.current = null;
+      if (anacrusisDisplayTimerRef.current) { clearTimeout(anacrusisDisplayTimerRef.current); anacrusisDisplayTimerRef.current = null; }
       stopSongMetronome();
       cancelPendingNext();
       stopCountIn();
@@ -1016,6 +1064,28 @@ export default function App() {
         }
         countInNodesRef.current = nodes;
         setIsCountingIn(true);
+
+        // Count-in anacrusis: if the start chord has a lick with anacrusis,
+        // schedule the anacrusis portion at the end of the count-in
+        const startChord = activeProg.chords[activeChordIdx];
+        const startAna = startChord?.lickAnacrusis ?? 0;
+        const startIsOriginator = startChord?.lickBeatOffset != null && startChord.lickBeatOffset === startAna;
+        if (startIsOriginator && startAna > 0 && startChord.lickId && lickDB) {
+          const anaPhrase = buildAnacrusisPhrase(activeChordIdx, activeProg, startAna);
+          if (anaPhrase) {
+            const eighthDurCi = (60 / bpm) / 2;
+            const anacStartAt = startAt + (countInBeats - startAna) * beatSec;
+            schedulePhrase(ctx, anaPhrase, anacStartAt, eighthDurCi, noteVolumeRef.current, 99, instrumentRef.current, swingEnabledRef.current ? swingAmountRef.current : 0, bpm, true);
+            // Display anacrusis on fretboard during count-in tail
+            const anacDisplayDelay = (countInBeats - startAna) * beatSec * 1000;
+            anacrusisDisplayTimerRef.current = setTimeout(() => {
+              anacrusisDisplayTimerRef.current = null;
+              setAutoPlayPhrase(anaPhrase);
+              setPhraseAnimKey(k => k + 1);
+            }, anacDisplayDelay);
+          }
+        }
+
         countInTimerRef.current = setTimeout(() => {
           countInTimerRef.current = null;
           countInNodesRef.current = [];
@@ -1078,6 +1148,39 @@ export default function App() {
     const nextResult = scheduleChordAudio(nextChordIdx, activeProg, audioStartAt, cumBeatsNext);
     pendingNextRef.current = nextResult;
 
+    // Anacrusis look-ahead: if next chord has a lick with anacrusis, schedule the
+    // anacrusis portion to play at the END of the current chord's time window.
+    anacrusisAudioRef.current?.stop();
+    anacrusisAudioRef.current = null;
+    if (anacrusisDisplayTimerRef.current) { clearTimeout(anacrusisDisplayTimerRef.current); anacrusisDisplayTimerRef.current = null; }
+    const nextChord = activeProg.chords[nextChordIdx];
+    const nextAna = nextChord?.lickAnacrusis ?? 0;
+    const nextIsOriginator = nextChord?.lickBeatOffset != null && nextChord.lickBeatOffset === nextAna;
+    if (nextIsOriginator && nextAna > 0 && nextChord.lickId && lickDB) {
+      const anaPhrase = buildAnacrusisPhrase(nextChordIdx, activeProg, nextAna);
+      if (anaPhrase) {
+        const beatSec = 60 / bpm;
+        // Clamp to current time: if anacrusis is longer than remaining chord,
+        // start immediately (Web Audio handles past-time scheduling gracefully)
+        const anacrusisStartAt = Math.max(ctx.currentTime, audioStartAt - nextAna * beatSec);
+        const eighthDurAna = (60 / bpm) / 2;
+        anacrusisAudioRef.current = schedulePhrase(ctx, anaPhrase, anacrusisStartAt, eighthDurAna, noteVolumeRef.current, 99, instrumentRef.current, swingEnabledRef.current ? swingAmountRef.current : 0, bpm, true);
+        // Display anacrusis on fretboard before chord switch
+        const anacrusisDisplayDelay = Math.max(0, delay - nextAna * beatSec * 1000);
+        if (anacrusisDisplayDelay > 0) {
+          anacrusisDisplayTimerRef.current = setTimeout(() => {
+            anacrusisDisplayTimerRef.current = null;
+            setAutoPlayPhrase(anaPhrase);
+            setPhraseAnimKey(k => k + 1);
+          }, anacrusisDisplayDelay);
+        } else {
+          // Anacrusis starts immediately — show on fretboard now
+          setAutoPlayPhrase(anaPhrase);
+          setPhraseAnimKey(k => k + 1);
+        }
+      }
+    }
+
     const timer = setTimeout(() => {
       wasAutoAdvanceRef.current = true;
       chordStartRef.current = targetAt;
@@ -1092,6 +1195,7 @@ export default function App() {
       songMetRef.current = pendingNextRef.current?.metNodes ?? [];
       const nextPhrase = pendingNextRef.current?.phrase ?? null;
       pendingNextRef.current = null;
+      anacrusisAudioRef.current = null; // anacrusis audio already played, don't stop
 
       if (nextPhrase) {
         setAutoPlayPhrase(nextPhrase);
@@ -1106,8 +1210,11 @@ export default function App() {
 
     return () => {
       clearTimeout(timer);
+      if (anacrusisDisplayTimerRef.current) { clearTimeout(anacrusisDisplayTimerRef.current); anacrusisDisplayTimerRef.current = null; }
       // If timeout hasn't fired yet, cancel the pre-scheduled next chord audio
       cancelPendingNext();
+      anacrusisAudioRef.current?.stop();
+      anacrusisAudioRef.current = null;
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPlaying, activeChordIdx, bpm, activeProg, progMode, isCountingIn, advanceTick]);
@@ -1290,17 +1397,20 @@ export default function App() {
     const startAt = ctx.currentTime;
     const { phrase, switchToVPart, iiBeats } = pending;
     const eighthDur = (60 / bpm) / 2;
+    const anacrusis = phrase.anacrusis ?? 0;
+    const beatDurSec = eighthDur * 2;
+    const anacrusisDur = anacrusis * beatDurSec;
 
     // Phrase audio
     const result = schedulePhrase(ctx, phrase, startAt, eighthDur, noteVolumeRef.current, 99, instrumentRef.current, swingEnabledRef.current ? swingAmountRef.current : 0, bpm);
     manualPhraseRef.current = result;
 
-    // Chord strum (same startAt)
+    // Chord strum (delayed by anacrusis so it aligns with the main beat)
     if (chordAudioOnRef.current) {
       if (progMode && activeProg) {
         const strumNotes = getStrumNotes(activeChordIdx, activeProg.chords, activeProg.songKey);
         if (strumNotes.length > 0) {
-          previewStrumRef.current.push(playChordStrum(ctx, strumNotes, chordVolumeRef.current, startAt));
+          previewStrumRef.current.push(playChordStrum(ctx, strumNotes, chordVolumeRef.current, startAt + anacrusisDur));
         }
       } else if (selPos && selPos.instances.length > 0) {
         const inst = selPos.instances[0];
@@ -1314,7 +1424,7 @@ export default function App() {
           if (strumNotes.length >= 4) break;
         }
         if (strumNotes.length > 0) {
-          previewStrumRef.current.push(playChordStrum(ctx, strumNotes, chordVolumeRef.current, startAt));
+          previewStrumRef.current.push(playChordStrum(ctx, strumNotes, chordVolumeRef.current, startAt + anacrusisDur));
         }
       }
     }
@@ -1336,7 +1446,7 @@ export default function App() {
     if (switchToVPart && activeProg) {
       const layout = getChartLayout(activeProg);
       const firstChordBeats = iiBeats ?? 4;
-      const switchSec = firstChordBeats * 2 * eighthDur;
+      const switchSec = (anacrusis + firstChordBeats) * 2 * eighthDur;
       const switchDelay = switchSec * 1000;
 
       // Schedule strums for all overflow chords (2nd, 3rd, ...)
@@ -1345,7 +1455,7 @@ export default function App() {
         let accBeats = firstChordBeats; // quarter-note beats accumulated
         let ci = activeChordIdx + 1;
         while (ci < activeProg.chords.length) {
-          const strumSec = accBeats * 2 * eighthDur; // convert quarter→eighth→seconds
+          const strumSec = (anacrusis + accBeats) * 2 * eighthDur; // anacrusis offset added
           if (strumSec >= totalSec) break;
           const strumNotes = getStrumNotes(ci, activeProg.chords, activeProg.songKey);
           if (strumNotes.length > 0) {
@@ -1567,9 +1677,11 @@ export default function App() {
                         const chordBeats = getChordBeatCount(layout, activeChordIdx);
 
                         // Assign lick to current chord, overflow to subsequent chords if needed
-                        if (lick.beats > chordBeats && activeChordIdx + 1 < prog.chords.length) {
-                          let remaining = lick.beats;
-                          let offset = 0;
+                        const anacrusis = lick.anacrusis ?? 0;
+                        const effectiveBeats = lick.beats - anacrusis;
+                        if (effectiveBeats > chordBeats && activeChordIdx + 1 < prog.chords.length) {
+                          let remaining = effectiveBeats;
+                          let offset = anacrusis;
                           let ci = activeChordIdx;
                           while (remaining > 0 && ci < prog.chords.length) {
                             const cb = ci === activeChordIdx ? chordBeats : getChordBeatCount(layout, ci);
@@ -1580,6 +1692,7 @@ export default function App() {
                               lickHighOctave: curOctave,
                               lickHighInstance: curInst,
                               lickBeatOffset: offset,
+                              lickAnacrusis: anacrusis > 0 ? anacrusis : undefined,
                             };
                             offset += assignBeats;
                             remaining -= assignBeats;
@@ -1591,7 +1704,8 @@ export default function App() {
                             lickId: lick.id,
                             lickHighOctave: curOctave,
                             lickHighInstance: curInst,
-                            lickBeatOffset: undefined,
+                            lickBeatOffset: anacrusis > 0 ? anacrusis : undefined,
+                            lickAnacrusis: anacrusis > 0 ? anacrusis : undefined,
                           };
                         }
                         copy[activeProgIdx] = prog;
@@ -1606,7 +1720,9 @@ export default function App() {
                       const ts = iiVTransp ?? getTransposeSemitones(chord.quality, rootSemi);
                       const layout = getChartLayout(activeProg);
                       const chordBeats = getChordBeatCount(layout, activeChordIdx);
-                      const isOverflow = lick.beats > chordBeats;
+                      const lickAna = lick.anacrusis ?? 0;
+                      const lickEffBeats = lick.beats - lickAna;
+                      const isOverflow = lickEffBeats > chordBeats;
                       const eff = effectiveAll[activeChordIdx];
                       if (eff) {
                         const { positions: posArr } = resolveChordPositions(chord.rootName, eff.modeIdx);
@@ -1614,7 +1730,8 @@ export default function App() {
                         if (pos) {
                           const phrase = buildPhraseForLick(lick, chord.rootName, pos, eff.modeIdx, ts, curOctave, curInst);
                           if (isOverflow) {
-                            const nextSlice = sliceLick(lick, chordBeats, Math.min(chordBeats, lick.beats - chordBeats));
+                            const nextOffset = lickAna + chordBeats;
+                            const nextSlice = sliceLick(lick, nextOffset, Math.min(chordBeats, lick.beats - nextOffset));
                             const vPartSwitch = buildPhraseForLick(nextSlice, chord.rootName, pos, eff.modeIdx, ts, curOctave, curInst);
                             playPhraseAudio(phrase, vPartSwitch, chordBeats);
                           } else {
@@ -1631,7 +1748,8 @@ export default function App() {
                           const fullCtx = buildIiVLickContext(lick, filteredLicks.iiV.keyCenterSemitone, nextChord.quality, nextChord.rootName, vRootSemi, curOctave, curInst);
                           if (fullCtx) {
                             if (isOverflow) {
-                              const nextSlice = sliceLick(lick, chordBeats, Math.min(chordBeats, lick.beats - chordBeats));
+                              const nextOffset = lickAna + chordBeats;
+                              const nextSlice = sliceLick(lick, nextOffset, Math.min(chordBeats, lick.beats - nextOffset));
                               const vCtx = buildIiVLickContext(nextSlice, filteredLicks.iiV.keyCenterSemitone, nextChord.quality, nextChord.rootName, vRootSemi, curOctave, curInst);
                               playPhraseAudio(fullCtx.phrase, vCtx?.phrase ?? null, chordBeats);
                             } else {
@@ -1671,13 +1789,14 @@ export default function App() {
                       const copy = [...progressions];
                       const prog = { ...copy[activeProgIdx], chords: [...copy[activeProgIdx].chords] };
                       const curChord = prog.chords[activeChordIdx];
-                      prog.chords[activeChordIdx] = { ...curChord, lickId: undefined, lickHighOctave: undefined, lickHighInstance: undefined, lickBeatOffset: undefined };
+                      prog.chords[activeChordIdx] = { ...curChord, lickId: undefined, lickHighOctave: undefined, lickHighInstance: undefined, lickBeatOffset: undefined, lickAnacrusis: undefined };
                       // Linked clear: if this was the originator, clear all continuations
-                      if (curChord?.lickBeatOffset === 0) {
+                      const clearAna = curChord?.lickAnacrusis ?? 0;
+                      if (curChord?.lickBeatOffset === clearAna) {
                         for (let i = activeChordIdx + 1; i < prog.chords.length; i++) {
                           const c = prog.chords[i];
-                          if (c?.lickId === curChord.lickId && c?.lickBeatOffset != null && c.lickBeatOffset > 0) {
-                            prog.chords[i] = { ...c, lickId: undefined, lickHighOctave: undefined, lickHighInstance: undefined, lickBeatOffset: undefined };
+                          if (c?.lickId === curChord.lickId && c?.lickBeatOffset != null && c.lickBeatOffset > clearAna) {
+                            prog.chords[i] = { ...c, lickId: undefined, lickHighOctave: undefined, lickHighInstance: undefined, lickBeatOffset: undefined, lickAnacrusis: undefined };
                           } else {
                             break;
                           }
@@ -1706,10 +1825,11 @@ export default function App() {
                         prog.chords[activeChordIdx] = { ...prog.chords[activeChordIdx], lickHighOctave: next };
                         // Propagate to continuation chords
                         const curLickId = prog.chords[activeChordIdx].lickId;
+                        const octAna = prog.chords[activeChordIdx].lickAnacrusis ?? 0;
                         if (curLickId && prog.chords[activeChordIdx].lickBeatOffset != null) {
                           for (let i = activeChordIdx + 1; i < prog.chords.length; i++) {
                             const c = prog.chords[i];
-                            if (c?.lickId === curLickId && c?.lickBeatOffset != null && c.lickBeatOffset > 0) {
+                            if (c?.lickId === curLickId && c?.lickBeatOffset != null && c.lickBeatOffset > octAna) {
                               prog.chords[i] = { ...c, lickHighOctave: next };
                             } else break;
                           }
@@ -1729,10 +1849,11 @@ export default function App() {
                         prog.chords[activeChordIdx] = { ...prog.chords[activeChordIdx], lickHighInstance: next };
                         // Propagate to continuation chords
                         const curLickId = prog.chords[activeChordIdx].lickId;
+                        const instAna = prog.chords[activeChordIdx].lickAnacrusis ?? 0;
                         if (curLickId && prog.chords[activeChordIdx].lickBeatOffset != null) {
                           for (let i = activeChordIdx + 1; i < prog.chords.length; i++) {
                             const c = prog.chords[i];
-                            if (c?.lickId === curLickId && c?.lickBeatOffset != null && c.lickBeatOffset > 0) {
+                            if (c?.lickId === curLickId && c?.lickBeatOffset != null && c.lickBeatOffset > instAna) {
                               prog.chords[i] = { ...c, lickHighInstance: next };
                             } else break;
                           }

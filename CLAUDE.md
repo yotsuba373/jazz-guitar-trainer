@@ -54,7 +54,7 @@ fnm install --lts && fnm default lts-latest
 src/
 ├── App.tsx                          — 状態管理ハブ (通常モード + 進行モード + BPM自動再生)
 ├── types/
-│   └── music.ts                     — ChordSlot (lickBeatOffset フィールド含む), Progression, ChartMeasure, ChartLayout, ModeTemplate, PoolNote 等
+│   └── music.ts                     — ChordSlot (lickBeatOffset, lickAnacrusis フィールド含む), Progression, ChartMeasure, ChartLayout, ModeTemplate, PoolNote 等
 ├── constants/
 │   └── music.ts                     — MODE_TEMPLATES(18 + description), ROOTS, STRING_DEG_OFFSETS, POS_COLORS, MODE_COLORS
 ├── utils/
@@ -478,7 +478,7 @@ Footer
 - コードストラム: エレピ音 (Sine加算合成, 2nd/3rd倍音)
 - スウィングモード: 多次元スウィング (タイミング+ダイナミクス+アーティキュレーション)、0-100%連続制御、テンポ補正 (>200BPM)、PhrasePath視覚同期、PianoRollはストレート表示、localStorage永続化
 - リック練習UI (練習モード): ChordChart直下の折りたたみパネル (LickPanel) にコード品質に合うリック一覧表示、安定ID(署名ハッシュ)+SVGコンター+音数/拍数+開始・終了度数&実音名+ソース名+モード候補(最大3, MODE_COLORSカラー)、テキスト検索(モード名・度数も対象)、選択→指板表示+自動再生、モード/ポジション自動推定、分析パネル対応、**リック選択をChordSlotに永続化** (lickId+lickHighOctave+lickHighInstance→コード切替時復元+進行再生時自動再生)、**8va** (同一インスタンス内オクターブ上)・**Hi** (ハイポジションインスタンス切替) 独立トグル。ルールベースフレーズ生成は削除済み (リック練習に一本化)
-- **リックオーバーフロー分割**: リックの拍数がコードの拍数を超える場合、`sliceLick()` でコード拍境界で分割し後続コードに連鎖割当 (`ChordSlot.lickBeatOffset`)。ii-V リックも通常リックも同じロジックで処理。3コード以上の跨ぎにも対応。先頭コードクリア時は全継続コードも連動クリア
+- **リックオーバーフロー分割**: リックの拍数がコードの拍数を超える場合、`sliceLick()` でコード拍境界で分割し後続コードに連鎖割当 (`ChordSlot.lickBeatOffset`)。ii-V リックも通常リックも同じロジックで処理。3コード以上の跨ぎにも対応。先頭コードクリア時は全継続コードも連動クリア。**アウフタクト対応**: `anacrusis` 拍分をメイン再生から除外し、プレビューではストラム遅延、自動演奏では前コード末尾に look-ahead 再生、カウントインでは終盤に再生
 - **ii-V リック対応**: `detectIiVPattern()` で連続コード (m7→7) の ii-V パターンを検出。ii コード選択時に ii-V タイプのリック (`maj-ii-v-short`, `maj-ii-v-long`, `min-ii-v-short`) を表示
 - **カウントイン**: 再生開始前に1-2小節クリック、音量調節可、サイクル切替 (2小節→OFF→1小節→2小節)、localStorage 永続化
 - **表示倍率スライダー**: 画面右下固定、CSS `zoom` で100-150% (1%刻み)、localStorage 永続化、リセットボタン付き
@@ -507,7 +507,7 @@ GeneratedPhrase → PhrasePath / PianoRoll / PhraseAnalysisPanel
 - `maj7` → `maj7` (C root)
 - `m7♭5` → `m7b5` (D root)
 - ii-V パターン検出: `detectIiVPattern(chords, idx)` — `chords[idx]` が m7 かつ `chords[idx+1]` が 7 の場合に `'major'|'minor'` を返す。LickPanel で ii コード選択時に ii-V タイプのリックを追加表示
-- リックオーバーフロー: リック拍数 > コード拍数の場合、`sliceLick()` でコード拍境界で分割し後続コードに `lickBeatOffset` 付きで連鎖割当。ii-V・通常リック共通ロジック
+- リックオーバーフロー: リック拍数 > コード拍数の場合、`sliceLick()` でコード拍境界で分割し後続コードに `lickBeatOffset` 付きで連鎖割当。ii-V・通常リック共通ロジック。アウフタクト付きリックは `effectiveBeats = beats - anacrusis` でオーバーフロー判定
 
 ### 自動推定
 

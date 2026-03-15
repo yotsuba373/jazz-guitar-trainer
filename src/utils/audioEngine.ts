@@ -337,6 +337,7 @@ export function schedulePhrase(
   instrument: InstrumentType = 'guitar',
   swingAmount = 0,
   bpm = 120,
+  noLastSustain = false,
 ): { stop: () => void; totalDuration: number } {
   if (ctx.state === 'suspended') ctx.resume();
 
@@ -357,7 +358,8 @@ export function schedulePhrase(
     // Use swung beatStart for timing so audio reflects swing feel
     const noteStart = startTime + swungBeat * beatDurSec;
     // Last note sustains longer; others get slight overlap for legato
-    const baseDur = i < notes.length - 1 ? rhythmDur * 1.2 : rhythmDur * 2;
+    const isLast = i === notes.length - 1;
+    const baseDur = isLast && !noLastSustain ? rhythmDur * 2 : rhythmDur * 1.2;
     handles.push(playNote(ctx, freq, volume * volMult, noteStart, baseDur * durMult, instrument));
   }
 

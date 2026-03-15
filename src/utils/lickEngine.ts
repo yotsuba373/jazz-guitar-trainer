@@ -507,6 +507,7 @@ export function lickToGeneratedPhrase(
     modeKey,
     rootName,
     totalBeats: lick.beats,
+    anacrusis: lick.anacrusis,
   };
 }
 

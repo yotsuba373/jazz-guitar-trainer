@@ -352,7 +352,7 @@
     <li><strong>リックお気に入り</strong> — ★ボタンでお気に入り登録、リスト上位にソート、localStorage永続化</li>
     <li><strong>曲ごとのBPM保存</strong> — 各進行に BPM を保存・復元、曲切替時に自動適用</li>
     <li><strong>スウィングモード</strong> — タイミング+ダイナミクス+アーティキュレーションの多次元スウィング</li>
-    <li><strong>カウントイン</strong> — 再生開始前に1小節 (BPM≥160で2小節) クリック、音量調節可</li>
+    <li><strong>カウントイン</strong> — 再生開始前に1小節 (BPM≥160で2小節) クリック、音量調節可、アウフタクト対応</li>
   </ul>
 </div>
 
@@ -726,6 +726,7 @@ actualBeats = (beatWidth / sumOfBeatWidths) * 4</pre>
   <li>カウントイン中は再生ボタンに <code>Count...</code> パルスアニメーション表示</li>
   <li>State: <code>countInEnabled</code> + <code>countInVolume</code> (両方 localStorage 永続化)</li>
   <li>カウントイン中に停止すると即座にクリーンアップ (予約済みクリック音を停止)</li>
+  <li><strong>アウフタクト対応</strong>: 1コード目のリックにアウフタクト (<code>anacrusis</code>) がある場合、カウントイン終盤にアウフタクト部分のフレーズを再生・指板表示</li>
 </ul>
 
 <h3>Measure Loop (小節ループ)</h3>
@@ -1047,7 +1048,8 @@ interface ChordSlot {
   lickId?: string         // 安定リックID (例: "D-3a7f")
   lickHighOctave?: boolean  // 8va: 同一インスタンス内+12半音シフト
   lickHighInstance?: boolean // Hi: ハイポジションインスタンス切替
-  lickBeatOffset?: number // リックオーバーフロー分割のビートオフセット (0=先頭, >0=継続, undefined=分割なし)
+  lickBeatOffset?: number // リックオーバーフロー分割のビートオフセット (anacrusis=先頭, >anacrusis=継続, undefined=分割なし)
+  lickAnacrusis?: number  // リックのアウフタクト拍数 (オリジネーター判定に使用)
 }
 
 // コード進行
@@ -1099,17 +1101,17 @@ python scripts/parse_licks.py scripts/data/midi/</code></pre>
   <tr><td>拍子</td><td>4/4</td></tr>
   <tr><td>キー</td><td>C ルート（全タイプ共通）</td></tr>
   <tr><td>クオンタイズ</td><td>DAW側で実施済み</td></tr>
-  <tr><td>ファイル名</td><td><code>{ソース}_{タイプ}_{小節数}.mid</code> — ソースは省略可</td></tr>
+  <tr><td>ファイル名</td><td><code>{ソース}_{タイプ}_b{小節数}[_a{アウフタクト}].mid</code> — ソースは省略可、<code>_a{N}</code> でアウフタクト拍数指定</td></tr>
   <tr><td>分割単位</td><td>_N で N小節 = 1リック（_N 必須、連続で弾く、空リックはスキップ）</td></tr>
 </table>
 
 <h3>ファイル名の例</h3>
 <table>
-  <tr><th>ファイル名</th><th>ソース</th><th>タイプ</th><th>小節数</th></tr>
-  <tr><td><code>parker_dom7_1.mid</code></td><td>parker</td><td>dom7</td><td>1</td></tr>
-  <tr><td><code>cannonball_maj-ii-v-long_2.mid</code></td><td>cannonball</td><td>maj-ii-v-long</td><td>2</td></tr>
-  <tr><td><code>dom7_1.mid</code></td><td>(なし)</td><td>dom7</td><td>1</td></tr>
-  <tr><td><code>min-ii-v-short_2.mid</code></td><td>(なし)</td><td>min-ii-v-short</td><td>2</td></tr>
+  <tr><th>ファイル名</th><th>ソース</th><th>タイプ</th><th>小節数</th><th>アウフタクト</th></tr>
+  <tr><td><code>parker_dom7_b1.mid</code></td><td>parker</td><td>dom7</td><td>1</td><td>なし</td></tr>
+  <tr><td><code>cannonball_maj-ii-v-long_b3_a1.mid</code></td><td>cannonball</td><td>maj-ii-v-long</td><td>3</td><td>1拍</td></tr>
+  <tr><td><code>dom7_b1.mid</code></td><td>(なし)</td><td>dom7</td><td>1</td><td>なし</td></tr>
+  <tr><td><code>min-ii-v-short_b2.mid</code></td><td>(なし)</td><td>min-ii-v-short</td><td>2</td><td>なし</td></tr>
 </table>
 
 <h3>有効なリックタイプ</h3>
@@ -1285,16 +1287,24 @@ GeneratedPhrase
 <h3>再生とBPM自動再生 — リックオーバーフロー分割</h3>
 <ul>
   <li>リック拍数 &gt; コード拍数の場合、<code>sliceLick(lick, offset, beats)</code> でコード拍境界で分割し後続コードに連鎖割当</li>
-  <li>各コードに <code>ChordSlot.lickBeatOffset</code> (0=先頭, &gt;0=継続) を保存。先頭コードクリア時は全継続コードも連動クリア</li>
+  <li>各コードに <code>ChordSlot.lickBeatOffset</code> (anacrusis=先頭, &gt;anacrusis=継続) を保存。先頭コードクリア時は全継続コードも連動クリア</li>
   <li>ii-V リックも通常リックも同じロジック。3コード以上の跨ぎにも対応</li>
   <li>BPM 自動再生では各コードが自身の <code>sliceLick()</code> 結果を独立再生</li>
   <li><strong>Look-ahead スケジューリング</strong>: 次コードの音声 (ストラム + リック + メトロノーム) を Web Audio タイムラインに事前予約。コードチェンジ時の 1-15ms 遅延を解消し、サンプル精度のタイミングを実現。<code>pendingNextRef</code> パターンで cleanup 安全性を確保</li>
+  <li><strong>アウフタクト (anacrusis) 対応</strong>: リックにアウフタクト拍数 (<code>LickEntry.anacrusis</code>) がある場合:
+    <ul>
+      <li><strong>プレビュー再生</strong>: コードストラムをアウフタクト分遅延して鳴らし、メインビートと同期</li>
+      <li><strong>自動演奏</strong>: look-ahead で次コードのアウフタクトを検出し、前のコード再生中にアウフタクト部分を事前再生 + 指板表示</li>
+      <li><strong>カウントイン</strong>: 1コード目のリックにアウフタクトがある場合、カウントイン終盤にアウフタクトフレーズを再生</li>
+      <li>オーバーフロー計算は <code>effectiveBeats = lick.beats - anacrusis</code> をベースに行う</li>
+    </ul>
+  </li>
 </ul>
 
 <h3>永続化</h3>
 <ul>
-  <li>リック選択は <code>ChordSlot.lickId</code> + <code>lickBeatOffset</code> で保存</li>
-  <li>オーバーフロー時: 先頭コードに <code>lickBeatOffset: 0</code>、各継続コードに <code>lickBeatOffset: 累積拍数</code> が設定される</li>
+  <li>リック選択は <code>ChordSlot.lickId</code> + <code>lickBeatOffset</code> + <code>lickAnacrusis</code> で保存</li>
+  <li>オーバーフロー時: 先頭コードに <code>lickBeatOffset: anacrusis</code>、各継続コードに <code>lickBeatOffset: anacrusis + 累積拍数</code> が設定される (アウフタクトなしの場合は従来通り 0 始まり)</li>
   <li>コード切替時に自動復元。先頭コードクリア (✕) 時は全継続コードも連動クリア</li>
   <li><strong>お気に入り</strong>: <code>lickFavorites: Set&lt;string&gt;</code> を App.tsx で管理。localStorage キー <code>lickFavorites</code> に JSON 配列として永続化。LickPanel の ★ ボタンでトグル。お気に入りリックは一覧の上位にソートされる</li>
   <li><strong>曲ごとの BPM</strong>: <code>Progression.bpm?: number</code> フィールドに保存。練習モードで BPM を変更すると現在の進行に自動保存。曲を切り替えると保存済み BPM が復元される。初回起動時は最初の進行の保存 BPM を使用</li>
