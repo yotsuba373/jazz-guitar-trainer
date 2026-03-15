@@ -352,7 +352,9 @@
     <li><strong>リックお気に入り</strong> — ★ボタンでお気に入り登録、リスト上位にソート、localStorage永続化</li>
     <li><strong>曲ごとのBPM保存</strong> — 各進行に BPM を保存・復元、曲切替時に自動適用</li>
     <li><strong>スウィングモード</strong> — タイミング+ダイナミクス+アーティキュレーションの多次元スウィング</li>
-    <li><strong>カウントイン</strong> — 再生開始前に1小節 (BPM≥160で2小節) クリック、音量調節可、アウフタクト対応</li>
+    <li><strong>カウントイン</strong> — 再生開始前に1-2小節クリック、サイクル切替 (2小節→OFF→1小節→2小節)、音量調節可、アウフタクト対応</li>
+    <li><strong>小節ループ</strong> — コード譜面上で小節を選択してループ再生 (単一/範囲)、オレンジ下線ハイライト</li>
+    <li><strong>表示倍率スライダー</strong> — 画面右下固定、CSS zoom で100-150% (1%刻み)、リセットボタン付き</li>
   </ul>
 </div>
 
@@ -428,11 +430,12 @@ Utils Layer (pure functions):
 │   ├── progression.ts            — parseChordSymbol(), rankPositionsByProximity(), presets
 │   ├── guideTones.ts             — getGuideTones(), findNoteLocations(), classifyResolution()
 │   ├── jazzStandards.ts          — fetchJazzStandards(), songToProgression()
-│   ├── chartLayout.ts            — deriveChartLayout(), getChartLayout(), buildChordRows(), appendChordToLayout(), removeChordFromLayout(), insertChordAtBeat(), computeInsertFlatIndex(), getMeasureBeatInfo(), splitSection(), mergeSections(), splitEndings(), removeEndings()
+│   ├── chordFormat.ts             — displayChordName(), formatChordSymbol(), コード記法プリファレンス
+│   ├── chartLayout.ts            — deriveChartLayout(), getChartLayout(), buildChordRows(), appendChordToLayout(), removeChordFromLayout(), insertChordAtBeat(), computeInsertFlatIndex(), getMeasureBeatInfo(), splitSection(), mergeSections(), splitEndings(), removeEndings(), renameSection(), splitSectionAtEnding(), adjustEndingSplit(), getChordBeatCount()
 │   ├── chordForms.ts             — findVoicingsInPosition(), VOICING_TEMPLATES(20)
 │   ├── audioEngine.ts            — playClick(), playKSNote(), playSaxNote(), playEPNote(), playChordStrum(), schedulePhrase()
-│   ├── lickEngine.ts             — absolutePitch(), buildNotePool(), loadLickDB(), transposeLick(), mapLickToFretboard(), buildLickContext(), detectIiVPattern(), isIiVLickId(), buildIiVLickContext(), sliceLick()
-│   ├── lickPlayback.ts           — findLickById(), playLickForChord(), buildAnacrusisPhrase(), getStrumNotes(), resolveChordPositions()
+│   ├── lickEngine.ts             — absolutePitch(), buildNotePool(), loadLickDB(), transposeLick(), mapLickToFretboard(), inferModeCandidates(), lickToGeneratedPhrase(), findBestPositionForLick(), selectBestInstance(), getTransposeSemitones(), buildLickContext(), detectIiVPattern(), isIiVLickId(), buildIiVLickContext(), sliceLick()
+│   ├── lickPlayback.ts           — findLickById(), findOriginatorIdx(), chordHasSavedLick(), buildPhraseForLick(), computeTransposeSemitones(), isLickOriginator(), playLickForChord(), buildAnacrusisPhrase(), getStrumNotes(), resolveChordPositions()
 │   ├── playbackSeq.ts            — buildPlaybackSeq(), computeCumBeats()
 │   ├── phraseAnalysis.ts         — analyzePhrase(), computeSummary()
 │   ├── swing.ts                  — swingBeatStart(), swingVolumeMult(), swingDurMult()
@@ -887,12 +890,13 @@ CSS Grid 描画</div>
 </div>
 
 <h3>リック割り当てインジケーター</h3>
-<p>通常表示モード（非編集時）で、各コードセルにリック割り当て状況を視覚表示:</p>
+<p>通常表示モード（非編集時）で、各小節にリック割り当て状況を視覚表示:</p>
 <ul>
   <li><strong>リックID</strong>: コード記号の直下に 8px モノスペースで表示 (色: <code>#FF6B9D</code>)</li>
-  <li><strong>カラーバー</strong>: セル下辺に 2px のピンクバー</li>
-  <li><strong>Originator</strong> (リック先頭コード): リックID全文 + 実線バー (opacity 0.7)</li>
-  <li><strong>Continuation</strong> (オーバーフロー後続コード): <code>→</code> + リックID + 破線バー (opacity 0.4)</li>
+  <li><strong>カラーバー</strong>: 小節全幅の 4px バー (小節単位で描画)</li>
+  <li><strong>Originator</strong> (リック先頭コード): リックID全文 + 不透明ピンクバー (<code>#FF6B9D80</code>)</li>
+  <li><strong>Continuation</strong> (オーバーフロー後続コード): <code>→</code> + リックID + 半透明ピンクバー (<code>#FF6B9D50</code>)</li>
+  <li>クリックでコード選択可能</li>
   <li>リック未割り当て / 編集モード → 非表示</li>
 </ul>
 <p>判定: <code>isLickOriginator(chord)</code> (<code>lickPlayback.ts</code>) で originator / continuation を区別。</p>
@@ -998,6 +1002,10 @@ Footer</pre>
   </ul>
 </div>
 
+<h4>表示倍率スライダー</h4>
+<p>画面右下に固定配置。CSS <code>zoom</code> プロパティで 100-150% (1%刻み) の倍率調整が可能。
+<code>localStorage</code> (<code>appZoom</code>) に永続化。リセットボタンで100%に戻る。</p>
+
 <h2 id="color-system">Color System</h2>
 <table>
   <tr><th>Purpose</th><th>Color</th><th>Hex</th></tr>
@@ -1090,6 +1098,7 @@ interface Progression {
   chords: ChordSlot[]
   chartLayout?: ChartLayout
   bpm?: number              // 曲ごとのBPM保存 (練習モードで変更時に自動保存、曲切替時に復元)
+  loopRange?: { start: number; end: number }  // 曲ごとの小節ループ範囲
 }</pre>
   </div>
 </details>
@@ -1176,15 +1185,17 @@ python scripts/parse_licks.py scripts/data/midi/</code></pre>
 }</code></pre>
 
 <h3>量子化グリッド</h3>
-<p>1拍を <strong>24分割</strong> (<code>GRID = 24</code>)。24 = lcm(8, 3) のため、8分音符・16分音符・三連符を全て正確に表現可能。</p>
+<p>1拍を <strong>120分割</strong> (<code>GRID = 120</code>)。120 = lcm(8, 3, 5) のため、8分音符・16分音符・三連符・5連符・32分音符を全て正確に表現可能。</p>
 <table>
   <tr><th>音価</th><th>拍数</th><th>GRID 単位</th></tr>
-  <tr><td>4分音符</td><td>1.0</td><td>24</td></tr>
-  <tr><td>付点4分</td><td>1.5</td><td>36</td></tr>
-  <tr><td>8分音符</td><td>0.5</td><td>12</td></tr>
-  <tr><td>3連符 (1拍)</td><td>0.333...</td><td>8</td></tr>
-  <tr><td>3連符 (2拍)</td><td>0.666...</td><td>16</td></tr>
-  <tr><td>16分音符</td><td>0.25</td><td>6</td></tr>
+  <tr><td>4分音符</td><td>1.0</td><td>120</td></tr>
+  <tr><td>付点4分</td><td>1.5</td><td>180</td></tr>
+  <tr><td>8分音符</td><td>0.5</td><td>60</td></tr>
+  <tr><td>3連符 (1拍)</td><td>0.333...</td><td>40</td></tr>
+  <tr><td>3連符 (2拍)</td><td>0.666...</td><td>80</td></tr>
+  <tr><td>16分音符</td><td>0.25</td><td>30</td></tr>
+  <tr><td>5連符</td><td>0.2</td><td>24</td></tr>
+  <tr><td>32分音符</td><td>0.125</td><td>15</td></tr>
 </table>
 
 <h3>機能</h3>
@@ -1390,7 +1401,7 @@ GeneratedPhrase
 <!-- Footer -->
 <hr style="border-color: var(--border); margin: 48px 0 24px;">
 <p style="color: var(--text-muted); font-size: 13px;">
-  Jazz Guitar Trainer Documentation — Generated 2026-03-14<br>
+  Jazz Guitar Trainer Documentation — Generated 2026-03-16<br>
   Vite 7 + React 19 + TypeScript 5 + Tailwind CSS v4
 </p>
 
