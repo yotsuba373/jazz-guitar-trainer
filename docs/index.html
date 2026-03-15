@@ -886,6 +886,17 @@ CSS Grid 描画</div>
   <code>beatWidths</code> は常に合計4拍に正規化される。</p>
 </div>
 
+<h3>リック割り当てインジケーター</h3>
+<p>通常表示モード（非編集時）で、各コードセルにリック割り当て状況を視覚表示:</p>
+<ul>
+  <li><strong>リックID</strong>: コード記号の直下に 8px モノスペースで表示 (色: <code>#FF6B9D</code>)</li>
+  <li><strong>カラーバー</strong>: セル下辺に 2px のピンクバー</li>
+  <li><strong>Originator</strong> (リック先頭コード): リックID全文 + 実線バー (opacity 0.7)</li>
+  <li><strong>Continuation</strong> (オーバーフロー後続コード): <code>→</code> + リックID + 破線バー (opacity 0.4)</li>
+  <li>リック未割り当て / 編集モード → 非表示</li>
+</ul>
+<p>判定: <code>isLickOriginator(chord)</code> (<code>lickPlayback.ts</code>) で originator / continuation を区別。</p>
+
 <h3>Section Structure — Symbol Buttons</h3>
 <p>編集モードでコードの1拍目をクリックすると、ツールバーに記号ボタン行が表示される。
 ボタンを押すとその小節にマーカーをスタンプし、必要に応じてセクション分割/結合が自動実行される。

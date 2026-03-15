@@ -2,7 +2,7 @@ import { useRef, useMemo, Fragment } from 'react';
 import type { Progression, ChordNotationPrefs, ChartMeasure } from '../../types';
 import type { EffectiveChord } from '../../utils/progression';
 import { POS_COLORS } from '../../constants';
-import { QUALITY_TO_MODES, isDiatonic, displayChordName, getChartLayout } from '../../utils';
+import { QUALITY_TO_MODES, isDiatonic, displayChordName, getChartLayout, isLickOriginator } from '../../utils';
 
 export type SelectedBeatInfo =
   | { type: 'chord'; chordIdx: number; beat: number }
@@ -79,7 +79,7 @@ export function ChordChart({
             color: !supported ? '#555'
               : !diatonic ? '#E67E22'
               : active ? '#FFF'
-              : '#AAA',
+              : '#CCC',
             outline: active ? `2px solid ${posColor}` : 'none',
             outlineOffset: '1px',
           }}
@@ -331,6 +331,49 @@ export function ChordChart({
                 <span className="flex flex-col text-[8px] leading-[6px] text-[#888] ml-auto -mr-1">
                   <span>•</span><span>•</span>
                 </span>
+              )}
+              {/* Lick indicator bar with per-chord IDs — spans full measure width at the grid edge */}
+              {!editing && measure.chordIndices.some(ci => !!chords[ci]?.lickId) && (
+                <div
+                  className="absolute left-0 right-0 bottom-0 flex"
+                  style={{ height: '4px' }}
+                >
+                  {measure.chordIndices.map((ci, i) => {
+                    const ch = chords[ci];
+                    const beats = measure.beatWidths?.[i] ?? 1;
+                    const hasLick = !!ch?.lickId;
+                    const isCont = hasLick && ch.lickBeatOffset != null && !isLickOriginator(ch);
+                    return (
+                      <div
+                        key={ci}
+                        className="relative"
+                        style={{
+                          flex: beats,
+                          background: hasLick
+                            ? (isCont ? '#FF6B9D50' : '#FF6B9D80')
+                            : 'transparent',
+                        }}
+                      >
+                        {hasLick && (
+                          <span
+                            className="absolute left-1/2 -translate-x-1/2 font-mono select-none truncate cursor-pointer"
+                            style={{
+                              bottom: '0px',
+                              fontSize: '9px',
+                              lineHeight: '1',
+                              letterSpacing: '0.5px',
+                              color: '#CCC',
+                              maxWidth: '100%',
+                            }}
+                            onClick={(e) => { e.stopPropagation(); onChordSelect(ci); }}
+                          >
+                            {isCont ? '→' : ''}{ch.lickId}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               )}
               {/* Loop selection overlay — intercepts all clicks when in loop-selecting mode */}
               {loopSelecting && onMeasureLoopClick && (
