@@ -125,8 +125,6 @@ export function usePreviewPlayback(params: PreviewParams) {
     if (switchToVPart && activeProg) {
       const layout = getChartLayout(activeProg);
       const firstChordBeats = iiBeats ?? 4;
-      const switchSec = (anacrusis + firstChordBeats) * 2 * eighthDur;
-      const switchDelay = switchSec * 1000;
 
       if (audio.chordAudioOnRef.current) {
         const totalSec = result.totalDuration;
@@ -145,12 +143,9 @@ export function usePreviewPlayback(params: PreviewParams) {
         }
       }
 
-      // ii-V display switch timer
-      iiVSwitchTimer.set(() => {
-        justStartedPlayRef.current = true;
-        setIiVDisplayPhrase(switchToVPart);
-        setPhraseAnimKey(k => k + 1);
-      }, switchDelay);
+      // Display stays on previewLickPhrase (full lick) throughout playback.
+      // Each note's CSS animation-delay (based on beatStart) handles onset timing,
+      // so no mid-playback display switch is needed (avoids React re-render latency).
     }
 
     // 5. Completion timer

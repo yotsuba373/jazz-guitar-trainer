@@ -612,6 +612,12 @@ export default function App() {
     return null;
   }, [isCountingIn, iiVDisplayPhrase, isPhraseAudioPlaying, previewLickPhrase, activeLickPhrase, progMode, autoPlayPhrase, isPlaying]);
 
+  // Chord boundary beat for CSS-only phrase transition (overflow lick preview)
+  const chordBoundaryBeat = useMemo(() => {
+    if (!isPhraseAudioPlaying || !previewLickPhrase || !vPartPhrase || !activeProg) return undefined;
+    return getChordBeatCount(getChartLayout(activeProg), activeChordIdx);
+  }, [isPhraseAudioPlaying, previewLickPhrase, vPartPhrase, activeProg, activeChordIdx]);
+
   // Keyboard navigation for progression mode
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (!progMode || editing) return;
@@ -1203,6 +1209,7 @@ export default function App() {
             : 0}
           swingAmount={swingEnabled ? swingAmount : 0}
           bpm={bpm}
+          chordBoundaryBeat={chordBoundaryBeat}
         />
 
         {activePhrase && <PhraseAnalysisPanel phrase={activePhrase} mode={mode} />}

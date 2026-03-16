@@ -44,6 +44,8 @@ interface PhrasePathProps {
   animSpeed?: number;
   swingAmount?: number;
   bpm?: number;
+  /** When set, notes before this beat fade out at the boundary (CSS-only, no React re-render). */
+  chordBoundaryBeat?: number;
 }
 
 /** Convert fretboard (stringIdx, fret) to SVG (x, y) */
@@ -211,7 +213,7 @@ function buildSegments(points: Point[]): Segment[] {
   });
 }
 
-export function PhrasePath({ phrase, animKey, animSpeed = 350, swingAmount = 0, bpm = 120 }: PhrasePathProps) {
+export function PhrasePath({ phrase, animKey, animSpeed = 350, swingAmount = 0, bpm = 120, chordBoundaryBeat }: PhrasePathProps) {
   const visitMeta = computeVisitMeta(phrase.notes);
   const points = phrase.notes.map((n, i) => {
     const base = toSvg(n.stringIdx, n.fret);
@@ -224,81 +226,106 @@ export function PhrasePath({ phrase, animKey, animSpeed = 350, swingAmount = 0, 
     return { animation: `phraseIn ${fadeDur}ms ease-out ${delayMs}ms both` };
   };
 
+  // CSS-only chord boundary: parent <g> fades out first-chord notes at boundary time
+  const hasBoundary = chordBoundaryBeat != null && animSpeed > 0;
+  const boundaryDelayMs = hasBoundary
+    ? Math.round(chordBoundaryBeat! * animSpeed * 2) : 0;
+
   // Key forces remount on phrase change or play trigger → restarts CSS animations
   const phraseId = phrase.notes.map(n => `${n.stringIdx}:${n.fret}`).join(',') + (animKey ? `:${animKey}` : '');
 
+  /** Render a single beat group (segment + marker + label + pulse) */
+  const renderBeat = (n: GeneratedPhrase['notes'][number], i: number, skipCrossSeg: boolean) => {
+    if (n.isRest) return null;
+    const { x, y } = points[i];
+    const base = toSvg(n.stringIdx, n.fret);
+    const color = getBeatColor(i, phrase.notes.length);
+
+    const { visitIdx } = visitMeta[i];
+    const offsets = [-11, 15, 26, -22];
+    const yOff = offsets[visitIdx % offsets.length];
+
+    const isSegmentStart = i === 0 || (hasBoundary && skipCrossSeg);
+    const bs = n.beatStart ?? 0;
+    const dur = n.duration ?? 'e';
+    const onsetDelay = Math.round(swingBeatStart(bs, dur, swingAmount, bpm) * animSpeed * 2);
+
+    let mSize = (RHYTHM_MARKER_SIZE[n.duration ?? 'e'] ?? 5) * visitMeta[i].sizeScale;
+    if (isSegmentStart) mSize *= 1.2;
+    let marker: React.ReactNode;
+    if (n.isChordTone) {
+      marker = <circle cx={x} cy={y} r={mSize} fill={color} stroke="#FFF" strokeWidth={1} opacity={0.9} />;
+    } else if (n.isApproach) {
+      const hs = mSize * 0.7;
+      marker = <rect x={x - hs} y={y - hs} width={hs * 2} height={hs * 2} transform={`rotate(45,${x},${y})`} fill={color} opacity={0.7} />;
+    } else {
+      marker = <circle cx={x} cy={y} r={mSize - 1} fill="none" stroke={color} strokeWidth={1.5} opacity={0.85} />;
+    }
+
+    return (
+      <g key={`beat-${i}`} style={fadeStyleForDelay(onsetDelay)}>
+        {i > 0 && !skipCrossSeg && !phrase.notes[i - 1]?.isRest && (
+          <path d={segs[i - 1].d} fill="none" stroke={color}
+            strokeWidth={2.2 - (i / phrase.notes.length) * 0.8}
+            opacity={0.6} strokeLinecap="round" />
+        )}
+        {isSegmentStart && (
+          <circle cx={x} cy={y} r={mSize + 3} fill="none" stroke={color} strokeWidth={1} opacity={0.3} />
+        )}
+        {marker}
+        {animSpeed > 0 && (
+          <circle cx={base.x} cy={base.y} r={8} fill="rgba(255,255,255,0.7)" stroke={color} strokeWidth={3}
+            opacity={0} style={{ animation: `phrasePulse 400ms ease-out ${onsetDelay}ms both` }} />
+        )}
+        <text x={x} y={y + yOff} textAnchor="middle"
+          fontSize="9" fontWeight="800" fill={color}
+          stroke="#1a1a2e" strokeWidth={2.5} paintOrder="stroke"
+          fontFamily="monospace" opacity={0.95}>
+          {beatLabel(n.beatStart, n.beatPosition)}
+        </text>
+      </g>
+    );
+  };
+
+  // Split notes into first-chord / second-chord groups for boundary fade-out
+  const firstChordBeats: React.ReactNode[] = [];
+  const secondChordBeats: React.ReactNode[] = [];
+  if (hasBoundary) {
+    let foundBoundary = false;
+    phrase.notes.forEach((n, i) => {
+      const bs = n.beatStart ?? 0;
+      if (bs < chordBoundaryBeat!) {
+        firstChordBeats.push(renderBeat(n, i, false));
+      } else {
+        const crossesBoundary = !foundBoundary;
+        foundBoundary = true;
+        secondChordBeats.push(renderBeat(n, i, crossesBoundary));
+      }
+    });
+  }
+
   return (
     <g key={phraseId}>
-      {/* CSS animation keyframes (SVG-embedded) */}
       <defs>
         <style>{`
 @keyframes phraseIn { from { opacity: 0 } to { opacity: 1 } }
+@keyframes phraseOut { from { opacity: 1 } to { opacity: 0 } }
 @keyframes phrasePulse { 0% { r: 8; opacity: 0.7 } 100% { r: 15; opacity: 0 } }
         `}</style>
       </defs>
 
-      {/* Per-beat groups: segment + marker + number appear together */}
-      {phrase.notes.map((n, i) => {
-        if (n.isRest) return null;
-        const { x, y } = points[i];
-        const base = toSvg(n.stringIdx, n.fret);
-        const color = getBeatColor(i, phrase.notes.length);
-
-        // Beat number y-offset for revisited positions
-        const { visitIdx } = visitMeta[i];
-        const offsets = [-11, 15, 26, -22];
-        const yOff = offsets[visitIdx % offsets.length];
-
-        const isSegmentStart = i === 0;
-
-        // Beat onset delay (shared by fadeIn and pulse)
-        const bs = n.beatStart ?? 0;
-        const dur = n.duration ?? 'e';
-        const onsetDelay = Math.round(swingBeatStart(bs, dur, swingAmount, bpm) * animSpeed * 2);
-
-        // Note marker element — size varies by rhythm type, shrunk on revisit
-        let mSize = (RHYTHM_MARKER_SIZE[n.duration ?? 'e'] ?? 5) * visitMeta[i].sizeScale;
-        // Enlarge first note of each segment for emphasis
-        if (isSegmentStart) mSize *= 1.2;
-        let marker: React.ReactNode;
-        if (n.isChordTone) {
-          marker = <circle cx={x} cy={y} r={mSize} fill={color} stroke="#FFF" strokeWidth={1} opacity={0.9} />;
-        } else if (n.isApproach) {
-          const hs = mSize * 0.7;
-          marker = <rect x={x - hs} y={y - hs} width={hs * 2} height={hs * 2} transform={`rotate(45,${x},${y})`} fill={color} opacity={0.7} />;
-        } else {
-          marker = <circle cx={x} cy={y} r={mSize - 1} fill="none" stroke={color} strokeWidth={1.5} opacity={0.85} />;
-        }
-
-        return (
-          <g key={`beat-${i}`} style={fadeStyleForDelay(onsetDelay)}>
-            {/* Curve segment leading TO this beat (from previous) — tapered */}
-            {i > 0 && !phrase.notes[i - 1]?.isRest && (
-              <path d={segs[i - 1].d} fill="none" stroke={color}
-                strokeWidth={2.2 - (i / phrase.notes.length) * 0.8}
-                opacity={0.6} strokeLinecap="round" />
-            )}
-            {/* Start note emphasis ring (phrase start + chord change start) */}
-            {isSegmentStart && (
-              <circle cx={x} cy={y} r={mSize + 3} fill="none" stroke={color} strokeWidth={1} opacity={0.3} />
-            )}
-            {/* Note marker */}
-            {marker}
-            {/* Pulse ring — expands and fades on note onset */}
-            {animSpeed > 0 && (
-              <circle cx={base.x} cy={base.y} r={8} fill="rgba(255,255,255,0.7)" stroke={color} strokeWidth={3}
-                opacity={0} style={{ animation: `phrasePulse 400ms ease-out ${onsetDelay}ms both` }} />
-            )}
-            {/* Beat number */}
-            <text x={x} y={y + yOff} textAnchor="middle"
-              fontSize="9" fontWeight="800" fill={color}
-              stroke="#1a1a2e" strokeWidth={2.5} paintOrder="stroke"
-              fontFamily="monospace" opacity={0.95}>
-              {beatLabel(n.beatStart, n.beatPosition)}
-            </text>
+      {hasBoundary ? (
+        <>
+          {/* First chord notes — parent <g> fades them all out at chord boundary */}
+          <g style={{ animation: `phraseOut ${fadeDur}ms ease-out ${boundaryDelayMs}ms both` }}>
+            {firstChordBeats}
           </g>
-        );
-      })}
+          {/* Second chord notes — no wrapper, individual phraseIn only */}
+          {secondChordBeats}
+        </>
+      ) : (
+        phrase.notes.map((n, i) => renderBeat(n, i, false))
+      )}
     </g>
   );
 }
