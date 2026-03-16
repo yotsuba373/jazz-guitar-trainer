@@ -70,6 +70,7 @@ export function buildNotePool(
 // ---------------------------------------------------------------------------
 
 const OPEN_MIDI = [64, 59, 55, 50, 45, 40]; // 1E=E4, B=B3, G=G3, D=D3, A=A2, 6E=E2
+const OCTAVE_SHIFTS = [0, -12, 12, -24, 24];
 
 /** Map chord quality (from parseChordSymbol) to lick DB type key */
 export const QUALITY_TO_LICK_TYPE: Record<string, string> = {
@@ -157,6 +158,7 @@ function mapPitchToFret(
   pool: PoolNote[],
   prevStringIdx: number | null,
   prevFret: number | null,
+  poolCenterFret: number,
 ): { stringIdx: number; fret: number; noteName: string; semitone: number; isChordTone: boolean; isApproach: boolean; poolMatch: boolean } {
   // Find all pool notes matching this pitch
   const candidates = pool.filter(p => absolutePitch(p) === midiPitch);
@@ -171,9 +173,10 @@ function mapPitchToFret(
         const scoreB = sDist(b) * 10 + fDist(b);
         return scoreA - scoreB;
       }
-      // First note: prefer middle strings (G=2, D=3)
+      // First note: prefer middle strings, biased toward pool's fret center
       const centerDist = (d: PoolNote) => Math.abs(d.stringIdx - 2.5);
-      return centerDist(a) - centerDist(b);
+      const fretDist = (d: PoolNote) => Math.abs(d.fret - poolCenterFret);
+      return (centerDist(a) * 10 + fretDist(a)) - (centerDist(b) * 10 + fretDist(b));
     });
     const best = candidates[0];
     return { ...best, poolMatch: true };
@@ -192,8 +195,11 @@ function mapPitchToFret(
     const fret = midiPitch - OPEN_MIDI[s];
     if (fret < 0 || fret > 21) continue;
     const sDist = prevStringIdx != null ? Math.abs(s - prevStringIdx) : Math.abs(s - 2.5);
-    const fDist = prevFret != null ? Math.abs(fret - prevFret) : 0;
-    const dist = sDist * 10 + fDist;
+    const fDist = prevFret != null ? Math.abs(fret - prevFret) : Math.abs(fret - poolCenterFret);
+    // With previous context, string proximity dominates (×10).
+    // For first note (no prev), fret proximity to pool center dominates (×3)
+    // to avoid jumping to a far-away fret on a "central" string.
+    const dist = prevStringIdx != null ? sDist * 10 + fDist : sDist + fDist * 3;
     if (dist < bestDist) {
       bestDist = dist;
       bestString = s;
@@ -224,12 +230,17 @@ export function mapLickToFretboard(
 ): Array<{ stringIdx: number; fret: number; noteName: string; semitone: number; isChordTone: boolean; isApproach: boolean } | null> {
   const chosenShift = pickOctaveShift(lick, pool, transposeSemitones, alternateOctave);
 
+  // Compute pool's fret centroid for first-note bias
+  const poolCenterFret = pool.length > 0
+    ? pool.reduce((sum, p) => sum + p.fret, 0) / pool.length
+    : 5;
+
   let prevStringIdx: number | null = null;
   let prevFret: number | null = null;
   return lick.notes.map((n: LickNote) => {
     if (n.rest) return null;
     const midiPitch = n.pitch! + transposeSemitones + chosenShift;
-    const mapped = mapPitchToFret(midiPitch, pool, prevStringIdx, prevFret);
+    const mapped = mapPitchToFret(midiPitch, pool, prevStringIdx, prevFret, poolCenterFret);
     prevStringIdx = mapped.stringIdx;
     prevFret = mapped.fret;
     return mapped;
@@ -245,7 +256,7 @@ function octaveCoverages(
   const basePitches = pitched.map(n => n.pitch! + transposeSemitones);
 
   const results: Array<{ shift: number; coverage: number }> = [];
-  for (const shift of [0, -12, 12]) {
+  for (const shift of OCTAVE_SHIFTS) {
     let cov = 0;
     for (const p of basePitches) if (poolPitches.has(p + shift)) cov++;
     results.push({ shift, coverage: cov });
@@ -535,37 +546,56 @@ export function selectBestInstance(pos: Position, lickPitches: number[], preferH
     return highIdx;
   }
 
-  // Default: best coverage with low-fret bias
+  // Default (preferHigh=false): pick the lowest-fret instance,
+  // symmetric with preferHigh=true which picks the highest.
+  // Only fall back to coverage-based selection if the low instance has zero coverage.
+  let lowIdx = 0;
+  let lowFret = Infinity;
+  for (let i = 0; i < pos.instances.length; i++) {
+    if (pos.instances[i].fretMin < lowFret) {
+      lowFret = pos.instances[i].fretMin;
+      lowIdx = i;
+    }
+  }
+
+  // Verify the low-fret instance can cover at least one lick pitch
+  const lowInst = pos.instances[lowIdx];
+  const lowPitches = new Set<number>();
+  for (let s = 0; s < 6; s++) {
+    const notes = lowInst.strings[s];
+    if (!notes) continue;
+    for (const [, fret] of notes) lowPitches.add(OPEN_MIDI[s] + fret);
+  }
+  let lowCov = 0;
+  for (const shift of OCTAVE_SHIFTS) {
+    let c = 0;
+    for (const p of lickPitches) if (lowPitches.has(p + shift)) c++;
+    if (c > lowCov) lowCov = c;
+  }
+  if (lowCov > 0) return lowIdx;
+
+  // Low-fret instance has zero coverage — fall back to best coverage
   let bestIdx = 0;
   let bestCov = -1;
-  let bestFret = Infinity;
-
   for (let i = 0; i < pos.instances.length; i++) {
     const inst = pos.instances[i];
     const instPitches = new Set<number>();
     for (let s = 0; s < 6; s++) {
       const notes = inst.strings[s];
       if (!notes) continue;
-      for (const [, fret] of notes) {
-        instPitches.add(OPEN_MIDI[s] + fret);
-      }
+      for (const [, fret] of notes) instPitches.add(OPEN_MIDI[s] + fret);
     }
-    // Best coverage across octave shifts
     let cov = 0;
-    for (const shift of [0, -12, 12]) {
+    for (const shift of OCTAVE_SHIFTS) {
       let c = 0;
       for (const p of lickPitches) if (instPitches.has(p + shift)) c++;
       if (c > cov) cov = c;
     }
-
-    // Prefer higher coverage; tiebreak by low fret
-    if (cov > bestCov || (cov === bestCov && inst.fretMin < bestFret)) {
+    if (cov > bestCov) {
       bestCov = cov;
       bestIdx = i;
-      bestFret = inst.fretMin;
     }
   }
-
   return bestIdx;
 }
 
