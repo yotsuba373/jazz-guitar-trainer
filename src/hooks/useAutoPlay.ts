@@ -243,11 +243,12 @@ export function useAutoPlay(params: AutoPlayParams) {
     const nextResult = scheduleChordAudio(nextChordIdx, activeProg, audioStartAt, cumBeatsNext);
     pendingNextRef.current = nextResult;
 
-    // アナクルーシス look-ahead
+    // アナクルーシス look-ahead (現コードにリックがある場合はスキップ — 重複防止)
     stopHandle(anacrusisAudioRef);
     anacrusisDisplayTimer.clear();
+    const curHasLick = lickDB != null && chordHasSavedLick(step.chordIdx, activeProg, lickDB);
     const nextChord = activeProg.chords[nextChordIdx];
-    if (nextChord && isLickOriginator(nextChord)) {
+    if (!curHasLick && nextChord && isLickOriginator(nextChord)) {
       const nextAna = nextChord.lickAnacrusis ?? 0;
       if (nextAna > 0 && nextChord.lickId && lickDB) {
         const anaPhrase = buildAnacrusisPhrase(nextChordIdx, activeProg, nextAna, lickDB);
