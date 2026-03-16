@@ -50,11 +50,14 @@ export default function App() {
   // Progression mode state
   const [progMode, setProgMode] = useState(() => localStorage.getItem('progMode') === 'true');
   const [progressions, setProgressions] = useState<Progression[]>(() => loadProgressions());
-  const [activeProgIdx, setActiveProgIdx] = useState(0);
+  const [activeProgIdx, setActiveProgIdx] = useState(() => {
+    const saved = parseInt(localStorage.getItem('activeProgIdx') ?? '', 10);
+    return Number.isFinite(saved) && saved >= 0 && saved < progressions.length ? saved : 0;
+  });
   const [activeChordIdx, setActiveChordIdx] = useState(0);
   const [editing, setEditing] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [bpm, setBpm] = useState(() => progressions[0]?.bpm ?? 120);
+  const [bpm, setBpm] = useState(() => progressions[activeProgIdx]?.bpm ?? 120);
   const [metVolume, setMetVolume] = useState<number>(() => {
     const saved = parseFloat(localStorage.getItem('metVolume') ?? '');
     return isNaN(saved) ? 0.5 : saved;
@@ -90,7 +93,7 @@ export default function App() {
   });
   // Loop range (measure-based): null = full playback, set = loop only specified measures
   const [loopRange, setLoopRange] = useState<{ start: number; end: number } | null>(
-    () => progressions[0]?.loopRange ?? null
+    () => progressions[activeProgIdx]?.loopRange ?? null
   );
   const [loopSelecting, setLoopSelecting] = useState(false);
 
@@ -899,7 +902,7 @@ export default function App() {
                 chordPrefs={chordPrefs}
                 activeChordIdx={activeChordIdx}
                 onSave={handleSaveProgressions}
-                onSelectProg={(idx) => { setActiveProgIdx(idx); setActiveChordIdx(0); setIsPlaying(false); setBpm(progressions[idx]?.bpm ?? 120); setLoopRange(progressions[idx]?.loopRange ?? null); }}
+                onSelectProg={(idx) => { setActiveProgIdx(idx); localStorage.setItem('activeProgIdx', String(idx)); setActiveChordIdx(0); setIsPlaying(false); setBpm(progressions[idx]?.bpm ?? 120); setLoopRange(progressions[idx]?.loopRange ?? null); }}
                 onClose={() => setEditing(false)}
               >
                 {(editingChords, onRemoveChord, editChartLayout, onInsertAtBeat, onEmptyMeasureBeat, onRemoveEmptyMeasure, selectedBeat) => (editingChords.length > 0 || editChartLayout) && (
