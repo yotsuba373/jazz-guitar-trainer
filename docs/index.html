@@ -1258,8 +1258,10 @@ GeneratedPhrase
 
 <h3>UIコンポーネント</h3>
 <ul>
-  <li><strong>LickPanel</strong> (<code>src/components/Controls/LickPanel.tsx</code>): ChordChart 直下に折りたたみ式パネルとして配置。ヘッダークリックで展開/折りたたみ。各リックに安定ユニークID + ★お気に入りボタン + コンターSVG + 音数/拍数 + 開始・終了度数&実音名 + ソース名 + モード候補 (最大3, MODE_COLORS カラー) を表示。選択中リックは左ボーダーでハイライト。お気に入りリックはリスト上位にソート (単コード/ii-V グループ内それぞれ)。Props: <code>favorites: Set&lt;string&gt;</code>, <code>onToggleFavorite: (lickId: string) =&gt; void</code></li>
-  <li><strong>ii-V セパレーター</strong>: ii コードが選択されており ii-V パターンが検出された場合、単コードリックと ii-V リックの間にセパレーターを表示。各 ii-V リックには種別バッジ (<code>ii-V S</code> / <code>ii-V L</code> / <code>ii-V m</code>) を表示</li>
+  <li><strong>LickPanel</strong> (<code>src/components/Controls/LickPanel.tsx</code>): ChordChart 直下に折りたたみ式パネルとして配置。ヘッダークリックで展開/折りたたみ。CSS Grid による固定カラムヘッダー付きテーブルレイアウト。各リックに★お気に入りボタン + 安定ユニークID + タイプバッジ + コンターSVG + 音数/拍数 + 開始音・末尾音 (<code>実音(度数)</code> 形式) + 解決音 (実音のみ、該当時) + ソース名 + モード候補 (最大3, MODE_COLORS カラー) を表示。選択中リックは左ボーダーでハイライト。お気に入りリックはリスト上位にソート (単コード/ii-V グループ内それぞれ)。Props: <code>favorites: Set&lt;string&gt;</code>, <code>onToggleFavorite: (lickId: string) =&gt; void</code></li>
+  <li><strong>タイプバッジ</strong>: 全リックにタイプ別バッジを表示。<code>dom7</code> (オレンジ), <code>min7</code> (緑), <code>maj7</code> (青), <code>m7♭5</code> (紫), <code>ii-V S</code> / <code>ii-V L</code> / <code>ii-V m</code> (シアン)。IDプレフィックスから自動判定</li>
+  <li><strong>開始音・末尾音・解決音</strong>: 開始音はフレーズ最初のピッチ音、末尾音はフレーズライン最後のアクティブ音。2小節以上で最終小節に1音のみ+末尾休符≥1拍のリックは解決音を分離表示（末尾音はその手前の音、解決音は実音名のみ）。解決音がないリックは空欄</li>
+  <li><strong>ii-V セパレーター</strong>: ii コードが選択されており ii-V パターンが検出された場合、単コードリックと ii-V リックの間にセパレーターを表示</li>
   <li><strong>検索機能</strong>: テキスト入力でID・アーティスト名・音数・モード名・度数等によるフィルタリング。フィルタ結果件数を表示</li>
 
   <li><strong>安定ID</strong>: パーサー (<code>parse_licks.py</code>) がリック内容の SHA-256 ハッシュ先頭4文字 + タイププレフィックスで生成。MIDIの順番が変わっても同じリックには同じID</li>
@@ -1332,13 +1334,7 @@ GeneratedPhrase
 <h3>LickPanel 表示</h3>
 <ul>
   <li>単コードリック一覧の後にセパレーター (<code>── ii-V ──</code>) を挟んで ii-V リックを表示</li>
-  <li>各 ii-V リックに種別バッジを表示:
-    <ul>
-      <li><code>ii-V S</code> — maj-ii-v-short (2+2拍)</li>
-      <li><code>ii-V L</code> — maj-ii-v-long (4+4拍)</li>
-      <li><code>ii-V m</code> — min-ii-v-short (2+2拍)</li>
-    </ul>
-  </li>
+  <li>全リックにタイプバッジを表示（単コード: dom7/min7/maj7/m7♭5、ii-V: ii-V S/ii-V L/ii-V m）</li>
   <li>ii-V リックのコンタープレビュー・ID・ソース名の表示仕様は単コードリックと同一</li>
 </ul>
 

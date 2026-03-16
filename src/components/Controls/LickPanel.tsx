@@ -37,8 +37,15 @@ function LickContourMini({ notes, selected }: { notes: LickEntry['notes']; selec
 }
 
 
-/** ii-V type display badge */
-const IIV_BADGE: Record<string, { label: string; color: string }> = {
+/** Grid column template shared by header and list rows */
+const LICK_GRID_COLS = '16px 48px 42px 60px 28px 24px 46px 46px 46px 116px minmax(0, 1fr)';
+
+/** Lick type display badge */
+const LICK_TYPE_BADGE: Record<string, { label: string; color: string }> = {
+  'dom7': { label: 'dom7', color: '#E67E22' },
+  'min7': { label: 'min7', color: '#27AE60' },
+  'maj7': { label: 'maj7', color: '#3498DB' },
+  'm7b5': { label: 'm7♭5', color: '#8E44AD' },
   'maj-ii-v-short': { label: 'ii-V S', color: '#4FC3F7' },
   'maj-ii-v-long': { label: 'ii-V L', color: '#4FC3F7' },
   'min-ii-v-short': { label: 'ii-V m', color: '#4FC3F7' },
@@ -117,23 +124,53 @@ export function LickPanel({
       const degRef = isIiV && vChordRootSemitone != null ? vChordRootSemitone : rootSemitone;
 
       const pitched = lick.notes.filter(n => !n.rest && n.pitch != null);
-      let startDeg = '', endDeg = '', startNote = '', endNote = '';
+      let startLabel = '', endLabel = '', resLabel = '';
       if (pitched.length > 0) {
         const info = (p: number) => {
           const real = ((p + transpose) % 12 + 12) % 12;
           const deg = ((p + transpose - degRef) % 12 + 12) % 12;
           return { note: CHROMATIC_NAMES[real], deg: CHROMATIC_DEGREE[deg] };
         };
+        const fmt = (i: { note: string; deg: string }) => `${i.note}(${i.deg})`;
         const s = info(pitched[0].pitch!);
-        const e = info(pitched[pitched.length - 1].pitch!);
-        startDeg = s.deg; startNote = s.note;
-        endDeg = e.deg; endNote = e.note;
+        startLabel = fmt(s);
+
+        // Detect resolution: trailing rest >= 1 beat + last measure has only 1 pitched note
+        const lastNote = lick.notes[lick.notes.length - 1];
+        const measures = lick.beats / 4;
+        const hasTrailingRest = lastNote.rest === true && lastNote.duration >= 1.0;
+        let hasResolution = false;
+        if (hasTrailingRest && measures >= 2) {
+          const lastMeasurePitched = pitched.filter(n => n.beatStart >= (measures - 1) * 4);
+          hasResolution = lastMeasurePitched.length === 1;
+        }
+
+        if (hasResolution && pitched.length >= 2) {
+          const res = info(pitched[pitched.length - 1].pitch!);
+          const end = info(pitched[pitched.length - 2].pitch!);
+          endLabel = fmt(end);
+          resLabel = res.note;
+        } else {
+          const e = info(pitched[pitched.length - 1].pitch!);
+          endLabel = fmt(e);
+        }
       }
 
-      // Badge info
-      const badge = isIiV ? IIV_BADGE[iiVType!] : null;
+      // Badge info — derive lick type from ID prefix
+      let badge: { label: string; color: string } | null = null;
+      if (isIiV && iiVType) {
+        badge = LICK_TYPE_BADGE[iiVType] ?? null;
+      } else {
+        const id = lick.id ?? '';
+        const prefixType = id.startsWith('D-') ? 'dom7'
+          : id.startsWith('m-') ? 'min7'
+          : id.startsWith('M-') ? 'maj7'
+          : id.startsWith('H-') ? 'm7b5'
+          : null;
+        if (prefixType) badge = LICK_TYPE_BADGE[prefixType] ?? null;
+      }
 
-      return { modes, modeNames, modeKeys, startDeg, endDeg, startNote, endNote, isIiV, badge };
+      return { modes, modeNames, modeKeys, startLabel, endLabel, resLabel, isIiV, badge };
     });
   }, [licks, quality, rootSemitone, iiV, vChordQuality, vChordRootSemitone]);
 
@@ -152,7 +189,7 @@ export function LickPanel({
         const meta = `${lick.noteCount}音 ${lick.beats}拍`;
         const m = lickMeta[i];
         const modeStr = m ? m.modeNames.join(' ').toLowerCase() : '';
-        const noteStr = m ? `${m.startDeg} ${m.endDeg} ${m.startNote} ${m.endNote}`.toLowerCase() : '';
+        const noteStr = m ? `${m.startLabel} ${m.endLabel} ${m.resLabel}`.toLowerCase() : '';
         const badgeStr = m?.badge ? m.badge.label.toLowerCase() : '';
         if (id.includes(q) || src.includes(q) || meta.includes(q) || modeStr.includes(q) || noteStr.includes(q) || badgeStr.includes(q) || 'ii-v'.includes(q) && m?.isIiV) {
           acc.push({ lick, origIdx: i });
@@ -370,6 +407,30 @@ export function LickPanel({
             </span>
           </div>
 
+          {/* Column Headers */}
+          {filtered.length > 0 && (
+            <div
+              className="grid items-center px-2 py-[2px]"
+              style={{
+                gridTemplateColumns: LICK_GRID_COLS,
+                borderBottom: '1px solid #333', color: '#666', fontSize: 9, fontFamily: 'monospace',
+                columnGap: 4,
+              }}
+            >
+              <span>{/* fav */}</span>
+              <span>ID</span>
+              <span>タイプ</span>
+              <span>コンター</span>
+              <span className="text-center">音数</span>
+              <span className="text-center">拍数</span>
+              <span className="text-center">開始音</span>
+              <span className="text-center">末尾音</span>
+              <span className="text-center">解決音</span>
+              <span>ソース</span>
+              <span>モード</span>
+            </div>
+          )}
+
           {/* List */}
           {filtered.length === 0 ? (
             <p className="text-[10px] text-text-dim px-2.5 py-2">
@@ -406,89 +467,86 @@ export function LickPanel({
                     key={origIdx}
                     data-lick-idx={origIdx}
                     onClick={() => onSelect(origIdx)}
-                    className="cursor-pointer px-2 py-[3px] flex items-center gap-1.5"
+                    className="cursor-pointer px-2 py-[3px] grid items-center"
                     style={{
+                      gridTemplateColumns: LICK_GRID_COLS,
+                      columnGap: 4,
                       background: isSelected ? '#2a2a3a' : 'transparent',
                       borderLeft: isSelected ? '2px solid #FF6B9D' : '2px solid transparent',
                     }}
                   >
-                    <span
-                      className="text-[10px] font-mono flex-shrink-0"
-                      style={{
-                        color: isSelected ? '#FF6B9D' : '#666',
-                        width: '40px',
-                      }}
-                    >
-                      {lick.id ?? `#${origIdx + 1}`}
-                    </span>
                     <button
                       onClick={(e) => { e.stopPropagation(); if (lick.id) onToggleFavorite(lick.id); }}
-                      className="flex-shrink-0 cursor-pointer bg-transparent border-none p-0 leading-none"
+                      className="cursor-pointer bg-transparent border-none p-0 leading-none"
                       title={favorites.has(lick.id ?? '') ? 'お気に入り解除' : 'お気に入り'}
                       style={{ color: favorites.has(lick.id ?? '') ? '#F1C40F' : '#555', fontSize: 12 }}
                     >
                       {favorites.has(lick.id ?? '') ? '\u2605' : '\u2606'}
                     </button>
-                    {meta?.badge && (
-                      <span
-                        className="text-[8px] font-mono flex-shrink-0 rounded px-1"
-                        style={{
-                          color: meta.badge.color,
-                          background: '#1a2a3a',
-                          border: `1px solid ${meta.badge.color}33`,
-                        }}
-                      >
-                        {meta.badge.label}
-                      </span>
-                    )}
+                    <span
+                      className="text-[10px] font-mono truncate"
+                      style={{ color: isSelected ? '#FF6B9D' : '#666' }}
+                    >
+                      {lick.id ?? `#${origIdx + 1}`}
+                    </span>
+                    <span className="min-w-0 overflow-hidden">
+                      {meta?.badge ? (
+                        <span
+                          className="text-[8px] font-mono rounded px-1"
+                          style={{
+                            color: meta.badge.color,
+                            background: '#1a2a3a',
+                            border: `1px solid ${meta.badge.color}33`,
+                          }}
+                        >
+                          {meta.badge.label}
+                        </span>
+                      ) : '\u00A0'}
+                    </span>
                     <LickContourMini notes={lick.notes} selected={isSelected} />
                     <span
-                      className="text-[9px] flex-shrink-0"
-                      style={{ color: isSelected ? '#CCC' : '#888', width: '28px' }}
+                      className="text-[9px] text-center"
+                      style={{ color: isSelected ? '#CCC' : '#888' }}
                     >
-                      {lick.noteCount}音
+                      {lick.noteCount}
                     </span>
-                    <span className="text-[9px] flex-shrink-0" style={{ color: isSelected ? '#CCC' : '#999', width: '24px' }}>
-                      {lick.beats}拍
+                    <span className="text-[9px] text-center" style={{ color: isSelected ? '#CCC' : '#999' }}>
+                      {lick.beats}
                     </span>
-                    {meta && meta.startDeg && (
-                      <span
-                        className="text-[9px] font-mono flex-shrink-0 inline-flex items-center"
-                        style={{ color: isSelected ? '#CCC' : '#999', width: '42px', marginLeft: '4px' }}
-                      >
-                        <span style={{ width: '16px', textAlign: 'center' }}>{meta.startDeg}</span>
-                        <span style={{ width: '10px', textAlign: 'center', color: isSelected ? '#888' : '#666' }}>→</span>
-                        <span style={{ width: '16px', textAlign: 'center' }}>{meta.endDeg}</span>
-                      </span>
-                    )}
-                    {meta && meta.startNote && (
-                      <span
-                        className="text-[9px] font-mono flex-shrink-0 inline-flex items-center"
-                        style={{ color: isSelected ? '#BBB' : '#888', width: '42px', marginLeft: '4px' }}
-                      >
-                        <span style={{ width: '16px', textAlign: 'center' }}>{meta.startNote}</span>
-                        <span style={{ width: '10px', textAlign: 'center', color: isSelected ? '#999' : '#666' }}>→</span>
-                        <span style={{ width: '16px', textAlign: 'center' }}>{meta.endNote}</span>
-                      </span>
-                    )}
                     <span
-                      className="text-[9px] flex-shrink-0"
-                      style={{ color: isSelected ? '#CCC' : '#999', width: '130px', marginLeft: '4px' }}
+                      className="text-[9px] font-mono text-center"
+                      style={{ color: isSelected ? '#CCC' : '#999' }}
+                    >
+                      {meta?.startLabel || '\u00A0'}
+                    </span>
+                    <span
+                      className="text-[9px] font-mono text-center"
+                      style={{ color: isSelected ? '#CCC' : '#999' }}
+                    >
+                      {meta?.endLabel || '\u00A0'}
+                    </span>
+                    <span
+                      className="text-[9px] font-mono text-center"
+                      style={{ color: isSelected ? '#CCC' : '#999' }}
+                    >
+                      {meta?.resLabel || '\u00A0'}
+                    </span>
+                    <span
+                      className="text-[9px] truncate"
+                      style={{ color: isSelected ? '#CCC' : '#999' }}
                     >
                       {sourceName || '\u00A0'}
                     </span>
-                    {meta && meta.modes.length > 0 && (
-                      <span className="text-[9px] truncate min-w-0">
-                        {meta.modes.map((m, mi) => (
-                          <span key={m.modeIdx}>
-                            {mi > 0 && <span style={{ color: '#666' }}>, </span>}
-                            <span style={{ color: MODE_COLORS[meta.modeKeys[mi]] ?? '#888' }}>
-                              {meta.modeNames[mi]}
-                            </span>
+                    <span className="text-[9px] truncate">
+                      {meta && meta.modes.length > 0 && meta.modes.map((m, mi) => (
+                        <span key={m.modeIdx}>
+                          {mi > 0 && <span style={{ color: '#666' }}>, </span>}
+                          <span style={{ color: MODE_COLORS[meta.modeKeys[mi]] ?? '#888' }}>
+                            {meta.modeNames[mi]}
                           </span>
-                        ))}
-                      </span>
-                    )}
+                        </span>
+                      ))}
+                    </span>
                   </div>
                 );
               })}
