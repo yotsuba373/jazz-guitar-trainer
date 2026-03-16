@@ -960,9 +960,13 @@ export default function App() {
                         const layout = getChartLayout(prog);
                         const chordBeats = getChordBeatCount(layout, activeChordIdx);
 
+                        // Remember old lickId before overwriting (for orphan cleanup)
+                        const oldLickId = prog.chords[activeChordIdx]?.lickId;
+
                         // Assign lick to current chord, overflow to subsequent chords if needed
                         const anacrusis = lick.anacrusis ?? 0;
                         const effectiveBeats = lick.beats - anacrusis;
+                        let assignEnd = activeChordIdx + 1;
                         if (effectiveBeats > chordBeats && activeChordIdx + 1 < prog.chords.length) {
                           let remaining = effectiveBeats;
                           let offset = anacrusis;
@@ -982,6 +986,7 @@ export default function App() {
                             remaining -= assignBeats;
                             ci++;
                           }
+                          assignEnd = ci;
                         } else {
                           prog.chords[activeChordIdx] = {
                             ...prog.chords[activeChordIdx],
@@ -992,6 +997,19 @@ export default function App() {
                             lickAnacrusis: anacrusis > 0 ? anacrusis : undefined,
                           };
                         }
+
+                        // Clean up orphaned continuations of the old lick beyond new assignment range
+                        if (oldLickId) {
+                          for (let i = assignEnd; i < prog.chords.length; i++) {
+                            const c = prog.chords[i];
+                            if (c?.lickId === oldLickId && c?.lickBeatOffset != null && c.lickBeatOffset > (c.lickAnacrusis ?? 0)) {
+                              prog.chords[i] = { ...c, lickId: undefined, lickHighOctave: undefined, lickHighInstance: undefined, lickBeatOffset: undefined, lickAnacrusis: undefined };
+                            } else {
+                              break;
+                            }
+                          }
+                        }
+
                         copy[activeProgIdx] = prog;
                         handleSaveProgressions(copy);
                       }
@@ -1064,12 +1082,11 @@ export default function App() {
                       const prog = { ...copy[activeProgIdx], chords: [...copy[activeProgIdx].chords] };
                       const curChord = prog.chords[activeChordIdx];
                       prog.chords[activeChordIdx] = { ...curChord, lickId: undefined, lickHighOctave: undefined, lickHighInstance: undefined, lickBeatOffset: undefined, lickAnacrusis: undefined };
-                      // Linked clear: if this was the originator, clear all continuations
-                      const clearAna = curChord?.lickAnacrusis ?? 0;
-                      if (curChord?.lickBeatOffset === clearAna) {
+                      // Linked clear: clear all continuations of the same lick after this chord
+                      if (curChord?.lickId) {
                         for (let i = activeChordIdx + 1; i < prog.chords.length; i++) {
                           const c = prog.chords[i];
-                          if (c?.lickId === curChord.lickId && c?.lickBeatOffset != null && c.lickBeatOffset > clearAna) {
+                          if (c?.lickId === curChord.lickId && c?.lickBeatOffset != null && c.lickBeatOffset > (c.lickAnacrusis ?? 0)) {
                             prog.chords[i] = { ...c, lickId: undefined, lickHighOctave: undefined, lickHighInstance: undefined, lickBeatOffset: undefined, lickAnacrusis: undefined };
                           } else {
                             break;
