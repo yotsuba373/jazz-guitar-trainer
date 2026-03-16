@@ -564,7 +564,9 @@ export default function App() {
 
   // Auto-disable toggles when they become unavailable
   // Skip for continuation chords — they inherit 8va/Hi from the originator
+  // Skip during auto-play — each chord has its own saved 8va/Hi; overwriting would cause re-scheduling glitches
   useEffect(() => {
+    if (isPlaying) return;
     const chord = activeProg?.chords[activeChordIdx];
     if (chord?.lickBeatOffset != null && chord.lickBeatOffset > (chord.lickAnacrusis ?? 0)) return;
     let changed = false;
