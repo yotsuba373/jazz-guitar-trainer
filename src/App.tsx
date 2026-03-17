@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import type { LabelMode, RootName, Progression, ChordNotationPrefs, GeneratedPhrase, InstrumentType, RhythmMode, LickDB, LickEntry, Position, FretMap } from './types';
+import type { LabelMode, RootName, Progression, ChordNotationPrefs, GeneratedPhrase, InstrumentType, RhythmMode, BackingStyle, LickDB, LickEntry, Position, FretMap } from './types';
 import { MODE_TEMPLATES, ROOTS, MODE_COLORS } from './constants';
 import {
   buildFretMap, generatePositions, generateDimPositions, resolveMode,
@@ -105,15 +105,16 @@ export default function App() {
   );
   const [loopSelecting, setLoopSelecting] = useState(false);
 
-  const [swingEnabled, setSwingEnabled] = useState(
-    () => localStorage.getItem('swingEnabled') === 'true'
-  );
   const [swingAmount, setSwingAmount] = useState(
     () => Number(localStorage.getItem('swingAmount')) || 0.2
   );
   const [rhythmMode, setRhythmMode] = useState<RhythmMode>(() =>
     (localStorage.getItem('rhythmMode') as RhythmMode) || 'metronome'
   );
+  const [backingStyle, setBackingStyle] = useState<BackingStyle>(() =>
+    progressions[activeProgIdx]?.backingStyle ?? 'swing'
+  );
+  const swingEnabled = backingStyle === 'swing' || backingStyle === 'ballad';
   // Lick practice state
   const [lickDB, setLickDB] = useState<LickDB | null>(null);
   const [selectedLickIdx, setSelectedLickIdx] = useState<number | null>(null);
@@ -198,7 +199,7 @@ export default function App() {
   const audio = useAudioContext({
     metVolume, chordVolume, chordAudioOn, noteVolume, noteAudioOn,
     countInVolume, bassVolume, bassAudioOn, rhythmMode, rhythmOn,
-    instrument, swingEnabled, swingAmount,
+    instrument, swingEnabled, swingAmount, backingStyle,
   });
 
   // Trigger sampler load when entering practice mode
@@ -760,6 +761,15 @@ export default function App() {
     }
   }
 
+  function handleBackingStyleChange(style: BackingStyle) {
+    setBackingStyle(style);
+    if (progMode && activeProg) {
+      const copy = [...progressions];
+      copy[activeProgIdx] = { ...copy[activeProgIdx], backingStyle: style };
+      handleSaveProgressions(copy);
+    }
+  }
+
   function handleChordModeChange(chordIdx: number, newModeIdx: number) {
     const copy = [...progressions];
     const prog = { ...copy[activeProgIdx], chords: [...copy[activeProgIdx].chords] };
@@ -889,8 +899,9 @@ export default function App() {
           onInstrumentChange={setInstrument}
           rhythmMode={rhythmMode}
           onRhythmModeChange={setRhythmMode}
+          backingStyle={backingStyle}
+          onBackingStyleChange={handleBackingStyleChange}
           swingEnabled={swingEnabled}
-          onToggleSwing={() => setSwingEnabled(p => !p)}
           swingAmount={swingAmount}
           onSwingAmountChange={setSwingAmount}
           countInEnabled={countInEnabled}
@@ -942,8 +953,10 @@ export default function App() {
                 chordPrefs={chordPrefs}
                 activeChordIdx={activeChordIdx}
                 onSave={handleSaveProgressions}
-                onSelectProg={(idx) => { setActiveProgIdx(idx); localStorage.setItem('activeProgIdx', String(idx)); setActiveChordIdx(0); setIsPlaying(false); setBpm(progressions[idx]?.bpm ?? 120); setLoopRange(progressions[idx]?.loopRange ?? null); }}
+                onSelectProg={(idx) => { setActiveProgIdx(idx); localStorage.setItem('activeProgIdx', String(idx)); setActiveChordIdx(0); setIsPlaying(false); setBpm(progressions[idx]?.bpm ?? 120); setLoopRange(progressions[idx]?.loopRange ?? null); setBackingStyle(progressions[idx]?.backingStyle ?? 'swing'); }}
                 onClose={() => setEditing(false)}
+                backingStyle={backingStyle}
+                onBackingStyleChange={handleBackingStyleChange}
               >
                 {(editingChords, onRemoveChord, editChartLayout, onInsertAtBeat, onEmptyMeasureBeat, onRemoveEmptyMeasure, selectedBeat) => (editingChords.length > 0 || editChartLayout) && (
                   <ProgressionPlayer

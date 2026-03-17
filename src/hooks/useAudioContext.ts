@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import type { MutableRefObject } from 'react';
-import type { InstrumentType, RhythmMode } from '../types';
+import type { InstrumentType, RhythmMode, BackingStyle } from '../types';
 import type { SamplerStatus } from '../utils/sampler';
 import { loadSamplers } from '../utils/sampler';
 
@@ -30,6 +30,7 @@ export function useAudioContext(volumes: {
   rhythmOn: boolean;
   swingEnabled: boolean;
   swingAmount: number;
+  backingStyle: BackingStyle;
 }) {
   const audioCtxRef = useRef<AudioContext | null>(null);
   const [samplerStatus, setSamplerStatus] = useState<SamplerStatus>('idle');
@@ -55,6 +56,7 @@ export function useAudioContext(volumes: {
   const rhythmOnRef = useRef(volumes.rhythmOn);
   const swingEnabledRef = useRef(volumes.swingEnabled);
   const swingAmountRef = useRef(volumes.swingAmount);
+  const backingStyleRef = useRef(volumes.backingStyle);
 
   // Ref sync + localStorage persistence
   useEffect(() => {
@@ -114,7 +116,6 @@ export function useAudioContext(volumes: {
 
   useEffect(() => {
     swingEnabledRef.current = volumes.swingEnabled;
-    localStorage.setItem('swingEnabled', String(volumes.swingEnabled));
   }, [volumes.swingEnabled]);
 
   useEffect(() => {
@@ -122,11 +123,16 @@ export function useAudioContext(volumes: {
     localStorage.setItem('swingAmount', String(volumes.swingAmount));
   }, [volumes.swingAmount]);
 
+  useEffect(() => {
+    backingStyleRef.current = volumes.backingStyle;
+  }, [volumes.backingStyle]);
+
   return {
     getCtx, samplerStatus,
     metVolumeRef, chordVolumeRef, chordAudioOnRef,
     noteVolumeRef, noteAudioOnRef, countInVolumeRef,
     bassVolumeRef, bassAudioOnRef,
     rhythmModeRef, rhythmOnRef, instrumentRef, swingEnabledRef, swingAmountRef,
+    backingStyleRef,
   };
 }

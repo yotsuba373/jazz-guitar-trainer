@@ -32,6 +32,7 @@ export type {
   PoolNote,
   InstrumentType,
   RhythmMode,
+  BackingStyle,
   LickNote,
   LickEntry,
   LickDB,

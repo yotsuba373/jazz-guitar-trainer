@@ -87,4 +87,45 @@ describe('generateBassLine', () => {
       expect(n.duration).toBe(1);
     }
   });
+
+  // --- Style-specific tests ---
+  it('style未指定: swing (4-feel) と同じ4音', () => {
+    const notes = generateBassLine(0, 'maj7', 4, 5);
+    expect(notes).toHaveLength(4);
+    // All integer beatStarts
+    for (const n of notes) {
+      expect(n.beatStart % 1).toBe(0);
+    }
+  });
+
+  it('Bossa 2-feel: 4拍→2音 (Root + 5th)', () => {
+    const notes = generateBassLine(0, 'maj7', 4, 5, 'bossa');
+    expect(notes).toHaveLength(2);
+    expect(notes[0].beatStart).toBe(0);
+    expect(notes[0].duration).toBe(2);
+    expect(notes[1].beatStart).toBe(2);
+    expect(notes[1].duration).toBe(2);
+  });
+
+  it('Ballad 2-feel: 4拍→2音 (Root + approach)', () => {
+    const notes = generateBassLine(7, '7', 4, 0, 'ballad');
+    expect(notes).toHaveLength(2);
+    expect(notes[0].beatStart).toBe(0);
+    expect(notes[1].beatStart).toBe(2);
+  });
+
+  it('Latin: 4拍→3音 (fractional beatStart)', () => {
+    const notes = generateBassLine(0, 'm7', 4, 7, 'latin');
+    expect(notes).toHaveLength(3);
+    expect(notes[0].beatStart).toBe(0);
+    expect(notes[1].beatStart).toBe(1.5);
+    expect(notes[2].beatStart).toBe(3);
+  });
+
+  it('Bossa/Ballad/Latin beats<=2: 既存ロジック (2音)', () => {
+    for (const style of ['bossa', 'ballad', 'latin'] as const) {
+      const notes = generateBassLine(0, 'maj7', 2, 7, style);
+      expect(notes).toHaveLength(2);
+    }
+  });
 });

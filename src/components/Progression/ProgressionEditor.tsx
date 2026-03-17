@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, type ReactNode } from 'react';
-import type { Progression, ChordSlot, ChartLayout, RootName, SongKey, ChordNotationPrefs } from '../../types';
+import type { Progression, ChordSlot, ChartLayout, RootName, SongKey, ChordNotationPrefs, BackingStyle } from '../../types';
 import type { SelectedBeatInfo } from './ChordChart';
 import { ROOTS } from '../../constants';
-import { parseChordSymbol, buildChordSlot, suggestMode, displayChordName, PRESET_PROGRESSIONS, removeChordFromLayout, computeInsertFlatIndex, insertChordAtBeat, deriveChartLayout, splitSection, mergeSections, splitEndings, removeEndings, renameSection, findChordMeasure, adjustEndingSplit, splitSectionAtEnding, insertEmptyMeasure } from '../../utils';
+import { parseChordSymbol, buildChordSlot, suggestMode, displayChordName, PRESET_PROGRESSIONS, removeChordFromLayout, computeInsertFlatIndex, insertChordAtBeat, deriveChartLayout, splitSection, mergeSections, splitEndings, removeEndings, renameSection, findChordMeasure, adjustEndingSplit, splitSectionAtEnding, insertEmptyMeasure, BACKING_STYLES } from '../../utils';
 import { SongImporter } from './SongImporter';
 import { ChordAutocomplete } from '../Controls';
 import { useUndoRedo } from '../../hooks';
@@ -20,6 +20,8 @@ interface ProgressionEditorProps {
   onSave: (progs: Progression[]) => void;
   onSelectProg: (idx: number) => void;
   onClose: () => void;
+  backingStyle: BackingStyle;
+  onBackingStyleChange: (style: BackingStyle) => void;
   children?: (
     editingChords: ChordSlot[],
     onRemoveChord: (idx: number) => void,
@@ -35,6 +37,7 @@ const btnBase = 'rounded cursor-pointer text-[10px] font-mono px-2.5 py-[5px]';
 
 export function ProgressionEditor({
   progressions, activeProgIdx, chordPrefs, activeChordIdx, onSave, onSelectProg,
+  backingStyle, onBackingStyleChange,
   children,
 }: ProgressionEditorProps) {
   const prog = progressions[activeProgIdx] ?? { name: '', chords: [] };
@@ -639,6 +642,18 @@ export function ProgressionEditor({
               </button>
             </>
           )}
+          {/* Style + Swing */}
+          <span className="mx-0.5" style={{ borderLeft: '1px solid #444', height: 18 }} />
+          <span className="text-[9px] text-text-dim">Style:</span>
+          <select
+            value={backingStyle}
+            onChange={e => onBackingStyleChange(e.target.value as BackingStyle)}
+            className="bg-[#111] border border-[#444] rounded text-[11px] text-text-primary font-mono px-1.5 py-1 cursor-pointer"
+          >
+            {BACKING_STYLES.map(s => (
+              <option key={s.key} value={s.key}>{s.label}</option>
+            ))}
+          </select>
         </div>
 
         {/* Chord input + actions */}

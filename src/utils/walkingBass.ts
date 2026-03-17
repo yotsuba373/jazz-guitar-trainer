@@ -1,4 +1,5 @@
 import type { Soundfont } from 'smplr';
+import type { BackingStyle } from '../types';
 import type { AudioHandle } from '../hooks/useAudioContext';
 
 export interface BassNote {
@@ -65,42 +66,66 @@ export function generateBassLine(
   quality: string,
   beats: number,
   nextRootSemi: number | null,
+  style: BackingStyle = 'swing',
 ): BassNote[] {
   const rootMidi = rootToBassMidi(rootSemi);
   const clamp = (n: number) => { let m = n; while (m > 55) m -= 12; while (m < 28) m += 12; return m; };
   const offsets = chordToneOffsets(quality);
   const third = clamp(rootMidi + offsets[1]);
   const fifth = clamp(rootMidi + offsets[2]);
+  const approach = nextRootSemi != null ? approachNote(rootMidi, nextRootSemi) : rootMidi;
 
   if (beats <= 1) {
     return [{ midi: rootMidi, beatStart: 0, duration: beats }];
   }
   if (beats <= 2) {
-    const approach = nextRootSemi != null ? approachNote(rootMidi, nextRootSemi) : rootMidi;
     return [
       { midi: rootMidi, beatStart: 0, duration: 1 },
       { midi: approach, beatStart: 1, duration: 1 },
     ];
   }
 
-  // 3-4 beats
+  // Style-specific patterns for 3+ beats
+  if (style === 'bossa' && beats >= 3) {
+    // 2-feel: Root + 5th
+    return [
+      { midi: rootMidi, beatStart: 0, duration: 2 },
+      { midi: fifth, beatStart: 2, duration: beats - 2 },
+    ];
+  }
+
+  if (style === 'ballad' && beats >= 3) {
+    // 2-feel: Root + approach
+    return [
+      { midi: rootMidi, beatStart: 0, duration: 2 },
+      { midi: approach, beatStart: 2, duration: beats - 2 },
+    ];
+  }
+
+  if (style === 'latin' && beats >= 3) {
+    // Tumbao: Root + 5th (syncopated) + Root octave
+    const oct = clamp(rootMidi + 12);
+    return [
+      { midi: rootMidi, beatStart: 0, duration: 1 },
+      { midi: fifth, beatStart: 1.5, duration: 1 },
+      { midi: oct, beatStart: 3, duration: beats - 3 || 1 },
+    ];
+  }
+
+  // Swing (default): 4-feel walking bass
   const notes: BassNote[] = [
     { midi: rootMidi, beatStart: 0, duration: 1 },
   ];
 
   if (beats >= 3) {
-    // Beat 2: 3rd or 5th
     notes.push({ midi: Math.random() < 0.5 ? third : fifth, beatStart: 1, duration: 1 });
   }
   if (beats >= 4) {
-    // Beat 3: 5th or octave (clamp octave to range)
     const oct = rootMidi + 12 <= 55 ? rootMidi + 12 : rootMidi;
     notes.push({ midi: Math.random() < 0.5 ? fifth : oct, beatStart: 2, duration: 1 });
   }
 
-  // Last beat: chromatic approach to next root
   const lastBeat = beats - 1;
-  const approach = nextRootSemi != null ? approachNote(rootMidi, nextRootSemi) : rootMidi;
   notes.push({ midi: approach, beatStart: lastBeat, duration: 1 });
 
   return notes;
@@ -124,10 +149,11 @@ export function playSmplrBassLine(
   nextRootName: string | null,
   startAt: number,
   bpm: number,
+  style: BackingStyle = 'swing',
 ): AudioHandle {
   const rootSemi = ROOT_PC[rootName] ?? 0;
   const nextRootSemi = nextRootName != null ? (ROOT_PC[nextRootName] ?? null) : null;
-  const bassLine = generateBassLine(rootSemi, quality, beats, nextRootSemi);
+  const bassLine = generateBassLine(rootSemi, quality, beats, nextRootSemi, style);
   const beatSec = 60 / bpm;
   const velocity = 90; // 音量は output.setVolume() で制御
   const stopId = `bass-${++bassIdCounter}`;

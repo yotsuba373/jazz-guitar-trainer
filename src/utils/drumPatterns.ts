@@ -1,4 +1,5 @@
 import { Sampler } from 'smplr';
+import type { BackingStyle } from '../types';
 import type { AudioHandle } from '../hooks/useAudioContext';
 import { swingBeatStart, swingVolumeMult } from './swing';
 
@@ -164,6 +165,80 @@ export function generateSwingDrumPattern(
   return hits;
 }
 
+/** Bossa nova: cross-stick + HH + kick */
+function generateBossaDrumPattern(beats: number): DrumHit[] {
+  const hits: DrumHit[] = [];
+  for (let b = 0; b < beats; b++) {
+    // HH on every quarter
+    hits.push({ role: 'hihat', beatStart: b, velocity: 40 });
+    // Cross-stick on 2, 4
+    if (b === 1 || b === 3) {
+      hits.push({ role: 'snare', beatStart: b, velocity: 55 });
+    }
+    // Kick on 0, and syncopated
+    if (b === 0) hits.push({ role: 'kick', beatStart: b, velocity: 70 });
+    if (b === 2 && beats >= 4) hits.push({ role: 'kick', beatStart: 2.5, velocity: 60 });
+    if (b === 3 && beats >= 4) hits.push({ role: 'kick', beatStart: 3, velocity: 65 });
+  }
+  return hits;
+}
+
+/** Ballad: light ride + HH + soft kick */
+function generateBalladDrumPattern(beats: number): DrumHit[] {
+  const hits: DrumHit[] = [];
+  for (let b = 0; b < beats; b++) {
+    // Ride on every quarter (soft)
+    hits.push({ role: 'ride', beatStart: b, velocity: 50 });
+    // HH on 2, 4
+    if (b === 1 || b === 3) {
+      hits.push({ role: 'hihat', beatStart: b, velocity: 45 });
+    }
+    // Kick on beat 0
+    if (b === 0) hits.push({ role: 'kick', beatStart: 0, velocity: 60 });
+  }
+  return hits;
+}
+
+/** Latin: straight 8th ride + kick on 1,3 + HH on 0,2 */
+function generateLatinDrumPattern(beats: number): DrumHit[] {
+  const hits: DrumHit[] = [];
+  for (let b = 0; b < beats; b++) {
+    // Ride straight 8ths (on beat + and)
+    hits.push({ role: 'ride', beatStart: b, velocity: 65 });
+    if (b + 0.5 < beats) {
+      hits.push({ role: 'ride', beatStart: b + 0.5, velocity: 55 });
+    }
+    // Kick on 1, 3
+    if (b === 1 || b === 3) {
+      hits.push({ role: 'kick', beatStart: b, velocity: 65 });
+    }
+    // HH on 0, 2
+    if (b === 0 || b === 2) {
+      hits.push({ role: 'hihat', beatStart: b, velocity: 55 });
+    }
+  }
+  return hits;
+}
+
+/**
+ * スタイル別ドラムパターン生成 (ディスパッチ関数)。
+ */
+export function generateDrumPattern(
+  beats: number,
+  globalBeatOffset: number,
+  swingAmount: number,
+  bpm: number,
+  style: BackingStyle = 'swing',
+): DrumHit[] {
+  switch (style) {
+    case 'bossa':  return generateBossaDrumPattern(beats);
+    case 'ballad': return generateBalladDrumPattern(beats);
+    case 'latin':  return generateLatinDrumPattern(beats);
+    case 'swing':
+    default:       return generateSwingDrumPattern(beats, globalBeatOffset, swingAmount, bpm);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Playback
 // ---------------------------------------------------------------------------
@@ -181,8 +256,9 @@ export function playDrumPattern(
   startAt: number,
   bpm: number,
   swingAmount: number,
+  style: BackingStyle = 'swing',
 ): AudioHandle {
-  const pattern = generateSwingDrumPattern(beats, globalBeatOffset, swingAmount, bpm);
+  const pattern = generateDrumPattern(beats, globalBeatOffset, swingAmount, bpm, style);
   const beatSec = 60 / bpm;
   const stopId = `drums-${++drumIdCounter}`;
 

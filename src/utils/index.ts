@@ -84,9 +84,13 @@ export {
 export { buildPlaybackSeq, computeCumBeats } from './playbackSeq';
 export { loadSamplers, getSamplers, getSamplerStatus, playSmplrPianoComp, buildJazzPianoVoicing } from './sampler';
 export { generateBassLine, playSmplrBassLine } from './walkingBass';
-export { generateSwingDrumPattern, playDrumPattern, getDrumSampler, loadDrumSampler } from './drumPatterns';
+export { generateSwingDrumPattern, generateDrumPattern, playDrumPattern, getDrumSampler, loadDrumSampler } from './drumPatterns';
 export type { DrumHit, DrumSamplerSet } from './drumPatterns';
 export type { SamplerStatus, SamplerSet } from './sampler';
+export { BACKING_STYLES } from './backingStyles';
+export type { BackingStyleDef } from './backingStyles';
+export { generateCompPattern } from './compPatterns';
+export type { CompEvent } from './compPatterns';
 export type { PlaybackStep } from './playbackSeq';
 export {
   findLickById, findOriginatorIdx, chordHasSavedLick,

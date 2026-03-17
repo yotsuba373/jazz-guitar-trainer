@@ -11,6 +11,7 @@ import {
   isLickOriginator,
   getSamplers, playSmplrPianoComp, playSmplrBassLine,
   playDrumPattern, getDrumSampler,
+  generateCompPattern,
 } from '../utils';
 
 interface AutoPlayParams {
@@ -115,17 +116,24 @@ export function useAutoPlay(params: AutoPlayParams) {
     let phrase: GeneratedPhrase | null = null;
     const metNodes: AudioHandle[] = [];
 
-    // Strum (piano comp)
+    // Strum (piano comp — style-aware)
     if (audio.chordAudioOnRef.current) {
       const chord = prog.chords[chordIdx];
       const samplers = getSamplers();
       if (samplers && chord) {
         const layout = getChartLayout(prog);
         const chordBeats = getChordBeatCount(layout, chordIdx);
-        const chordDur = chordBeats * (60 / bpm);
+        const beatSec = 60 / bpm;
+        const style = audio.backingStyleRef.current;
+        const compEvents = generateCompPattern(chordBeats, style, globalBeatOffset);
         samplers.piano.output.setVolume(audio.chordVolumeRef.current * 127);
-        strumHandle = playSmplrPianoComp(
-          samplers.piano, chord.rootName, chord.quality, startAt, chordDur);
+        const compHandles: AudioHandle[] = [];
+        for (const ev of compEvents) {
+          compHandles.push(playSmplrPianoComp(
+            samplers.piano, chord.rootName, chord.quality,
+            startAt + ev.beatStart * beatSec, ev.duration * beatSec));
+        }
+        strumHandle = { stop: () => compHandles.forEach(h => h.stop()) };
       } else {
         const strumNotes = getStrumNotes(chordIdx, prog.chords, prog.songKey);
         if (strumNotes.length > 0) {
@@ -147,6 +155,7 @@ export function useAutoPlay(params: AutoPlayParams) {
           bassHandle = playSmplrBassLine(
             samplers.bass, chord.rootName, chord.quality,
             chordBeats, nextChord?.rootName ?? null, startAt, bpm,
+            audio.backingStyleRef.current,
           );
         }
       }
@@ -171,11 +180,12 @@ export function useAutoPlay(params: AutoPlayParams) {
         if (drumSampler) {
           const layout = getChartLayout(prog);
           const chordBeats = getChordBeatCount(layout, chordIdx);
-          const swAmt = audio.swingEnabledRef.current ? audio.swingAmountRef.current : 0;
+          const swAmt = audio.swingEnabledRef.current ? 0.65 : 0;
           drumSampler.metal.output.setVolume(rhythmVol * 127);
           drumSampler.body.output.setVolume(rhythmVol * 127);
           drumsHandle = playDrumPattern(
             drumSampler, chordBeats, globalBeatOffset, startAt, bpm, swAmt,
+            audio.backingStyleRef.current,
           );
         }
       } else {

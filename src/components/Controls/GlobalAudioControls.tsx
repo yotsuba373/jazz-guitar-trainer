@@ -1,5 +1,6 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import type { InstrumentType, RhythmMode } from '../../types';
+import { useState, useEffect, useRef, useCallback, type ReactNode } from 'react';
+import type { InstrumentType, RhythmMode, BackingStyle } from '../../types';
+import { BACKING_STYLES } from '../../utils';
 
 interface GlobalAudioControlsProps {
   bpm: number;
@@ -24,8 +25,9 @@ interface GlobalAudioControlsProps {
   onInstrumentChange: (inst: InstrumentType) => void;
   rhythmMode: RhythmMode;
   onRhythmModeChange: (mode: RhythmMode) => void;
+  backingStyle: BackingStyle;
+  onBackingStyleChange: (style: BackingStyle) => void;
   swingEnabled: boolean;
-  onToggleSwing: () => void;
   swingAmount: number;
   onSwingAmountChange: (v: number) => void;
   countInEnabled: boolean;
@@ -43,7 +45,7 @@ interface GlobalAudioControlsProps {
   loopSelecting?: boolean;
   onToggleLoopSelecting?: () => void;
   /** Slot for leading elements (e.g. chord edit button) before play/audio controls */
-  leadingSlot?: React.ReactNode;
+  leadingSlot?: ReactNode;
 }
 
 const btnBase = 'rounded cursor-pointer text-[10px] font-mono px-2 h-[24px] inline-flex items-center';
@@ -66,6 +68,41 @@ function MuteBtn({ muted, onToggle, color, label }: { muted: boolean; onToggle: 
   );
 }
 
+/** ミキサーの1チャンネル行 (MuteBtn + ラベル + スライダー + %) */
+function ChannelRow({ color, label, muted, onToggle, volume, onVolumeChange, muteLabel }: {
+  color: string; label: string; muted: boolean; onToggle: () => void;
+  volume: number; onVolumeChange: (v: number) => void; muteLabel?: string;
+}) {
+  const dim = muted ? 0.3 : 1;
+  return (<>
+    <MuteBtn muted={muted} onToggle={onToggle} color={color} label={muteLabel} />
+    <span className="text-[10px]" style={{ color, opacity: dim }}>{label}</span>
+    <input type="range" min={0} max={1} step={0.05} value={volume}
+      onChange={e => onVolumeChange(Number(e.target.value))}
+      style={{ accentColor: color, opacity: dim }} />
+    <span className="text-[10px] text-text-dim text-right" style={{ opacity: dim }}>{Math.round(volume * 100)}%</span>
+  </>);
+}
+
+/** チャンネル間の gap スペーサー */
+function Gap() {
+  return <span style={{ gridColumn: '1 / -1', height: 2 }} />;
+}
+
+/** チャンネル下のサブ設定セクション (左ボーダーライン付き) */
+function SubSection({ color, dimmed, children }: { color: string; dimmed: boolean; children: ReactNode }) {
+  return (
+    <span style={{
+      gridColumn: '1 / -1', borderLeft: `2px solid ${color}50`,
+      marginLeft: 16, paddingLeft: 8,
+      display: 'grid', gridTemplateColumns: '68px 1fr 28px', gap: '4px 6px', alignItems: 'center',
+      opacity: dimmed ? 0.3 : 1,
+    }}>
+      {children}
+    </span>
+  );
+}
+
 export function GlobalAudioControls({
   bpm, onBpmChange,
   chordAudioOn, onToggleChordAudio,
@@ -76,7 +113,8 @@ export function GlobalAudioControls({
   noteAudioOn, onToggleNoteAudio, bassAudioOn, onToggleBassAudio,
   rhythmOn, onToggleRhythm,
   instrument, onInstrumentChange, rhythmMode, onRhythmModeChange,
-  swingEnabled, onToggleSwing, swingAmount, onSwingAmountChange,
+  backingStyle, onBackingStyleChange,
+  swingEnabled, swingAmount, onSwingAmountChange,
   countInEnabled, onToggleCountIn, countInVolume, onCountInVolumeChange, countInBars, isCountingIn,
   isPlaying, onTogglePlay, showPlayButton,
   loopLabel, onClearLoop, loopSelecting, onToggleLoopSelecting,
@@ -121,6 +159,24 @@ export function GlobalAudioControls({
     if (volOpen) document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [volOpen, handleClickOutside]);
+
+  /** トグルボタン (音色選択等) */
+  function ToggleBtn<T extends string>({ value, current, onSelect, color, label, title }: {
+    value: T; current: T; onSelect: (v: T) => void; color: string; label: string; title: string;
+  }) {
+    const active = current === value;
+    return (
+      <button onClick={() => onSelect(value)} title={title}
+        className="rounded cursor-pointer text-[13px] px-1.5 py-[1px]"
+        style={{
+          border: `1px solid ${active ? color : '#555'}`,
+          background: active ? `${color}18` : '#1a1a1a',
+          color: active ? color : '#888',
+        }}>
+        {label}
+      </button>
+    );
+  }
 
   return (
     <div className="flex items-center gap-2 mb-3">
@@ -211,106 +267,55 @@ export function GlobalAudioControls({
           <div className="absolute left-0 top-[28px] z-50 rounded-md p-2.5 flex flex-col gap-2 min-w-[220px]"
             style={{ background: '#222', border: '1px solid #555', boxShadow: '0 4px 12px rgba(0,0,0,0.5)' }}>
             <div className="grid gap-y-1.5 gap-x-1.5 items-center" style={{ gridTemplateColumns: 'auto 68px 1fr 28px' }}>
-              <MuteBtn muted={!noteAudioOn} onToggle={onToggleNoteAudio} color="#FF6B9D" />
-              <span className="text-[10px] text-text-dim">メロディ</span>
-              <input type="range" min={0} max={1} step={0.05}
-                value={noteVolume}
-                onChange={e => onNoteVolumeChange(Number(e.target.value))}
-                style={{ accentColor: '#FF6B9D', opacity: !noteAudioOn ? 0.3 : 1 }} />
-              <span className="text-[10px] text-text-dim text-right">{Math.round(noteVolume * 100)}%</span>
+              {/* メロディ */}
+              <ChannelRow color="#FF6B9D" label="メロディ" muted={!noteAudioOn} onToggle={onToggleNoteAudio}
+                volume={noteVolume} onVolumeChange={onNoteVolumeChange} />
+              <SubSection color="#FF6B9D" dimmed={!noteAudioOn}>
+                <span className="text-[9px]" style={{ color: '#999' }}>音色</span>
+                <span className="flex gap-1" style={{ gridColumn: 'span 2' }}>
+                  <ToggleBtn value="guitar" current={instrument} onSelect={onInstrumentChange} color="#FF6B9D" label="🎸" title="ギター" />
+                  <ToggleBtn value="saxophone" current={instrument} onSelect={onInstrumentChange} color="#FF6B9D" label="🎷" title="サクソフォン" />
+                </span>
+                <span className="text-[9px]" style={{ color: '#999', opacity: swingEnabled ? 1 : 0.35 }}>スウィング</span>
+                <input type="range" min={0} max={100} step={5}
+                  value={Math.round(swingAmount * 100)}
+                  onChange={e => onSwingAmountChange(Number(e.target.value) / 100)}
+                  style={{ accentColor: '#E67E22', opacity: swingEnabled ? 1 : 0.3 }}
+                  disabled={!swingEnabled} />
+                <span className="text-[10px] text-text-dim text-right" style={{ opacity: swingEnabled ? 1 : 0.35 }}>{Math.round(swingAmount * 100)}%</span>
+              </SubSection>
 
-              <MuteBtn muted={!chordAudioOn} onToggle={onToggleChordAudio} color="#27AE60" />
-              <span className="text-[10px] text-text-dim">コード</span>
-              <input type="range" min={0} max={1} step={0.05}
-                value={chordVolume}
-                onChange={e => onChordVolumeChange(Number(e.target.value))}
-                style={{ accentColor: '#27AE60', opacity: !chordAudioOn ? 0.3 : 1 }} />
-              <span className="text-[10px] text-text-dim text-right">{Math.round(chordVolume * 100)}%</span>
+              <Gap />
 
-              <MuteBtn muted={!bassAudioOn} onToggle={onToggleBassAudio} color="#1ABC9C" />
-              <span className="text-[10px] text-text-dim">ベース</span>
-              <input type="range" min={0} max={1} step={0.05}
-                value={bassVolume}
-                onChange={e => onBassVolumeChange(Number(e.target.value))}
-                style={{ accentColor: '#1ABC9C', opacity: !bassAudioOn ? 0.3 : 1 }} />
-              <span className="text-[10px] text-text-dim text-right">{Math.round(bassVolume * 100)}%</span>
+              {/* コード */}
+              <ChannelRow color="#27AE60" label="コード" muted={!chordAudioOn} onToggle={onToggleChordAudio}
+                volume={chordVolume} onVolumeChange={onChordVolumeChange} />
 
-              <MuteBtn muted={!rhythmOn} onToggle={onToggleRhythm} color="#F1C40F" />
-              <span className="text-[10px] text-text-dim">リズム</span>
-              <input type="range" min={0} max={1} step={0.05}
-                value={metVolume}
-                onChange={e => onMetVolumeChange(Number(e.target.value))}
-                style={{ accentColor: '#F1C40F', opacity: !rhythmOn ? 0.3 : 1 }} />
-              <span className="text-[10px] text-text-dim text-right">{Math.round(metVolume * 100)}%</span>
+              <Gap />
 
-              <MuteBtn
-                muted={!countInEnabled}
-                onToggle={onToggleCountIn}
-                color="#BB86FC"
-                label={countInEnabled ? `${countInBars}小節` : 'OFF'} />
-              <span className="text-[10px] text-text-dim">カウントイン</span>
-              <input type="range" min={0} max={1} step={0.05}
-                value={countInVolume}
-                onChange={e => onCountInVolumeChange(Number(e.target.value))}
-                style={{ accentColor: '#BB86FC', opacity: !countInEnabled ? 0.3 : 1 }} />
-              <span className="text-[10px] text-text-dim text-right">{Math.round(countInVolume * 100)}%</span>
-            </div>
-            <div className="flex gap-1 mt-1 items-center">
-              {([
-                { key: 'guitar' as InstrumentType, label: '\uD83C\uDFB8', title: 'ギター' },
-                { key: 'saxophone' as InstrumentType, label: '\uD83C\uDFB7', title: 'サクソフォン' },
-              ]).map(({ key, label, title }) => (
-                <button key={key}
-                  onClick={() => onInstrumentChange(key)}
-                  title={title}
-                  className="rounded cursor-pointer text-[13px] px-1.5 py-[1px]"
-                  style={{
-                    border: `1px solid ${instrument === key ? '#FF6B9D' : '#555'}`,
-                    background: instrument === key ? '#2a1020' : '#1a1a1a',
-                    color: instrument === key ? '#FF6B9D' : '#888',
-                  }}>
-                  {label}
-                </button>
-              ))}
-              <span className="mx-1" style={{ borderLeft: '1px solid #444', height: 16 }} />
-              {([
-                { key: 'metronome' as RhythmMode, label: '\uD83D\uDD14', title: 'メトロノーム' },
-                { key: 'drums' as RhythmMode, label: '\uD83E\uDD41', title: 'ドラム' },
-              ]).map(({ key, label, title }) => (
-                <button key={key}
-                  onClick={() => onRhythmModeChange(key)}
-                  title={title}
-                  className="rounded cursor-pointer text-[13px] px-1.5 py-[1px]"
-                  style={{
-                    border: `1px solid ${rhythmMode === key ? '#F1C40F' : '#555'}`,
-                    background: rhythmMode === key ? '#2a2a0a' : '#1a1a1a',
-                    color: rhythmMode === key ? '#F1C40F' : '#888',
-                  }}>
-                  {label}
-                </button>
-              ))}
-            </div>
-            {/* Swing controls */}
-            <div className="flex items-center gap-1.5 mt-1 pt-1" style={{ borderTop: '1px solid #333' }}>
-              <button
-                onClick={onToggleSwing}
-                className="rounded cursor-pointer text-[9px] font-mono px-1.5 h-[18px] inline-flex items-center"
-                style={{
-                  border: `1px solid ${swingEnabled ? '#E67E22' : '#555'}`,
-                  background: swingEnabled ? '#2a1a0a' : '#1a1a1a',
-                  color: swingEnabled ? '#E67E22' : '#888',
-                }}
-              >
-                Swing
-              </button>
-              <input type="range" min={0} max={100} step={5}
-                value={Math.round(swingAmount * 100)}
-                onChange={e => onSwingAmountChange(Number(e.target.value) / 100)}
-                className="flex-1"
-                style={{ accentColor: '#E67E22', opacity: swingEnabled ? 1 : 0.3 }}
-                disabled={!swingEnabled}
-              />
-              <span className="text-[10px] text-text-dim w-[28px] text-right">{Math.round(swingAmount * 100)}%</span>
+              {/* ベース */}
+              <ChannelRow color="#1ABC9C" label="ベース" muted={!bassAudioOn} onToggle={onToggleBassAudio}
+                volume={bassVolume} onVolumeChange={onBassVolumeChange} />
+
+              <Gap />
+
+              {/* リズム */}
+              <ChannelRow color="#F1C40F" label="リズム" muted={!rhythmOn} onToggle={onToggleRhythm}
+                volume={metVolume} onVolumeChange={onMetVolumeChange} />
+              <SubSection color="#F1C40F" dimmed={!rhythmOn}>
+                <span className="text-[9px]" style={{ color: '#999' }}>音色</span>
+                <span className="flex gap-1" style={{ gridColumn: 'span 2' }}>
+                  <ToggleBtn value="metronome" current={rhythmMode} onSelect={onRhythmModeChange} color="#F1C40F" label="🔔" title="メトロノーム" />
+                  <ToggleBtn value="drums" current={rhythmMode} onSelect={onRhythmModeChange} color="#F1C40F" label="🥁" title="ドラム" />
+                </span>
+              </SubSection>
+
+              <Gap />
+
+              {/* カウントイン */}
+              <ChannelRow color="#BB86FC" label="カウントイン" muted={!countInEnabled} onToggle={onToggleCountIn}
+                volume={countInVolume} onVolumeChange={onCountInVolumeChange}
+                muteLabel={countInEnabled ? `${countInBars}小節` : 'OFF'} />
             </div>
           </div>
         )}
@@ -318,7 +323,7 @@ export function GlobalAudioControls({
       <button
         onClick={() => onBpmChange(Math.max(40, bpm - 1))}
         className={btnBase}
-        style={{ border: '1px solid #444', background: '#1a1a1a', color: '#AAA' }}
+        style={{ border: '1px solid #444', background: '#1a1a1a', color: '#999' }}
       >−</button>
       <input
         type="number"
@@ -333,14 +338,25 @@ export function GlobalAudioControls({
       <button
         onClick={() => onBpmChange(Math.min(320, bpm + 1))}
         className={btnBase}
-        style={{ border: '1px solid #444', background: '#1a1a1a', color: '#AAA' }}
+        style={{ border: '1px solid #444', background: '#1a1a1a', color: '#999' }}
       >+</button>
       <button
         onClick={handleTapTempo}
         title="タップテンポ（連続タップでBPM設定）"
         className={btnBase}
-        style={{ border: '1px solid #444', background: '#1a1a1a', color: '#AAA', fontSize: 9, letterSpacing: 1 }}
+        style={{ border: '1px solid #444', background: '#1a1a1a', color: '#999', fontSize: 9, letterSpacing: 1 }}
       >TAP</button>
+      {/* Style selector (compact) */}
+      <select
+        value={backingStyle}
+        onChange={e => onBackingStyleChange(e.target.value as BackingStyle)}
+        className="bg-[#111] rounded text-[10px] font-mono px-1 h-[24px] cursor-pointer text-white"
+        style={{ border: '1px solid #444' }}
+      >
+        {BACKING_STYLES.map(s => (
+          <option key={s.key} value={s.key}>{s.label}</option>
+        ))}
+      </select>
     </div>
   );
 }

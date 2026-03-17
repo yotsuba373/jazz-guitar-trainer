@@ -436,14 +436,16 @@ Utils Layer (pure functions):
 │   ├── chordForms.ts             — findVoicingsInPosition(), VOICING_TEMPLATES(20)
 │   ├── audioEngine.ts            — playClick(), playKSNote(), playSaxNote(), playEPNote(), playChordStrum(), schedulePhrase()
 │   ├── sampler.ts               — loadSamplers(), getSamplers(), buildJazzPianoVoicing(), playSmplrPianoComp() — smplr SoundFont サンプラー + ジャズピアノボイシング
-│   ├── walkingBass.ts           — generateBassLine(), playSmplrBassLine() — ウォーキングベース生成 + smplr acoustic_bass 再生
-│   ├── drumPatterns.ts          — buildDrumPattern(), playSmplrDrums() — ジャズドラムパターン生成 + smplr DrumMachine TR-808 再生
+│   ├── walkingBass.ts           — generateBassLine(), playSmplrBassLine() — ウォーキングベース生成 + smplr acoustic_bass 再生 (スタイル別パターン対応)
+│   ├── drumPatterns.ts          — generateSwingDrumPattern(), generateDrumPattern(), playDrumPattern() — スタイル別ドラムパターン生成 (Swing/Bossa/Ballad/Latin) + Hydrogen GM ドラム再生
+│   ├── compPatterns.ts          — generateCompPattern() — スタイル別コンピングリズムパターン生成
+│   ├── backingStyles.ts         — BACKING_STYLES, BackingStyleDef — バッキングスタイル定義 (swing/bossa/ballad/latin)
 │   ├── lickEngine.ts             — absolutePitch(), buildNotePool(), loadLickDB(), transposeLick(), mapLickToFretboard(), inferModeCandidates(), lickToGeneratedPhrase(), findBestPositionForLick(), selectBestInstance(), getTransposeSemitones(), buildLickContext(), detectIiVPattern(), isIiVLickId(), buildIiVLickContext(), sliceLick()
 │   ├── lickPlayback.ts           — findLickById(), findOriginatorIdx(), chordHasSavedLick(), buildPhraseForLick(), computeTransposeSemitones(), isLickOriginator(), playLickForChord(), buildAnacrusisPhrase(), getStrumNotes(), resolveChordPositions()
 │   ├── playbackSeq.ts            — buildPlaybackSeq(), computeCumBeats()
 │   ├── phraseAnalysis.ts         — analyzePhrase(), computeSummary()
 │   ├── swing.ts                  — swingBeatStart(), swingVolumeMult(), swingDurMult()
-│   └── __tests__/                — 754 テスト
+│   └── __tests__/                — 776 テスト
 ├── components/
 │   ├── Fretboard/                — SVG指板 (Fretboard, FretboardNote, GhostNote, PhrasePath)
 │   ├── Controls/                 — 全コントロールUI
@@ -809,6 +811,50 @@ actualBeats = (beatWidth / sumOfBeatWidths) * 4</pre>
   <li><strong>音量制御</strong>: メトロノームと同じ <code>metVolume</code> スライダーで音量調節</li>
 </ul>
 
+<h3>バッキングスタイル (<code>backingStyles.ts</code> / <code>compPatterns.ts</code>)</h3>
+<p>4種類のバッキングスタイルを提供。スタイルに応じてコンピングリズム・ベースライン・ドラムパターンを一括切替。
+<code>backingStyle</code>, <code>swingEnabled</code>, <code>swingAmount</code> は <code>Progression</code> オブジェクトに曲ごと保存され、進行切替時に復元。ミキサーのドロップダウンで選択。</p>
+
+<table>
+  <tr><th>Style</th><th>Comping</th><th>Bass</th><th>Drums</th></tr>
+  <tr>
+    <td><strong>Swing</strong></td>
+    <td>Charleston (1拍半+裏拍) / 2拍ホールド交互</td>
+    <td>4フィール ウォーキングベース (Root→3rd/5th→5th/8va→アプローチ)</td>
+    <td>スウィングライド + 2,4拍HH + 1拍目キック</td>
+  </tr>
+  <tr>
+    <td><strong>Bossa</strong></td>
+    <td>シンコペーション (1拍+裏拍+3拍目)</td>
+    <td>2フィール (Root + 5th)</td>
+    <td>クロススティック 2,4拍 + 4分HH + シンコペーションキック</td>
+  </tr>
+  <tr>
+    <td><strong>Ballad</strong></td>
+    <td>全音符ホールド (4拍)</td>
+    <td>2フィール (Root + アプローチ)</td>
+    <td>ソフトライド 4分 + 2,4拍HH + 1拍目ソフトキック</td>
+  </tr>
+  <tr>
+    <td><strong>Latin</strong></td>
+    <td>モントゥーノ風 (8分音符シンコペーション、6イベント/4拍)</td>
+    <td>トゥンバオ (Root + 5thシンコペーション + オクターブ)</td>
+    <td>ストレート8thライド + 1,3拍キック + 0,2拍HH</td>
+  </tr>
+</table>
+
+<h4>コンピングパターン (<code>compPatterns.ts</code>)</h4>
+<p><code>generateCompPattern(beats, style, globalBeatOffset)</code> — コードの拍数とスタイルに応じた
+<code>CompEvent[]</code> (beatStart, duration, velocity) を返す純粋関数。
+ピアノコンピング (<code>playSmplrPianoComp</code>) のリズムパターンとして使用。</p>
+
+<h4>ベースライン (<code>walkingBass.ts</code>)</h4>
+<p><code>generateBassLine()</code> の <code>style</code> パラメータでスタイル別パターンに分岐。
+Swing はウォーキング (4フィール)、Bossa/Ballad は2フィール、Latin はトゥンバオ。</p>
+
+<h4>ドラムパターン (<code>drumPatterns.ts</code>)</h4>
+<p><code>generateDrumPattern()</code> がスタイル別ディスパッチ関数として各パターン生成関数に分岐。</p>
+
 <h2 id="volume-mixer">Volume Mixer</h2>
 <table>
   <tr><th>Channel</th><th>State</th><th>Default</th><th>Target</th></tr>
@@ -818,8 +864,11 @@ actualBeats = (beatWidth / sumOfBeatWidths) * 4</pre>
   <tr><td>Single Note</td><td><code>noteVolume</code></td><td>0.4</td><td><code>playNote()</code> + <code>schedulePhrase()</code></td></tr>
   <tr><td>Count-In</td><td><code>countInVolume</code></td><td>0.5</td><td><code>playClick()</code> (カウントイン専用)</td></tr>
   <tr><td>Instrument</td><td><code>phraseInstrument</code></td><td>'guitar'</td><td>楽器選択 (guitar/saxophone)</td></tr>
+  <tr><td>Backing Style</td><td><code>Progression.backingStyle</code></td><td>'swing'</td><td>スタイル選択 (swing/bossa/ballad/latin) — 曲ごと保存</td></tr>
+  <tr><td>Swing</td><td><code>Progression.swingEnabled</code></td><td>false</td><td>ON/OFFトグル — 曲ごと保存</td></tr>
+  <tr><td>Swing Amount</td><td><code>Progression.swingAmount</code></td><td>0.2</td><td>0-1 (デフォルト20%) — 曲ごと保存</td></tr>
 </table>
-<p>全て localStorage に永続化。<code>useAudioContext</code> フックが ref 同期と localStorage 永続化を一括管理 (App.tsx から9個の useEffect を移動)。
+<p>音量・楽器・リズムモードは localStorage に永続化。バッキングスタイル・スウィング設定は <code>Progression</code> に曲ごと保存。<code>useAudioContext</code> フックが ref 同期を一括管理。
 <code>GlobalAudioControls</code> コンポーネントで練習モードの UI を提供（辞典モードでは非表示）。
 各チャンネルにミュートボタン付き（コード/単音、メトロノームは音量0でミュート）。タップテンポ対応（TAPボタン連続タップでBPM設定）。</p>
 
@@ -1403,7 +1452,7 @@ GeneratedPhrase
 
 <!-- ==================== TESTING ==================== -->
 <h2 id="testing">Test Suite</h2>
-<p><code>npm test</code> — Vitest による <strong>754テスト</strong>。</p>
+<p><code>npm test</code> — Vitest による <strong>776テスト</strong>。</p>
 
 <table>
   <tr><th>Test File</th><th>Tests</th><th>Coverage</th></tr>
@@ -1418,6 +1467,7 @@ GeneratedPhrase
   <tr><td>audioEngine.test.ts</td><td>14</td><td>Karplus-Strong, サクソフォン, エレピ, コードストラム</td></tr>
   <tr><td>walkingBass.test.ts</td><td>10</td><td>ベースライン生成、音域検証、拍数別、アプローチノート</td></tr>
   <tr><td>drumPatterns.test.ts</td><td>12</td><td>ドラムパターン生成、スウィング適用、ride/hihat/kick配置</td></tr>
+  <tr><td>backingStyles.test.ts</td><td>24</td><td>バッキングスタイル別コンピング/ベース/ドラムパターン生成</td></tr>
 </table>
 
 <div class="callout warn">

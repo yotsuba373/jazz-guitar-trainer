@@ -7,6 +7,9 @@ export type InstrumentType = 'guitar' | 'saxophone';
 /** Rhythm mode: metronome click or drum pattern */
 export type RhythmMode = 'metronome' | 'drums';
 
+/** Backing style for comping, bass, and drums */
+export type BackingStyle = 'swing' | 'bossa' | 'ballad' | 'latin';
+
 /** A single note on the fretboard: [noteName, fretNumber, semitoneValue] */
 export type FretNote = [string, number, number];
 
@@ -129,6 +132,7 @@ export interface Progression {
   chartLayout?: ChartLayout;  // optional chart display layout
   bpm?: number;               // per-song BPM (restored on song switch)
   loopRange?: { start: number; end: number };  // per-song measure loop range
+  backingStyle?: BackingStyle;  // per-song backing style (restored on song switch)
 }
 
 /** Raw song entry from JazzStandards.json */

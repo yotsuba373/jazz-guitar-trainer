@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { generateSwingDrumPattern } from '../drumPatterns';
+import { generateSwingDrumPattern, generateDrumPattern } from '../drumPatterns';
 
 describe('generateSwingDrumPattern', () => {
   it('4拍: ライド6 + HH 2 + kick 1 = 計9', () => {
@@ -94,5 +94,72 @@ describe('generateSwingDrumPattern', () => {
     expect(roles.has('ride')).toBe(true);
     expect(roles.has('hihat')).toBe(true);
     expect(roles.has('kick')).toBe(true);
+  });
+});
+
+describe('generateDrumPattern', () => {
+  it('style=swing: generateSwingDrumPattern と同じ結果', () => {
+    const swing = generateSwingDrumPattern(4, 0, 0.2, 120);
+    const dispatch = generateDrumPattern(4, 0, 0.2, 120, 'swing');
+    expect(dispatch).toEqual(swing);
+  });
+
+  it('style 未指定: swing がデフォルト', () => {
+    const swing = generateSwingDrumPattern(4, 0, 0, 120);
+    const dispatch = generateDrumPattern(4, 0, 0, 120);
+    expect(dispatch).toEqual(swing);
+  });
+
+  it('Bossa: snare (cross-stick) が含まれる', () => {
+    const hits = generateDrumPattern(4, 0, 0, 120, 'bossa');
+    const snares = hits.filter(h => h.role === 'snare');
+    expect(snares.length).toBeGreaterThan(0);
+    // Cross-stick on beat 2 and 4
+    expect(snares.some(s => s.beatStart === 1)).toBe(true);
+    expect(snares.some(s => s.beatStart === 3)).toBe(true);
+  });
+
+  it('Bossa: hihat + kick が含まれる', () => {
+    const hits = generateDrumPattern(4, 0, 0, 120, 'bossa');
+    expect(hits.some(h => h.role === 'hihat')).toBe(true);
+    expect(hits.some(h => h.role === 'kick')).toBe(true);
+  });
+
+  it('Ballad: ride + hihat + kick', () => {
+    const hits = generateDrumPattern(4, 0, 0, 120, 'ballad');
+    const roles = new Set(hits.map(h => h.role));
+    expect(roles.has('ride')).toBe(true);
+    expect(roles.has('hihat')).toBe(true);
+    expect(roles.has('kick')).toBe(true);
+  });
+
+  it('Ballad: ソフトなベロシティ (全て≤70)', () => {
+    const hits = generateDrumPattern(4, 0, 0, 120, 'ballad');
+    for (const h of hits) {
+      expect(h.velocity).toBeLessThanOrEqual(70);
+    }
+  });
+
+  it('Latin: straight 8th ride (8ヒット以上)', () => {
+    const hits = generateDrumPattern(4, 0, 0, 120, 'latin');
+    const rides = hits.filter(h => h.role === 'ride');
+    expect(rides.length).toBeGreaterThanOrEqual(7); // 4 on-beat + at least 3 and
+  });
+
+  it('Latin: kick on 1, 3', () => {
+    const hits = generateDrumPattern(4, 0, 0, 120, 'latin');
+    const kicks = hits.filter(h => h.role === 'kick');
+    expect(kicks.some(k => k.beatStart === 1)).toBe(true);
+    expect(kicks.some(k => k.beatStart === 3)).toBe(true);
+  });
+
+  it('全スタイル velocity 範囲 0-127', () => {
+    for (const style of ['swing', 'bossa', 'ballad', 'latin'] as const) {
+      const hits = generateDrumPattern(4, 0, 0.2, 120, style);
+      for (const h of hits) {
+        expect(h.velocity).toBeGreaterThanOrEqual(0);
+        expect(h.velocity).toBeLessThanOrEqual(127);
+      }
+    }
   });
 });
