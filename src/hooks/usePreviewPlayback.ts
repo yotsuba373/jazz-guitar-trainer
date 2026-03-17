@@ -1,9 +1,9 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import type { GeneratedPhrase, Progression, Position, Mode, SongKey } from '../types';
+import type { GeneratedPhrase, PhraseNote, Progression, Position, Mode, SongKey } from '../types';
 import type { useAudioContext } from './useAudioContext';
 import { stopHandle, stopHandleArray, type AudioHandle } from './useAudioContext';
 import { useTimer } from './useTimer';
-import { playClick, playChordStrum, schedulePhrase, getStrumNotes, getChartLayout, getChordBeatCount } from '../utils';
+import { playClick, playChordStrum, schedulePhrase, getStrumNotes, getChartLayout, getChordBeatCount, fretToFrequency, playNote } from '../utils';
 
 interface PreviewParams {
   bpm: number;
@@ -45,12 +45,22 @@ export function usePreviewPlayback(params: PreviewParams) {
     stopHandleArray(previewMetRef);
   }
 
+  // --- Step mode (defined early so playPhraseAudio can reference exitStepMode) ---
+  const [stepIndex, setStepIndex] = useState<number | null>(null);
+  const stepNoteRef = useRef<AudioHandle | null>(null);
+
+  const exitStepMode = useCallback(() => {
+    stopHandle(stepNoteRef);
+    setStepIndex(null);
+  }, []);
+
   // --- playPhraseAudio ---
   const playPhraseAudio = useCallback((
     phrase: GeneratedPhrase,
     switchToVPart?: GeneratedPhrase | null,
     iiBeats?: number,
   ) => {
+    exitStepMode();
     stopHandle(manualPhraseRef);
     completionTimer.clear();
     stopHandleArray(previewStrumRef);
@@ -61,7 +71,7 @@ export function usePreviewPlayback(params: PreviewParams) {
     pendingPhraseRef.current = { phrase, switchToVPart, iiBeats };
     setIsPhraseAudioPlaying(true);
     setPhraseAnimKey(k => k + 1);
-  }, [completionTimer, iiVSwitchTimer]);
+  }, [completionTimer, iiVSwitchTimer, exitStepMode]);
 
   // --- Phrase-start effect ---
   useEffect(() => {
@@ -169,10 +179,23 @@ export function usePreviewPlayback(params: PreviewParams) {
     iiVSwitchTimer.clear();
     setIsPhraseAudioPlaying(false);
     setIiVDisplayPhrase(null);
+    exitStepMode();
   }, [activeChordIdx, progMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // stopPreview (外部からの明示的停止)
-  const stopPreview = useCallback(() => {
+  /** Return indices of non-rest notes */
+  function soundingIndices(phrase: GeneratedPhrase): number[] {
+    return phrase.notes.reduce<number[]>((acc, n, i) => { if (!n.isRest) acc.push(i); return acc; }, []);
+  }
+
+  function playStepNote(note: PhraseNote) {
+    stopHandle(stepNoteRef);
+    if (note.isRest) return;
+    const ctx = audio.getCtx();
+    const freq = fretToFrequency(note.stringIdx, note.fret);
+    stepNoteRef.current = playNote(ctx, freq, audio.noteVolumeRef.current, ctx.currentTime, 1.0, audio.instrumentRef.current);
+  }
+
+  const stopPreviewInternal = useCallback(() => {
     stopHandle(manualPhraseRef);
     completionTimer.clear();
     stopHandleArray(previewStrumRef);
@@ -181,6 +204,38 @@ export function usePreviewPlayback(params: PreviewParams) {
     setIiVDisplayPhrase(null);
     setIsPhraseAudioPlaying(false);
   }, [completionTimer, iiVSwitchTimer]);
+
+  const stepForward = useCallback((phrase: GeneratedPhrase) => {
+    if (isPhraseAudioPlaying) stopPreviewInternal();
+    const si = soundingIndices(phrase);
+    if (si.length === 0) return;
+    setStepIndex(prev => {
+      const curPos = prev == null ? -1 : si.indexOf(prev);
+      const nextPos = curPos < 0 ? 0 : Math.min(curPos + 1, si.length - 1);
+      const nextIdx = si[nextPos];
+      playStepNote(phrase.notes[nextIdx]);
+      return nextIdx;
+    });
+  }, [isPhraseAudioPlaying, stopPreviewInternal]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const stepBackward = useCallback((phrase: GeneratedPhrase) => {
+    if (isPhraseAudioPlaying) stopPreviewInternal();
+    const si = soundingIndices(phrase);
+    if (si.length === 0) return;
+    setStepIndex(prev => {
+      const curPos = prev == null ? 0 : si.indexOf(prev);
+      const prevPos = curPos <= 0 ? 0 : curPos - 1;
+      const prevIdx = si[prevPos];
+      playStepNote(phrase.notes[prevIdx]);
+      return prevIdx;
+    });
+  }, [isPhraseAudioPlaying, stopPreviewInternal]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // stopPreview (外部からの明示的停止)
+  const stopPreview = useCallback(() => {
+    stopPreviewInternal();
+    exitStepMode();
+  }, [stopPreviewInternal, exitStepMode]);
 
   const clearIiVSwitchTimer = useCallback(() => {
     iiVSwitchTimer.clear();
@@ -197,5 +252,9 @@ export function usePreviewPlayback(params: PreviewParams) {
     phraseAnimKey,
     clearIiVSwitchTimer,
     bumpAnimKey,
+    stepIndex,
+    stepForward,
+    stepBackward,
+    exitStepMode,
   };
 }

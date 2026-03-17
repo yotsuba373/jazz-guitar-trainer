@@ -192,6 +192,7 @@ export default function App() {
   const {
     playPhraseAudio, stopPreview, isPhraseAudioPlaying,
     iiVDisplayPhrase, setIiVDisplayPhrase, phraseAnimKey, clearIiVSwitchTimer, bumpAnimKey,
+    stepIndex, stepForward, stepBackward, exitStepMode,
   } = usePreviewPlayback({
     bpm, audio, progMode, activeProg, activeChordIdx,
     songKey: activeProg?.songKey, selPos, mode,
@@ -607,13 +608,24 @@ export default function App() {
   const activePhrase = useMemo(() => {
     if (isCountingIn) return autoPlayPhrase ?? null;  // during count-in, only show anacrusis or nothing
     if (iiVDisplayPhrase) return iiVDisplayPhrase;
+    // Step mode: show the phrase being stepped through
+    if (stepIndex != null && (previewLickPhrase ?? activeLickPhrase)) return previewLickPhrase ?? activeLickPhrase;
     // During manual playback of ii-V-long, show full phrase (not split display)
     if (isPhraseAudioPlaying && previewLickPhrase) return previewLickPhrase;
     if (activeLickPhrase) return activeLickPhrase;
     if (progMode && autoPlayPhrase && isPlaying)
       return autoPlayPhrase;
     return null;
-  }, [isCountingIn, iiVDisplayPhrase, isPhraseAudioPlaying, previewLickPhrase, activeLickPhrase, progMode, autoPlayPhrase, isPlaying]);
+  }, [isCountingIn, iiVDisplayPhrase, stepIndex, isPhraseAudioPlaying, previewLickPhrase, activeLickPhrase, progMode, autoPlayPhrase, isPlaying]);
+
+  // Sounding note count & step position for step mode display
+  const { soundingNoteCount, stepPosition } = useMemo(() => {
+    const p = previewLickPhrase ?? activeLickPhrase;
+    if (!p) return { soundingNoteCount: 0, stepPosition: 0 };
+    const si = p.notes.reduce<number[]>((acc, n, i) => { if (!n.isRest) acc.push(i); return acc; }, []);
+    const pos = stepIndex != null ? si.indexOf(stepIndex) + 1 : 0;
+    return { soundingNoteCount: si.length, stepPosition: pos };
+  }, [previewLickPhrase, activeLickPhrase, stepIndex]);
 
   // Chord boundary beat for CSS-only phrase transition (overflow lick preview)
   const chordBoundaryBeat = useMemo(() => {
@@ -1065,6 +1077,7 @@ export default function App() {
                       }
                     }}
                     onPlay={() => {
+                      exitStepMode();
                       const p = previewLickPhrase ?? activeLickPhrase;
                       if (!p) return;
                       if (vPartPhrase) {
@@ -1154,6 +1167,11 @@ export default function App() {
                         return next;
                       });
                     }}
+                    stepIndex={stepIndex}
+                    onStepForward={() => { const p = previewLickPhrase ?? activeLickPhrase; if (p) stepForward(p); }}
+                    onStepBackward={() => { const p = previewLickPhrase ?? activeLickPhrase; if (p) stepBackward(p); }}
+                    soundingNoteCount={soundingNoteCount}
+                    stepPosition={stepPosition}
                   />
                 )}
               />
@@ -1224,12 +1242,14 @@ export default function App() {
           voicingHighlights={voicingHighlights}
           activePhrase={activePhrase}
           phraseAnimKey={phraseAnimKey}
-          phraseAnimSpeed={isPhraseAudioPlaying || isPlaying
-            ? Math.round((60000 / bpm) / 2)
-            : 0}
+          phraseAnimSpeed={stepIndex != null ? 0
+            : isPhraseAudioPlaying || isPlaying
+              ? Math.round((60000 / bpm) / 2)
+              : 0}
           swingAmount={swingEnabled ? swingAmount : 0}
           bpm={bpm}
           chordBoundaryBeat={chordBoundaryBeat}
+          phraseHighlightUpTo={stepIndex ?? undefined}
         />
 
         {activePhrase && <PhraseAnalysisPanel phrase={activePhrase} mode={mode} />}

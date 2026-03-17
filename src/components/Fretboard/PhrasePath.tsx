@@ -46,6 +46,8 @@ interface PhrasePathProps {
   bpm?: number;
   /** When set, notes before this beat fade out at the boundary (CSS-only, no React re-render). */
   chordBoundaryBeat?: number;
+  /** Step mode: show notes 0..highlightUpTo, hide the rest */
+  highlightUpTo?: number;
 }
 
 /** Convert fretboard (stringIdx, fret) to SVG (x, y) */
@@ -213,7 +215,7 @@ function buildSegments(points: Point[]): Segment[] {
   });
 }
 
-export function PhrasePath({ phrase, animKey, animSpeed = 350, swingAmount = 0, bpm = 120, chordBoundaryBeat }: PhrasePathProps) {
+export function PhrasePath({ phrase, animKey, animSpeed = 350, swingAmount = 0, bpm = 120, chordBoundaryBeat, highlightUpTo }: PhrasePathProps) {
   const visitMeta = computeVisitMeta(phrase.notes);
   const points = phrase.notes.map((n, i) => {
     const base = toSvg(n.stringIdx, n.fret);
@@ -231,8 +233,11 @@ export function PhrasePath({ phrase, animKey, animSpeed = 350, swingAmount = 0, 
   const boundaryDelayMs = hasBoundary
     ? Math.round(chordBoundaryBeat! * animSpeed * 2) : 0;
 
+  const isStepMode = highlightUpTo != null;
+
   // Key forces remount on phrase change or play trigger → restarts CSS animations
-  const phraseId = phrase.notes.map(n => `${n.stringIdx}:${n.fret}`).join(',') + (animKey ? `:${animKey}` : '');
+  // In step mode, don't include animKey so changing highlightUpTo doesn't remount
+  const phraseId = phrase.notes.map(n => `${n.stringIdx}:${n.fret}`).join(',') + (isStepMode ? '' : animKey ? `:${animKey}` : '');
 
   /** Render a single beat group (segment + marker + label + pulse) */
   const renderBeat = (n: GeneratedPhrase['notes'][number], i: number, skipCrossSeg: boolean) => {
@@ -304,6 +309,57 @@ export function PhrasePath({ phrase, animKey, animSpeed = 350, swingAmount = 0, 
     });
   }
 
+  // Step mode rendering
+  const renderStepMode = () => {
+    const hut = highlightUpTo!;
+    return phrase.notes.map((n, i) => {
+      if (n.isRest) return null;
+      if (i > hut) return null; // hidden
+      const { x, y } = points[i];
+      const base = toSvg(n.stringIdx, n.fret);
+      const color = getBeatColor(i, phrase.notes.length);
+      const { visitIdx } = visitMeta[i];
+      const offsets = [-11, 15, 26, -22];
+      const yOff = offsets[visitIdx % offsets.length];
+      let mSize = (RHYTHM_MARKER_SIZE[n.duration ?? 'e'] ?? 5) * visitMeta[i].sizeScale;
+      const isCurrent = i === hut;
+      if (i === 0 || isCurrent) mSize *= 1.2;
+
+      let marker: React.ReactNode;
+      if (n.isChordTone) {
+        marker = <circle cx={x} cy={y} r={mSize} fill={color} stroke="#FFF" strokeWidth={1} opacity={0.9} />;
+      } else if (n.isApproach) {
+        const hs = mSize * 0.7;
+        marker = <rect x={x - hs} y={y - hs} width={hs * 2} height={hs * 2} transform={`rotate(45,${x},${y})`} fill={color} opacity={0.7} />;
+      } else {
+        marker = <circle cx={x} cy={y} r={mSize - 1} fill="none" stroke={color} strokeWidth={1.5} opacity={0.85} />;
+      }
+
+      return (
+        <g key={`step-${i}`} opacity={isCurrent ? 1 : 0.5}>
+          {i > 0 && !phrase.notes[i - 1]?.isRest && (
+            <path d={segs[i - 1].d} fill="none" stroke={color}
+              strokeWidth={2.2 - (i / phrase.notes.length) * 0.8}
+              opacity={0.6} strokeLinecap="round" />
+          )}
+          {marker}
+          {isCurrent && (
+            <circle cx={base.x} cy={base.y} r={10} fill="none" stroke={color} strokeWidth={2} opacity={0.6}>
+              <animate attributeName="r" values="8;14" dur="0.6s" repeatCount="indefinite" />
+              <animate attributeName="opacity" values="0.7;0" dur="0.6s" repeatCount="indefinite" />
+            </circle>
+          )}
+          <text x={x} y={y + yOff} textAnchor="middle"
+            fontSize="9" fontWeight="800" fill={color}
+            stroke="#1a1a2e" strokeWidth={2.5} paintOrder="stroke"
+            fontFamily="monospace" opacity={0.95}>
+            {beatLabel(n.beatStart, n.beatPosition)}
+          </text>
+        </g>
+      );
+    });
+  };
+
   return (
     <g key={phraseId}>
       <defs>
@@ -314,7 +370,7 @@ export function PhrasePath({ phrase, animKey, animSpeed = 350, swingAmount = 0, 
         `}</style>
       </defs>
 
-      {hasBoundary ? (
+      {isStepMode ? renderStepMode() : hasBoundary ? (
         <>
           {/* First chord notes — parent <g> fades them all out at chord boundary */}
           <g style={{ animation: `phraseOut ${fadeDur}ms ease-out ${boundaryDelayMs}ms both` }}>

@@ -51,6 +51,104 @@ const LICK_TYPE_BADGE: Record<string, { label: string; color: string }> = {
   'min-ii-v-short': { label: 'ii-V m', color: '#4FC3F7' },
 };
 
+/* ---- Reusable small button components ---- */
+
+const BTN_BASE = 'rounded cursor-pointer h-[24px] inline-flex items-center justify-center flex-shrink-0';
+
+function PlayStopBtn({ isPlaying, onPlay, onStop, compact }: { isPlaying: boolean; onPlay: () => void; onStop: () => void; compact?: boolean }) {
+  return (
+    <button
+      onClick={isPlaying ? onStop : onPlay}
+      className={`${BTN_BASE} ${compact ? 'px-1.5' : 'text-[10px] font-mono px-2'}`}
+      style={{
+        border: '1px solid #555',
+        background: isPlaying ? '#3a2020' : '#1a2a1a',
+        color: isPlaying ? '#F88' : '#8F8',
+      }}
+    >
+      {compact ? (
+        <svg width="8" height="8" viewBox="0 0 8 8">
+          {isPlaying
+            ? <rect x="1" y="1" width="6" height="6" fill="currentColor" />
+            : <polygon points="1,0 8,4 1,8" fill="currentColor" />
+          }
+        </svg>
+      ) : (isPlaying ? '■ Stop' : '▶ Play')}
+    </button>
+  );
+}
+
+function StepBtn({ direction, disabled, active, onClick }: { direction: 'back' | 'fwd'; disabled: boolean; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={`${BTN_BASE} px-1`}
+      style={{
+        border: '1px solid #555',
+        background: active ? '#2a2030' : '#1a1a1a',
+        color: disabled ? '#444' : active ? '#FF6B9D' : '#888',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+      }}
+      title={direction === 'back' ? '前の音 (ステップ)' : '次の音 (ステップ)'}
+    >
+      <svg width="10" height="8" viewBox="0 0 10 8">
+        {direction === 'back' ? (
+          <>
+            <rect x="0" y="0" width="2" height="8" fill="currentColor" />
+            <polygon points="10,0 3,4 10,8" fill="currentColor" />
+          </>
+        ) : (
+          <>
+            <polygon points="0,0 7,4 0,8" fill="currentColor" />
+            <rect x="8" y="0" width="2" height="8" fill="currentColor" />
+          </>
+        )}
+      </svg>
+    </button>
+  );
+}
+
+function ToggleBtn({ label, active, disabled, activeColor, onClick, title }: {
+  label: string; active: boolean; disabled: boolean; activeColor: string;
+  onClick: () => void; title: string;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={`${BTN_BASE} text-[9px] font-mono px-1.5`}
+      style={{
+        border: '1px solid #555',
+        background: disabled ? '#111' : active ? '#2a2a3a' : '#1a1a1a',
+        color: disabled ? '#444' : active ? activeColor : '#888',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+      }}
+      title={title}
+    >
+      {label}
+    </button>
+  );
+}
+
+function ClearBtn({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`${BTN_BASE} px-1.5`}
+      style={{ border: '1px solid #444', background: '#1a1a1a', color: '#888' }}
+      title="フレーズ解除"
+    >
+      <svg width="8" height="8" viewBox="0 0 8 8">
+        <line x1="1" y1="1" x2="7" y2="7" stroke="currentColor" strokeWidth="1.5" />
+        <line x1="7" y1="1" x2="1" y2="7" stroke="currentColor" strokeWidth="1.5" />
+      </svg>
+    </button>
+  );
+}
+
+/* ---- Main component ---- */
+
 interface LickPanelProps {
   licks: LickEntry[];
   selectedIdx: number | null;
@@ -74,6 +172,11 @@ interface LickPanelProps {
   highInstance: boolean;
   onToggleInstance: () => void;
   canHighInstance: boolean;
+  stepIndex: number | null;
+  onStepForward: () => void;
+  onStepBackward: () => void;
+  soundingNoteCount: number;
+  stepPosition: number;
 }
 
 export function LickPanel({
@@ -83,12 +186,16 @@ export function LickPanel({
   favorites, onToggleFavorite,
   highOctave, onToggleOctave, canHighOctave,
   highInstance, onToggleInstance, canHighInstance,
+  stepIndex, onStepForward, onStepBackward, soundingNoteCount, stepPosition,
 }: LickPanelProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const hasSelection = selectedIdx != null;
   const listRef = useRef<HTMLDivElement>(null);
   const iiVLickCount = licks.length - singleLickCount;
+  const isStepMode = stepIndex != null;
+  const atFirst = isStepMode && stepPosition <= 1;
+  const atLast = isStepMode && stepPosition >= soundingNoteCount;
 
   // Snapshot favorites when the panel opens (avoid re-sort while browsing)
   const sortFavoritesRef = useRef(favorites);
@@ -100,7 +207,6 @@ export function LickPanel({
   // Auto-scroll to selected item — need to account for separator in DOM
   useEffect(() => {
     if (!open || selectedIdx == null || !listRef.current) return;
-    // Find the actual DOM element by data attribute
     const el = listRef.current.querySelector(`[data-lick-idx="${selectedIdx}"]`) as HTMLElement | undefined;
     el?.scrollIntoView({ block: 'nearest' });
   }, [selectedIdx, open]);
@@ -111,7 +217,6 @@ export function LickPanel({
       const iiVType = isIiVLickId(lick.id);
       const isIiV = !!iiVType;
 
-      // For ii-V licks, use V chord's quality/rootSemitone for mode inference
       const q = isIiV && vChordQuality ? vChordQuality : quality;
       const rs = isIiV && vChordRootSemitone != null ? vChordRootSemitone : rootSemitone;
 
@@ -119,7 +224,6 @@ export function LickPanel({
       const modeNames = modes.map(m => MODE_TEMPLATES[m.modeIdx].name);
       const modeKeys = modes.map(m => MODE_TEMPLATES[m.modeIdx].key);
 
-      // For degree/note display, ii-V licks use keyCenterSemitone for transposition
       const transpose = isIiV && iiV ? getIiVTransposeSemitones(iiV.keyCenterSemitone) : rootSemitone;
       const degRef = isIiV && vChordRootSemitone != null ? vChordRootSemitone : rootSemitone;
 
@@ -135,7 +239,6 @@ export function LickPanel({
         const s = info(pitched[0].pitch!);
         startLabel = fmt(s);
 
-        // Detect resolution: trailing rest >= 1 beat + last measure has only 1 pitched note
         const lastNote = lick.notes[lick.notes.length - 1];
         const measures = lick.beats / 4;
         const hasTrailingRest = lastNote.rest === true && lastNote.duration >= 1.0;
@@ -156,7 +259,6 @@ export function LickPanel({
         }
       }
 
-      // Badge info — derive lick type from ID prefix
       let badge: { label: string; color: string } | null = null;
       if (isIiV && iiVType) {
         badge = LICK_TYPE_BADGE[iiVType] ?? null;
@@ -197,13 +299,10 @@ export function LickPanel({
         return acc;
       }, []);
     }
-    // Sort favorites to top (within single / ii-V groups respectively)
-    // Uses sortFavorites snapshot so order doesn't shift while panel is open
     if (sortFavorites.size > 0) {
       items.sort((a, b) => {
         const aFav = sortFavorites.has(a.lick.id ?? '') ? 1 : 0;
         const bFav = sortFavorites.has(b.lick.id ?? '') ? 1 : 0;
-        // Keep ii-V items after single items
         const aIiV = lickMeta[a.origIdx]?.isIiV ? 1 : 0;
         const bIiV = lickMeta[b.origIdx]?.isIiV ? 1 : 0;
         if (aIiV !== bIiV) return aIiV - bIiV;
@@ -227,16 +326,35 @@ export function LickPanel({
     return items;
   }, [filtered, lickMeta, singleLickCount]);
 
+  /** Shared action buttons: Play, Step ◀/▶, 8va, Hi, ✕ */
+  const actionButtons = (compact: boolean) => (
+    <>
+      <PlayStopBtn isPlaying={isPlaying} onPlay={onPlay} onStop={onStop} compact={compact} />
+      <StepBtn direction="back" disabled={atFirst} active={isStepMode} onClick={onStepBackward} />
+      <span className="text-[9px] font-mono flex-shrink-0 h-[24px] inline-flex items-center leading-none" style={{ color: isStepMode ? '#FF6B9D' : '#666' }}>
+        {isStepMode ? stepPosition : '-'}/{soundingNoteCount}
+      </span>
+      <StepBtn direction="fwd" disabled={atLast} active={isStepMode} onClick={onStepForward} />
+      <svg width="1" height="16" className="flex-shrink-0"><line x1="0.5" y1="0" x2="0.5" y2="16" stroke="#333" strokeWidth="1" /></svg>
+      <ToggleBtn label="8va" active={highOctave} disabled={!canHighOctave} activeColor="#8BF"
+        onClick={onToggleOctave}
+        title={!canHighOctave ? 'この音域ではオクターブ上に収まりません' : highOctave ? '通常オクターブで再生' : 'オクターブ上で再生'}
+      />
+      <ToggleBtn label="Hi" active={highInstance} disabled={!canHighInstance} activeColor="#F8B"
+        onClick={onToggleInstance}
+        title={!canHighInstance ? 'このポジションにはハイインスタンスがありません' : highInstance ? 'ローインスタンスで再生' : 'ハイインスタンスで再生'}
+      />
+      <svg width="1" height="16" className="flex-shrink-0"><line x1="0.5" y1="0" x2="0.5" y2="16" stroke="#333" strokeWidth="1" /></svg>
+      <ClearBtn onClick={() => { onClear(); onStop(); }} />
+    </>
+  );
+
   // Header bar (always visible) — acts as toggle
   const iiVCountStr = iiVLickCount > 0 ? ` + ii-V ${iiVLickCount}` : '';
   const headerContent = (
     <div
       className="flex items-center gap-1.5 px-3 cursor-pointer select-none h-[31px]"
-      style={{
-        background: '#1a1a1a',
-        borderBottom: '1px solid #333',
-        fontSize: 11,
-      }}
+      style={{ background: '#1a1a1a', borderBottom: '1px solid #333', fontSize: 11 }}
       onClick={() => setOpen(p => !p)}
     >
       <span style={{ color: '#FF6B9D' }} className="inline-flex items-center gap-1">
@@ -258,61 +376,7 @@ export function LickPanel({
           <span style={{ color: '#FF6B9D' }}>
             {licks[selectedIdx]?.id ?? `#${selectedIdx + 1}`}
           </span>
-          <button
-            onClick={isPlaying ? onStop : onPlay}
-            className="rounded cursor-pointer px-1.5 h-[24px] inline-flex items-center justify-center"
-            style={{
-              border: '1px solid #555',
-              background: isPlaying ? '#3a2020' : '#1a2a1a',
-              color: isPlaying ? '#F88' : '#8F8',
-            }}
-          >
-            <svg width="8" height="8" viewBox="0 0 8 8">
-              {isPlaying
-                ? <rect x="1" y="1" width="6" height="6" fill="currentColor" />
-                : <polygon points="1,0 8,4 1,8" fill="currentColor" />
-              }
-            </svg>
-          </button>
-          <button
-            onClick={onToggleOctave}
-            disabled={!canHighOctave}
-            className="rounded cursor-pointer px-1.5 h-[24px] inline-flex items-center justify-center text-[9px] font-mono"
-            style={{
-              border: '1px solid #555',
-              background: !canHighOctave ? '#111' : highOctave ? '#2a2a3a' : '#1a1a1a',
-              color: !canHighOctave ? '#444' : highOctave ? '#8BF' : '#888',
-              cursor: !canHighOctave ? 'not-allowed' : 'pointer',
-            }}
-            title={!canHighOctave ? 'この音域ではオクターブ上に収まりません' : highOctave ? '通常オクターブで再生' : 'オクターブ上で再生'}
-          >
-            8va
-          </button>
-          <button
-            onClick={onToggleInstance}
-            disabled={!canHighInstance}
-            className="rounded cursor-pointer px-1.5 h-[24px] inline-flex items-center justify-center text-[9px] font-mono"
-            style={{
-              border: '1px solid #555',
-              background: !canHighInstance ? '#111' : highInstance ? '#2a2a3a' : '#1a1a1a',
-              color: !canHighInstance ? '#444' : highInstance ? '#F8B' : '#888',
-              cursor: !canHighInstance ? 'not-allowed' : 'pointer',
-            }}
-            title={!canHighInstance ? 'このポジションにはハイインスタンスがありません' : highInstance ? 'ローインスタンスで再生' : 'ハイインスタンスで再生'}
-          >
-            Hi
-          </button>
-          <button
-            onClick={() => { onClear(); onStop(); }}
-            className="rounded cursor-pointer px-1.5 h-[24px] inline-flex items-center justify-center"
-            style={{ border: '1px solid #444', background: '#1a1a1a', color: '#888' }}
-            title="フレーズ解除"
-          >
-            <svg width="8" height="8" viewBox="0 0 8 8">
-              <line x1="1" y1="1" x2="7" y2="7" stroke="currentColor" strokeWidth="1.5" />
-              <line x1="7" y1="1" x2="1" y2="7" stroke="currentColor" strokeWidth="1.5" />
-            </svg>
-          </button>
+          {actionButtons(true)}
         </div>
       )}
       {!open && !hasSelection && (
@@ -324,12 +388,7 @@ export function LickPanel({
   return (
     <div
       className="overflow-hidden"
-      style={{
-        background: '#1a1a1a',
-        border: '1px solid #3a2a30',
-        borderRadius: 6,
-        fontSize: 10,
-      }}
+      style={{ background: '#1a1a1a', border: '1px solid #3a2a30', borderRadius: 6, fontSize: 10 }}
     >
       {headerContent}
 
@@ -343,65 +402,10 @@ export function LickPanel({
               onChange={e => setQuery(e.target.value)}
               placeholder="検索 (ID, アーティスト, 音数, ii-V...)"
               className="flex-1 text-[10px] rounded px-1.5 py-0.5 outline-none"
-              style={{
-                background: '#111',
-                border: '1px solid #333',
-                color: '#CCC',
-                minWidth: 0,
-              }}
+              style={{ background: '#111', border: '1px solid #333', color: '#CCC', minWidth: 0 }}
               onClick={e => e.stopPropagation()}
             />
-            {hasSelection && (
-              <>
-                <button
-                  onClick={isPlaying ? onStop : onPlay}
-                  className="rounded cursor-pointer text-[10px] font-mono px-2 h-[24px] inline-flex items-center flex-shrink-0"
-                  style={{
-                    border: '1px solid #555',
-                    background: isPlaying ? '#3a2020' : '#1a2a1a',
-                    color: isPlaying ? '#F88' : '#8F8',
-                  }}
-                >
-                  {isPlaying ? '■ Stop' : '▶ Play'}
-                </button>
-                <button
-                  onClick={onToggleOctave}
-                  disabled={!canHighOctave}
-                  className="rounded cursor-pointer text-[10px] font-mono px-1.5 h-[24px] inline-flex items-center flex-shrink-0"
-                  style={{
-                    border: '1px solid #555',
-                    background: !canHighOctave ? '#111' : highOctave ? '#2a2a3a' : '#1a1a1a',
-                    color: !canHighOctave ? '#444' : highOctave ? '#8BF' : '#888',
-                    cursor: !canHighOctave ? 'not-allowed' : 'pointer',
-                  }}
-                  title={!canHighOctave ? 'この音域ではオクターブ上に収まりません' : highOctave ? '通常オクターブで再生' : 'オクターブ上で再生'}
-                >
-                  8va
-                </button>
-                <button
-                  onClick={onToggleInstance}
-                  disabled={!canHighInstance}
-                  className="rounded cursor-pointer text-[10px] font-mono px-1.5 h-[24px] inline-flex items-center flex-shrink-0"
-                  style={{
-                    border: '1px solid #555',
-                    background: !canHighInstance ? '#111' : highInstance ? '#2a2a3a' : '#1a1a1a',
-                    color: !canHighInstance ? '#444' : highInstance ? '#F8B' : '#888',
-                    cursor: !canHighInstance ? 'not-allowed' : 'pointer',
-                  }}
-                  title={!canHighInstance ? 'このポジションにはハイインスタンスがありません' : highInstance ? 'ローインスタンスで再生' : 'ハイインスタンスで再生'}
-                >
-                  Hi
-                </button>
-                <button
-                  onClick={() => { onClear(); onStop(); }}
-                  className="rounded cursor-pointer text-[10px] font-mono px-1.5 h-[24px] inline-flex items-center flex-shrink-0"
-                  style={{ border: '1px solid #444', background: '#1a1a1a', color: '#888' }}
-                  title="フレーズ解除"
-                >
-                  ✕
-                </button>
-              </>
-            )}
+            {hasSelection && actionButtons(false)}
             <span className="text-[9px] text-text-dim flex-shrink-0">
               {filtered.length !== licks.length ? `${filtered.length}/` : ''}{licks.length}
             </span>
@@ -504,37 +508,22 @@ export function LickPanel({
                       ) : '\u00A0'}
                     </span>
                     <LickContourMini notes={lick.notes} selected={isSelected} />
-                    <span
-                      className="text-[9px] text-center"
-                      style={{ color: isSelected ? '#CCC' : '#888' }}
-                    >
+                    <span className="text-[9px] text-center" style={{ color: isSelected ? '#CCC' : '#888' }}>
                       {lick.noteCount}
                     </span>
                     <span className="text-[9px] text-center" style={{ color: isSelected ? '#CCC' : '#999' }}>
                       {lick.beats}
                     </span>
-                    <span
-                      className="text-[9px] font-mono text-center"
-                      style={{ color: isSelected ? '#CCC' : '#999' }}
-                    >
+                    <span className="text-[9px] font-mono text-center" style={{ color: isSelected ? '#CCC' : '#999' }}>
                       {meta?.startLabel || '\u00A0'}
                     </span>
-                    <span
-                      className="text-[9px] font-mono text-center"
-                      style={{ color: isSelected ? '#CCC' : '#999' }}
-                    >
+                    <span className="text-[9px] font-mono text-center" style={{ color: isSelected ? '#CCC' : '#999' }}>
                       {meta?.endLabel || '\u00A0'}
                     </span>
-                    <span
-                      className="text-[9px] font-mono text-center"
-                      style={{ color: isSelected ? '#CCC' : '#999' }}
-                    >
+                    <span className="text-[9px] font-mono text-center" style={{ color: isSelected ? '#CCC' : '#999' }}>
                       {meta?.resLabel || '\u00A0'}
                     </span>
-                    <span
-                      className="text-[9px] truncate"
-                      style={{ color: isSelected ? '#CCC' : '#999' }}
-                    >
+                    <span className="text-[9px] truncate" style={{ color: isSelected ? '#CCC' : '#999' }}>
                       {sourceName || '\u00A0'}
                     </span>
                     <span className="text-[9px] truncate">
