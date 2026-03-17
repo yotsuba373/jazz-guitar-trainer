@@ -62,8 +62,11 @@ export default function App() {
     const saved = parseFloat(localStorage.getItem('metVolume') ?? '');
     return isNaN(saved) ? 0.5 : saved;
   });
-  // Chord audio state
+  // Audio channel on/off toggles (independent of volume)
   const [chordAudioOn, setChordAudioOn] = useState(() => localStorage.getItem('chordAudioOn') === 'true');
+  const [noteAudioOn, setNoteAudioOn] = useState(() => localStorage.getItem('noteAudioOn') !== 'false');
+  const [bassAudioOn, setBassAudioOn] = useState(() => localStorage.getItem('bassAudioOn') !== 'false');
+  const [rhythmOn, setRhythmOn] = useState(() => localStorage.getItem('rhythmOn') !== 'false');
   const [chordVolume, setChordVolume] = useState<number>(() => {
     const saved = parseFloat(localStorage.getItem('chordVolume') ?? '');
     return isNaN(saved) ? 0.5 : saved;
@@ -193,8 +196,9 @@ export default function App() {
 
   // --- Audio hooks ---
   const audio = useAudioContext({
-    metVolume, chordVolume, chordAudioOn, noteVolume,
-    countInVolume, bassVolume, rhythmMode, instrument, swingEnabled, swingAmount,
+    metVolume, chordVolume, chordAudioOn, noteVolume, noteAudioOn,
+    countInVolume, bassVolume, bassAudioOn, rhythmMode, rhythmOn,
+    instrument, swingEnabled, swingAmount,
   });
 
   // Trigger sampler load when entering practice mode
@@ -867,6 +871,12 @@ export default function App() {
           samplerLoading={audio.samplerStatus === 'loading'}
           chordAudioOn={chordAudioOn}
           onToggleChordAudio={() => setChordAudioOn(p => !p)}
+          noteAudioOn={noteAudioOn}
+          onToggleNoteAudio={() => setNoteAudioOn(p => !p)}
+          bassAudioOn={bassAudioOn}
+          onToggleBassAudio={() => setBassAudioOn(p => !p)}
+          rhythmOn={rhythmOn}
+          onToggleRhythm={() => setRhythmOn(p => !p)}
           metVolume={metVolume}
           onMetVolumeChange={setMetVolume}
           chordVolume={chordVolume}

@@ -21,10 +21,13 @@ export function useAudioContext(volumes: {
   chordVolume: number;
   chordAudioOn: boolean;
   noteVolume: number;
+  noteAudioOn: boolean;
   countInVolume: number;
   instrument: InstrumentType;
   bassVolume: number;
+  bassAudioOn: boolean;
   rhythmMode: RhythmMode;
+  rhythmOn: boolean;
   swingEnabled: boolean;
   swingAmount: number;
 }) {
@@ -45,8 +48,11 @@ export function useAudioContext(volumes: {
   const noteVolumeRef = useRef(volumes.noteVolume);
   const countInVolumeRef = useRef(volumes.countInVolume);
   const instrumentRef = useRef(volumes.instrument);
+  const noteAudioOnRef = useRef(volumes.noteAudioOn);
   const bassVolumeRef = useRef(volumes.bassVolume);
+  const bassAudioOnRef = useRef(volumes.bassAudioOn);
   const rhythmModeRef = useRef(volumes.rhythmMode);
+  const rhythmOnRef = useRef(volumes.rhythmOn);
   const swingEnabledRef = useRef(volumes.swingEnabled);
   const swingAmountRef = useRef(volumes.swingAmount);
 
@@ -72,6 +78,11 @@ export function useAudioContext(volumes: {
   }, [volumes.noteVolume]);
 
   useEffect(() => {
+    noteAudioOnRef.current = volumes.noteAudioOn;
+    localStorage.setItem('noteAudioOn', String(volumes.noteAudioOn));
+  }, [volumes.noteAudioOn]);
+
+  useEffect(() => {
     countInVolumeRef.current = volumes.countInVolume;
     localStorage.setItem('countInVolume', String(volumes.countInVolume));
   }, [volumes.countInVolume]);
@@ -87,9 +98,19 @@ export function useAudioContext(volumes: {
   }, [volumes.bassVolume]);
 
   useEffect(() => {
+    bassAudioOnRef.current = volumes.bassAudioOn;
+    localStorage.setItem('bassAudioOn', String(volumes.bassAudioOn));
+  }, [volumes.bassAudioOn]);
+
+  useEffect(() => {
     rhythmModeRef.current = volumes.rhythmMode;
     localStorage.setItem('rhythmMode', volumes.rhythmMode);
   }, [volumes.rhythmMode]);
+
+  useEffect(() => {
+    rhythmOnRef.current = volumes.rhythmOn;
+    localStorage.setItem('rhythmOn', String(volumes.rhythmOn));
+  }, [volumes.rhythmOn]);
 
   useEffect(() => {
     swingEnabledRef.current = volumes.swingEnabled;
@@ -104,7 +125,8 @@ export function useAudioContext(volumes: {
   return {
     getCtx, samplerStatus,
     metVolumeRef, chordVolumeRef, chordAudioOnRef,
-    noteVolumeRef, countInVolumeRef, bassVolumeRef,
-    rhythmModeRef, instrumentRef, swingEnabledRef, swingAmountRef,
+    noteVolumeRef, noteAudioOnRef, countInVolumeRef,
+    bassVolumeRef, bassAudioOnRef,
+    rhythmModeRef, rhythmOnRef, instrumentRef, swingEnabledRef, swingAmountRef,
   };
 }

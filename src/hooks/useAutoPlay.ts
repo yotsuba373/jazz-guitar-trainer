@@ -115,7 +115,7 @@ export function useAutoPlay(params: AutoPlayParams) {
     let phrase: GeneratedPhrase | null = null;
     const metNodes: AudioHandle[] = [];
 
-    // Strum
+    // Strum (piano comp)
     if (audio.chordAudioOnRef.current) {
       const chord = prog.chords[chordIdx];
       const samplers = getSamplers();
@@ -123,9 +123,9 @@ export function useAutoPlay(params: AutoPlayParams) {
         const layout = getChartLayout(prog);
         const chordBeats = getChordBeatCount(layout, chordIdx);
         const chordDur = chordBeats * (60 / bpm);
+        samplers.piano.output.setVolume(audio.chordVolumeRef.current * 127);
         strumHandle = playSmplrPianoComp(
-          samplers.piano, chord.rootName, chord.quality,
-          audio.chordVolumeRef.current, startAt, chordDur);
+          samplers.piano, chord.rootName, chord.quality, startAt, chordDur);
       } else {
         const strumNotes = getStrumNotes(chordIdx, prog.chords, prog.songKey);
         if (strumNotes.length > 0) {
@@ -135,7 +135,7 @@ export function useAutoPlay(params: AutoPlayParams) {
     }
 
     // Walking bass
-    if (audio.bassVolumeRef.current > 0) {
+    if (audio.bassAudioOnRef.current) {
       const samplers = getSamplers();
       if (samplers?.bass) {
         const chord = prog.chords[chordIdx];
@@ -143,17 +143,17 @@ export function useAutoPlay(params: AutoPlayParams) {
           const layout = getChartLayout(prog);
           const chordBeats = getChordBeatCount(layout, chordIdx);
           const nextChord = prog.chords[chordIdx + 1];
+          samplers.bass.output.setVolume(audio.bassVolumeRef.current * 127);
           bassHandle = playSmplrBassLine(
             samplers.bass, chord.rootName, chord.quality,
-            chordBeats, nextChord?.rootName ?? null,
-            audio.bassVolumeRef.current, startAt, bpm,
+            chordBeats, nextChord?.rootName ?? null, startAt, bpm,
           );
         }
       }
     }
 
     // Lick
-    if (lickDB && chordHasSavedLick(chordIdx, prog, lickDB)) {
+    if (audio.noteAudioOnRef.current && lickDB && chordHasSavedLick(chordIdx, prog, lickDB)) {
       phrase = playLickForChord(chordIdx, prog, lickDB);
       if (phrase) {
         const eighthDur = (60 / bpm) / 2;
@@ -164,17 +164,18 @@ export function useAutoPlay(params: AutoPlayParams) {
     }
 
     // Rhythm (metronome OR drums — exclusive)
-    const rhythmVol = audio.metVolumeRef.current;
-    if (rhythmVol > 0) {
+    if (audio.rhythmOnRef.current) {
+      const rhythmVol = audio.metVolumeRef.current;
       if (audio.rhythmModeRef.current === 'drums') {
         const drumSampler = getDrumSampler();
         if (drumSampler) {
           const layout = getChartLayout(prog);
           const chordBeats = getChordBeatCount(layout, chordIdx);
           const swAmt = audio.swingEnabledRef.current ? audio.swingAmountRef.current : 0;
+          drumSampler.metal.output.setVolume(rhythmVol * 127);
+          drumSampler.body.output.setVolume(rhythmVol * 127);
           drumsHandle = playDrumPattern(
-            drumSampler, chordBeats, globalBeatOffset,
-            rhythmVol, startAt, bpm, swAmt,
+            drumSampler, chordBeats, globalBeatOffset, startAt, bpm, swAmt,
           );
         }
       } else {

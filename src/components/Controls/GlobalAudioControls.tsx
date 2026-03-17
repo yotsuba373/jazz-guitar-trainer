@@ -12,8 +12,14 @@ interface GlobalAudioControlsProps {
   onChordVolumeChange: (v: number) => void;
   noteVolume: number;
   onNoteVolumeChange: (v: number) => void;
+  noteAudioOn: boolean;
+  onToggleNoteAudio: () => void;
   bassVolume: number;
   onBassVolumeChange: (v: number) => void;
+  bassAudioOn: boolean;
+  onToggleBassAudio: () => void;
+  rhythmOn: boolean;
+  onToggleRhythm: () => void;
   instrument: InstrumentType;
   onInstrumentChange: (inst: InstrumentType) => void;
   rhythmMode: RhythmMode;
@@ -67,6 +73,8 @@ export function GlobalAudioControls({
   chordVolume, onChordVolumeChange,
   noteVolume, onNoteVolumeChange,
   bassVolume, onBassVolumeChange,
+  noteAudioOn, onToggleNoteAudio, bassAudioOn, onToggleBassAudio,
+  rhythmOn, onToggleRhythm,
   instrument, onInstrumentChange, rhythmMode, onRhythmModeChange,
   swingEnabled, onToggleSwing, swingAmount, onSwingAmountChange,
   countInEnabled, onToggleCountIn, countInVolume, onCountInVolumeChange, countInBars, isCountingIn,
@@ -104,38 +112,6 @@ export function GlobalAudioControls({
     }
   }
 
-  // Mute: store pre-mute volume to restore
-  const prevMetVol = useRef(metVolume || 0.5);
-  const prevNoteVol = useRef(noteVolume || 0.4);
-  const prevBassVol = useRef(bassVolume || 0.5);
-  const metMuted = metVolume === 0;
-  const noteMuted = noteVolume === 0;
-  const bassMuted = bassVolume === 0;
-
-  function toggleMetMute() {
-    if (metMuted) {
-      onMetVolumeChange(prevMetVol.current || 0.5);
-    } else {
-      prevMetVol.current = metVolume;
-      onMetVolumeChange(0);
-    }
-  }
-  function toggleNoteMute() {
-    if (noteMuted) {
-      onNoteVolumeChange(prevNoteVol.current || 0.4);
-    } else {
-      prevNoteVol.current = noteVolume;
-      onNoteVolumeChange(0);
-    }
-  }
-  function toggleBassMute() {
-    if (bassMuted) {
-      onBassVolumeChange(prevBassVol.current || 0.5);
-    } else {
-      prevBassVol.current = bassVolume;
-      onBassVolumeChange(0);
-    }
-  }
   const [volOpen, setVolOpen] = useState(false);
   const volRef = useRef<HTMLDivElement>(null);
   const handleClickOutside = useCallback((e: MouseEvent) => {
@@ -235,26 +211,13 @@ export function GlobalAudioControls({
           <div className="absolute left-0 top-[28px] z-50 rounded-md p-2.5 flex flex-col gap-2 min-w-[220px]"
             style={{ background: '#222', border: '1px solid #555', boxShadow: '0 4px 12px rgba(0,0,0,0.5)' }}>
             <div className="grid gap-y-1.5 gap-x-1.5 items-center" style={{ gridTemplateColumns: 'auto 68px 1fr 28px' }}>
-              <MuteBtn
-                muted={!countInEnabled}
-                onToggle={onToggleCountIn}
-                color="#BB86FC"
-                label={countInEnabled ? `${countInBars}小節` : 'OFF'} />
-              <span className="text-[10px] text-text-dim">カウントイン</span>
+              <MuteBtn muted={!noteAudioOn} onToggle={onToggleNoteAudio} color="#FF6B9D" />
+              <span className="text-[10px] text-text-dim">メロディ</span>
               <input type="range" min={0} max={1} step={0.05}
-                value={countInVolume}
-                onChange={e => onCountInVolumeChange(Number(e.target.value))}
-                style={{ accentColor: '#BB86FC', opacity: !countInEnabled ? 0.3 : 1 }}
-                disabled={!countInEnabled} />
-              <span className="text-[10px] text-text-dim text-right">{Math.round(countInVolume * 100)}%</span>
-
-              <MuteBtn muted={metMuted} onToggle={toggleMetMute} color="#F1C40F" />
-              <span className="text-[10px] text-text-dim">リズム</span>
-              <input type="range" min={0} max={1} step={0.05}
-                value={metVolume}
-                onChange={e => onMetVolumeChange(Number(e.target.value))}
-                style={{ accentColor: '#F1C40F', opacity: metMuted ? 0.3 : 1 }} />
-              <span className="text-[10px] text-text-dim text-right">{Math.round(metVolume * 100)}%</span>
+                value={noteVolume}
+                onChange={e => onNoteVolumeChange(Number(e.target.value))}
+                style={{ accentColor: '#FF6B9D', opacity: !noteAudioOn ? 0.3 : 1 }} />
+              <span className="text-[10px] text-text-dim text-right">{Math.round(noteVolume * 100)}%</span>
 
               <MuteBtn muted={!chordAudioOn} onToggle={onToggleChordAudio} color="#27AE60" />
               <span className="text-[10px] text-text-dim">コード</span>
@@ -264,24 +227,35 @@ export function GlobalAudioControls({
                 style={{ accentColor: '#27AE60', opacity: !chordAudioOn ? 0.3 : 1 }} />
               <span className="text-[10px] text-text-dim text-right">{Math.round(chordVolume * 100)}%</span>
 
-              <MuteBtn muted={bassMuted} onToggle={toggleBassMute} color="#1ABC9C" />
+              <MuteBtn muted={!bassAudioOn} onToggle={onToggleBassAudio} color="#1ABC9C" />
               <span className="text-[10px] text-text-dim">ベース</span>
               <input type="range" min={0} max={1} step={0.05}
                 value={bassVolume}
                 onChange={e => onBassVolumeChange(Number(e.target.value))}
-                style={{ accentColor: '#1ABC9C', opacity: bassMuted ? 0.3 : 1 }} />
+                style={{ accentColor: '#1ABC9C', opacity: !bassAudioOn ? 0.3 : 1 }} />
               <span className="text-[10px] text-text-dim text-right">{Math.round(bassVolume * 100)}%</span>
 
-              <MuteBtn muted={noteMuted} onToggle={toggleNoteMute} color="#FF6B9D" />
-              <span className="text-[10px] text-text-dim">単音</span>
+              <MuteBtn muted={!rhythmOn} onToggle={onToggleRhythm} color="#F1C40F" />
+              <span className="text-[10px] text-text-dim">リズム</span>
               <input type="range" min={0} max={1} step={0.05}
-                value={noteVolume}
-                onChange={e => onNoteVolumeChange(Number(e.target.value))}
-                style={{ accentColor: '#FF6B9D', opacity: noteMuted ? 0.3 : 1 }} />
-              <span className="text-[10px] text-text-dim text-right">{Math.round(noteVolume * 100)}%</span>
+                value={metVolume}
+                onChange={e => onMetVolumeChange(Number(e.target.value))}
+                style={{ accentColor: '#F1C40F', opacity: !rhythmOn ? 0.3 : 1 }} />
+              <span className="text-[10px] text-text-dim text-right">{Math.round(metVolume * 100)}%</span>
 
+              <MuteBtn
+                muted={!countInEnabled}
+                onToggle={onToggleCountIn}
+                color="#BB86FC"
+                label={countInEnabled ? `${countInBars}小節` : 'OFF'} />
+              <span className="text-[10px] text-text-dim">カウントイン</span>
+              <input type="range" min={0} max={1} step={0.05}
+                value={countInVolume}
+                onChange={e => onCountInVolumeChange(Number(e.target.value))}
+                style={{ accentColor: '#BB86FC', opacity: !countInEnabled ? 0.3 : 1 }} />
+              <span className="text-[10px] text-text-dim text-right">{Math.round(countInVolume * 100)}%</span>
             </div>
-            <div className="flex gap-1 mt-1">
+            <div className="flex gap-1 mt-1 items-center">
               {([
                 { key: 'guitar' as InstrumentType, label: '\uD83C\uDFB8', title: 'ギター' },
                 { key: 'saxophone' as InstrumentType, label: '\uD83C\uDFB7', title: 'サクソフォン' },
@@ -298,9 +272,7 @@ export function GlobalAudioControls({
                   {label}
                 </button>
               ))}
-            </div>
-            {/* Rhythm mode selector */}
-            <div className="flex gap-1 mt-1">
+              <span className="mx-1" style={{ borderLeft: '1px solid #444', height: 16 }} />
               {([
                 { key: 'metronome' as RhythmMode, label: '\uD83D\uDD14', title: 'メトロノーム' },
                 { key: 'drums' as RhythmMode, label: '\uD83E\uDD41', title: 'ドラム' },

@@ -122,7 +122,6 @@ export function playSmplrBassLine(
   quality: string,
   beats: number,
   nextRootName: string | null,
-  volume: number,
   startAt: number,
   bpm: number,
 ): AudioHandle {
@@ -130,7 +129,7 @@ export function playSmplrBassLine(
   const nextRootSemi = nextRootName != null ? (ROOT_PC[nextRootName] ?? null) : null;
   const bassLine = generateBassLine(rootSemi, quality, beats, nextRootSemi);
   const beatSec = 60 / bpm;
-  const velocity = Math.round(volume * 100);
+  const velocity = 90; // 音量は output.setVolume() で制御
   const stopId = `bass-${++bassIdCounter}`;
 
   const stopFns: (() => void)[] = [];

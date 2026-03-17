@@ -132,13 +132,12 @@ export function playSmplrPianoComp(
   piano: Soundfont,
   rootName: string,
   quality: string,
-  volume: number,
   startAt: number,
   duration?: number,
 ): AudioHandle {
   const dur = duration ?? 2.0;
   const midiNotes = buildJazzPianoVoicing(rootName, quality);
-  const velocity = Math.round(volume * 100);
+  const velocity = 80; // mf — 音量は output.setVolume() で制御
   const stagger = 0.012; // 12ms between notes (subtle spread, LH→RH)
   const stopId = `comp-${++compIdCounter}`;
 

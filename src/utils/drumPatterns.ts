@@ -178,7 +178,6 @@ export function playDrumPattern(
   samplers: DrumSamplerSet,
   beats: number,
   globalBeatOffset: number,
-  volume: number,
   startAt: number,
   bpm: number,
   swingAmount: number,
@@ -197,7 +196,7 @@ export function playDrumPattern(
 
     const stop = sampler.start({
       note: noteName,
-      velocity: Math.round(hit.velocity * volume),
+      velocity: hit.velocity, // 音量は output.setVolume() で制御
       time: startAt + hit.beatStart * beatSec,
       stopId,
     });

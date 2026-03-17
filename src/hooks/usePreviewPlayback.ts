@@ -100,9 +100,9 @@ export function usePreviewPlayback(params: PreviewParams) {
     const doPianoComp = (chordIdx: number, at: number, dur?: number) => {
       const chord = activeProg!.chords[chordIdx];
       if (samplers && chord) {
+        samplers.piano.output.setVolume(audio.chordVolumeRef.current * 127);
         return playSmplrPianoComp(
-          samplers.piano, chord.rootName, chord.quality,
-          audio.chordVolumeRef.current, at, dur);
+          samplers.piano, chord.rootName, chord.quality, at, dur);
       }
       const strumNotes = getStrumNotes(chordIdx, activeProg!.chords, songKey);
       return strumNotes.length > 0
@@ -132,7 +132,7 @@ export function usePreviewPlayback(params: PreviewParams) {
 
     // 3. Metronome
     stopPreviewMetronome();
-    if (audio.metVolumeRef.current > 0) {
+    if (audio.rhythmOnRef.current && audio.metVolumeRef.current > 0) {
       const beatSec = 60 / bpm;
       const totalBeats = Math.ceil(result.totalDuration / beatSec) + 1;
       for (let b = 0; b < totalBeats; b++) {
