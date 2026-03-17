@@ -385,19 +385,20 @@ function playClick(accent: boolean, ctx: AudioContext, volume: number, at?: numb
 
 | 種別 | state | localStorage | デフォルト | ミュート | 用途 |
 |------|-------|-------------|-----------|---------|------|
-| リズム | `metVolume` | `metVolume` | 0.5 | volume=0 | メトロノーム: `playClick()` / ドラム: `playSmplrDrumPattern()` |
-| コード | `chordVolume` | `chordVolume` | 0.5 | `chordAudioOn` | `playChordStrum()` |
-| ベース | `bassVolume` | `bassVolume` | 0.5 | volume=0 | `playSmplrBassLine()` |
-| 単音 | `noteVolume` | `noteVolume` | 0.4 | volume=0 | `playNote()` + `schedulePhrase()` |
+| メロディ | `noteVolume` | `noteVolume` | 0.4 | `noteAudioOn` | `playNote()` + `schedulePhrase()` |
+| コード | `chordVolume` | `chordVolume` | 0.5 | `chordAudioOn` | `playSmplrPianoComp()` |
+| ベース | `bassVolume` | `bassVolume` | 0.5 | `bassAudioOn` | `playSmplrBassLine()` |
+| リズム | `metVolume` | `metVolume` | 0.5 | `rhythmOn` | メトロノーム: `playClick()` / ドラム: `playDrumPattern()` |
+| カウントイン | `countInEnabled` | `countInEnabled` | true | サイクル切替 | ON/OFF + 小節数 |
+| カウントイン音量 | `countInVolume` | `countInVolume` | 0.5 | — | `playClick()` |
+| カウントイン小節 | `countInBars` | `countInBars` | 2 | — | 1 or 2 |
 | 楽器 | `instrument` | `phraseInstrument` | 'guitar' | — | 楽器選択 (guitar/saxophone) |
+| リズムモード | `rhythmMode` | `rhythmMode` | 'metronome' | — | 'metronome' \| 'drums' 排他切替 |
 | スウィング | `swingEnabled` | `swingEnabled` | false | — | ON/OFFトグル |
 | スウィング量 | `swingAmount` | `swingAmount` | 0.2 | — | 0-1 (デフォルト20%) |
-| リズムモード | `rhythmMode` | `rhythmMode` | 'metronome' | — | 'metronome' \| 'drums' 排他切替 |
-| カウントイン | `countInEnabled` | `countInEnabled` | true | サイクル切替 | ON/OFF + 小節数 |
-| カウントイン音量 | `countInVolume` | `countInVolume` | 0.5 | volume=0 | `playClick()` |
-| カウントイン小節 | `countInBars` | `countInBars` | 2 | — | 1 or 2 |
 
-- 各チャンネルにミュートボタン: メトロノーム/単音は volume 0⇔復元、コードは `chordAudioOn` トグル
+- 全チャンネルに独立ON/OFFトグル (音量スライダーはOFF時も操作可能)
+- smplr 楽器の音量制御は `output.setVolume()` で行い、velocity は演奏表現用の値を保持
 - タップテンポ: TAPボタン連続タップでBPM設定 (直近8タップ平均、2秒リセット)
 - 全 state は `useAudioContext` フック内の `useRef` 経由でコールバック内から参照 (再レンダリング不要)。ref 同期 + localStorage 永続化を自動実行
 - パネル外クリックで自動閉じ (`mousedown` リスナー)
@@ -406,7 +407,7 @@ function playClick(accent: boolean, ctx: AudioContext, volume: number, at?: numb
 
 リック選択時に自動再生。`▶ Play` / `■ Stop` でトグル再生も可能。
 - テンポ: 常に BPM 同期 (`(60/bpm)/2`)
-- 音量は `noteVolume` (単音音量) を使用
+- 音量は `noteVolume` (メロディ音量) を使用
 - `phraseAnimKey` インクリメントで SVG アニメーションも同時リスタート
 - `schedulePhrase()` で Web Audio API スケジューリング → 自動タイマーで再生完了検出
 - `chordAudioOn` 時、フレーズ再生開始にコードストラムも同時再生 (辞典/練習モード両対応)
