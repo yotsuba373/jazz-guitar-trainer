@@ -10,6 +10,7 @@ import {
   playLickForChord, buildAnacrusisPhrase, chordHasSavedLick,
   isLickOriginator,
   getSamplers, playSmplrPianoComp, playSmplrBassLine,
+  playDrumPattern, getDrumSampler,
 } from '../utils';
 
 interface AutoPlayParams {
@@ -47,11 +48,13 @@ export function useAutoPlay(params: AutoPlayParams) {
   const playPosRef = useRef(0);
   const activeStrumRef = useRef<AudioHandle | null>(null);
   const activeBassRef = useRef<AudioHandle | null>(null);
+  const activeDrumsRef = useRef<AudioHandle | null>(null);
   const activePhraseStopRef = useRef<AudioHandle | null>(null);
   const songMetRef = useRef<AudioHandle[]>([]);
   const pendingNextRef = useRef<{
     strumHandle: AudioHandle | null;
     bassHandle: AudioHandle | null;
+    drumsHandle: AudioHandle | null;
     phraseHandle: AudioHandle | null;
     phrase: GeneratedPhrase | null;
     metNodes: AudioHandle[];
@@ -74,6 +77,7 @@ export function useAutoPlay(params: AutoPlayParams) {
     if (pendingNextRef.current) {
       pendingNextRef.current.strumHandle?.stop();
       pendingNextRef.current.bassHandle?.stop();
+      pendingNextRef.current.drumsHandle?.stop();
       pendingNextRef.current.phraseHandle?.stop();
       pendingNextRef.current.metNodes.forEach(h => { try { h.stop(); } catch { /* already stopped */ } });
       pendingNextRef.current = null;
@@ -92,6 +96,7 @@ export function useAutoPlay(params: AutoPlayParams) {
     chordStartRef.current = 0;
     stopHandle(activeStrumRef);
     stopHandle(activeBassRef);
+    stopHandle(activeDrumsRef);
     stopHandle(activePhraseStopRef);
     stopHandle(anacrusisAudioRef);
     anacrusisDisplayTimer.clear();
@@ -105,6 +110,7 @@ export function useAutoPlay(params: AutoPlayParams) {
     const ctx = audio.getCtx();
     let strumHandle: AudioHandle | null = null;
     let bassHandle: AudioHandle | null = null;
+    let drumsHandle: AudioHandle | null = null;
     let phraseHandle: AudioHandle | null = null;
     let phrase: GeneratedPhrase | null = null;
     const metNodes: AudioHandle[] = [];
@@ -157,19 +163,33 @@ export function useAutoPlay(params: AutoPlayParams) {
       }
     }
 
-    // Metronome
-    if (audio.metVolumeRef.current > 0) {
-      const layout = getChartLayout(prog);
-      const chordBeats = getChordBeatCount(layout, chordIdx);
-      const beatSec = 60 / bpm;
-      for (let b = 0; b < chordBeats; b++) {
-        const accent = (globalBeatOffset + b) % 4 === 0;
-        const osc = playClick(accent, ctx, audio.metVolumeRef.current, startAt + b * beatSec);
-        metNodes.push(osc);
+    // Rhythm (metronome OR drums — exclusive)
+    const rhythmVol = audio.metVolumeRef.current;
+    if (rhythmVol > 0) {
+      if (audio.rhythmModeRef.current === 'drums') {
+        const drumSampler = getDrumSampler();
+        if (drumSampler) {
+          const layout = getChartLayout(prog);
+          const chordBeats = getChordBeatCount(layout, chordIdx);
+          const swAmt = audio.swingEnabledRef.current ? audio.swingAmountRef.current : 0;
+          drumsHandle = playDrumPattern(
+            drumSampler, chordBeats, globalBeatOffset,
+            rhythmVol, startAt, bpm, swAmt,
+          );
+        }
+      } else {
+        const layout = getChartLayout(prog);
+        const chordBeats = getChordBeatCount(layout, chordIdx);
+        const beatSec = 60 / bpm;
+        for (let b = 0; b < chordBeats; b++) {
+          const accent = (globalBeatOffset + b) % 4 === 0;
+          const osc = playClick(accent, ctx, rhythmVol, startAt + b * beatSec);
+          metNodes.push(osc);
+        }
       }
     }
 
-    return { strumHandle, bassHandle, phraseHandle, phrase, metNodes };
+    return { strumHandle, bassHandle, drumsHandle, phraseHandle, phrase, metNodes };
   }
 
   // --- Main auto-advance effect ---
@@ -238,12 +258,14 @@ export function useAutoPlay(params: AutoPlayParams) {
       cancelPendingNext();
       stopHandle(activeStrumRef);
       stopHandle(activeBassRef);
+      stopHandle(activeDrumsRef);
       stopHandle(activePhraseStopRef);
       stopSongMetronome();
       const cumBeats = computeCumBeats(seq, playPosRef.current);
       const result = scheduleChordAudio(activeChordIdx, activeProg, ctx.currentTime, cumBeats);
       activeStrumRef.current = result.strumHandle;
       activeBassRef.current = result.bassHandle;
+      activeDrumsRef.current = result.drumsHandle;
       activePhraseStopRef.current = result.phraseHandle;
       songMetRef.current = result.metNodes;
       if (result.phrase) {
@@ -318,10 +340,12 @@ export function useAutoPlay(params: AutoPlayParams) {
 
       stopHandle(activeStrumRef);
       stopHandle(activeBassRef);
+      stopHandle(activeDrumsRef);
       stopHandle(activePhraseStopRef);
       stopSongMetronome();
       activeStrumRef.current = pendingNextRef.current?.strumHandle ?? null;
       activeBassRef.current = pendingNextRef.current?.bassHandle ?? null;
+      activeDrumsRef.current = pendingNextRef.current?.drumsHandle ?? null;
       activePhraseStopRef.current = pendingNextRef.current?.phraseHandle ?? null;
       songMetRef.current = pendingNextRef.current?.metNodes ?? [];
       const nextPhrase = pendingNextRef.current?.phrase ?? null;

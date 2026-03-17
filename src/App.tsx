@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import type { LabelMode, RootName, Progression, ChordNotationPrefs, GeneratedPhrase, InstrumentType, LickDB, LickEntry, Position, FretMap } from './types';
+import type { LabelMode, RootName, Progression, ChordNotationPrefs, GeneratedPhrase, InstrumentType, RhythmMode, LickDB, LickEntry, Position, FretMap } from './types';
 import { MODE_TEMPLATES, ROOTS, MODE_COLORS } from './constants';
 import {
   buildFretMap, generatePositions, generateDimPositions, resolveMode,
@@ -108,6 +108,9 @@ export default function App() {
   const [swingAmount, setSwingAmount] = useState(
     () => Number(localStorage.getItem('swingAmount')) || 0.2
   );
+  const [rhythmMode, setRhythmMode] = useState<RhythmMode>(() =>
+    (localStorage.getItem('rhythmMode') as RhythmMode) || 'metronome'
+  );
   // Lick practice state
   const [lickDB, setLickDB] = useState<LickDB | null>(null);
   const [selectedLickIdx, setSelectedLickIdx] = useState<number | null>(null);
@@ -191,7 +194,7 @@ export default function App() {
   // --- Audio hooks ---
   const audio = useAudioContext({
     metVolume, chordVolume, chordAudioOn, noteVolume,
-    countInVolume, bassVolume, instrument, swingEnabled, swingAmount,
+    countInVolume, bassVolume, rhythmMode, instrument, swingEnabled, swingAmount,
   });
 
   // Trigger sampler load when entering practice mode
@@ -874,6 +877,8 @@ export default function App() {
           onBassVolumeChange={setBassVolume}
           instrument={instrument}
           onInstrumentChange={setInstrument}
+          rhythmMode={rhythmMode}
+          onRhythmModeChange={setRhythmMode}
           swingEnabled={swingEnabled}
           onToggleSwing={() => setSwingEnabled(p => !p)}
           swingAmount={swingAmount}

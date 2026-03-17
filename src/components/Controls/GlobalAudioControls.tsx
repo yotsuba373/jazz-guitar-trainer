@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import type { InstrumentType } from '../../types';
+import type { InstrumentType, RhythmMode } from '../../types';
 
 interface GlobalAudioControlsProps {
   bpm: number;
@@ -16,6 +16,8 @@ interface GlobalAudioControlsProps {
   onBassVolumeChange: (v: number) => void;
   instrument: InstrumentType;
   onInstrumentChange: (inst: InstrumentType) => void;
+  rhythmMode: RhythmMode;
+  onRhythmModeChange: (mode: RhythmMode) => void;
   swingEnabled: boolean;
   onToggleSwing: () => void;
   swingAmount: number;
@@ -65,7 +67,7 @@ export function GlobalAudioControls({
   chordVolume, onChordVolumeChange,
   noteVolume, onNoteVolumeChange,
   bassVolume, onBassVolumeChange,
-  instrument, onInstrumentChange,
+  instrument, onInstrumentChange, rhythmMode, onRhythmModeChange,
   swingEnabled, onToggleSwing, swingAmount, onSwingAmountChange,
   countInEnabled, onToggleCountIn, countInVolume, onCountInVolumeChange, countInBars, isCountingIn,
   isPlaying, onTogglePlay, showPlayButton,
@@ -247,7 +249,7 @@ export function GlobalAudioControls({
               <span className="text-[10px] text-text-dim text-right">{Math.round(countInVolume * 100)}%</span>
 
               <MuteBtn muted={metMuted} onToggle={toggleMetMute} color="#F1C40F" />
-              <span className="text-[10px] text-text-dim">メトロノーム</span>
+              <span className="text-[10px] text-text-dim">リズム</span>
               <input type="range" min={0} max={1} step={0.05}
                 value={metVolume}
                 onChange={e => onMetVolumeChange(Number(e.target.value))}
@@ -292,6 +294,25 @@ export function GlobalAudioControls({
                     border: `1px solid ${instrument === key ? '#FF6B9D' : '#555'}`,
                     background: instrument === key ? '#2a1020' : '#1a1a1a',
                     color: instrument === key ? '#FF6B9D' : '#888',
+                  }}>
+                  {label}
+                </button>
+              ))}
+            </div>
+            {/* Rhythm mode selector */}
+            <div className="flex gap-1 mt-1">
+              {([
+                { key: 'metronome' as RhythmMode, label: '\uD83D\uDD14', title: 'メトロノーム' },
+                { key: 'drums' as RhythmMode, label: '\uD83E\uDD41', title: 'ドラム' },
+              ]).map(({ key, label, title }) => (
+                <button key={key}
+                  onClick={() => onRhythmModeChange(key)}
+                  title={title}
+                  className="rounded cursor-pointer text-[13px] px-1.5 py-[1px]"
+                  style={{
+                    border: `1px solid ${rhythmMode === key ? '#F1C40F' : '#555'}`,
+                    background: rhythmMode === key ? '#2a2a0a' : '#1a1a1a',
+                    color: rhythmMode === key ? '#F1C40F' : '#888',
                   }}>
                   {label}
                 </button>

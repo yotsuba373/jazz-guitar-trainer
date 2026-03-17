@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import type { MutableRefObject } from 'react';
-import type { InstrumentType } from '../types';
+import type { InstrumentType, RhythmMode } from '../types';
 import type { SamplerStatus } from '../utils/sampler';
 import { loadSamplers } from '../utils/sampler';
 
@@ -24,6 +24,7 @@ export function useAudioContext(volumes: {
   countInVolume: number;
   instrument: InstrumentType;
   bassVolume: number;
+  rhythmMode: RhythmMode;
   swingEnabled: boolean;
   swingAmount: number;
 }) {
@@ -45,6 +46,7 @@ export function useAudioContext(volumes: {
   const countInVolumeRef = useRef(volumes.countInVolume);
   const instrumentRef = useRef(volumes.instrument);
   const bassVolumeRef = useRef(volumes.bassVolume);
+  const rhythmModeRef = useRef(volumes.rhythmMode);
   const swingEnabledRef = useRef(volumes.swingEnabled);
   const swingAmountRef = useRef(volumes.swingAmount);
 
@@ -85,6 +87,11 @@ export function useAudioContext(volumes: {
   }, [volumes.bassVolume]);
 
   useEffect(() => {
+    rhythmModeRef.current = volumes.rhythmMode;
+    localStorage.setItem('rhythmMode', volumes.rhythmMode);
+  }, [volumes.rhythmMode]);
+
+  useEffect(() => {
     swingEnabledRef.current = volumes.swingEnabled;
     localStorage.setItem('swingEnabled', String(volumes.swingEnabled));
   }, [volumes.swingEnabled]);
@@ -98,6 +105,6 @@ export function useAudioContext(volumes: {
     getCtx, samplerStatus,
     metVolumeRef, chordVolumeRef, chordAudioOnRef,
     noteVolumeRef, countInVolumeRef, bassVolumeRef,
-    instrumentRef, swingEnabledRef, swingAmountRef,
+    rhythmModeRef, instrumentRef, swingEnabledRef, swingAmountRef,
   };
 }

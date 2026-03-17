@@ -4,6 +4,9 @@ export type RhythmType = 'q' | 't' | 'e' | 's';
 /** Instrument type for phrase playback synthesis */
 export type InstrumentType = 'guitar' | 'saxophone';
 
+/** Rhythm mode: metronome click or drum pattern */
+export type RhythmMode = 'metronome' | 'drums';
+
 /** A single note on the fretboard: [noteName, fretNumber, semitoneValue] */
 export type FretNote = [string, number, number];
 

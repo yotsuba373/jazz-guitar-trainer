@@ -285,7 +285,7 @@
     <div class="nav-group-title">Audio &amp; Playback</div>
     <a href="#audio-engine" class="nav-link">Audio Engine</a>
     <a href="#bpm-playback" class="nav-link">BPM Playback</a>
-    <a href="#metronome" class="nav-link">Metronome</a>
+    <a href="#metronome" class="nav-link">Rhythm (Metronome / Drums)</a>
     <a href="#volume-mixer" class="nav-link">Volume Mixer</a>
     <a href="#swing" class="nav-link">Swing Mode</a>
   </div>
@@ -355,6 +355,7 @@
     <li><strong>カウントイン</strong> — 再生開始前に1-2小節クリック、サイクル切替 (2小節→OFF→1小節→2小節)、音量調節可、アウフタクト対応</li>
     <li><strong>小節ループ</strong> — コード譜面上で小節を選択してループ再生 (単一/範囲)、オレンジ下線ハイライト</li>
     <li><strong>表示倍率スライダー</strong> — 画面右下固定、CSS zoom で100-150% (1%刻み)、リセットボタン付き</li>
+    <li><strong>ドラムパターン</strong> — smplr DrumMachine (TR-808) によるジャズスウィングドラムパターン (ride/hihat/kick)、スウィング対応、メトロノームとの切替</li>
   </ul>
 </div>
 
@@ -367,13 +368,13 @@
   <tr><td>スタイル</td><td>Tailwind CSS</td><td>4.2</td></tr>
   <tr><td>テスト</td><td>Vitest</td><td>4.0</td></tr>
   <tr><td>音声</td><td>Web Audio API</td><td>Built-in</td></tr>
-  <tr><td>外部依存</td><td colspan="2">なし（React + Tailwind のみ）</td></tr>
+  <tr><td>外部依存</td><td colspan="2">smplr (SoundFont サンプラー: ピアノ/ベース/ドラム)</td></tr>
 </table>
 
 <pre>npm install       # 依存インストール
 npm run dev       # 開発サーバー → http://localhost:5173
 npm run build     # tsc + vite build
-npm test          # vitest run (732 tests)
+npm test          # vitest run (754 tests)
 npm run lint      # ESLint</pre>
 
 <h2 id="architecture">Architecture</h2>
@@ -436,12 +437,13 @@ Utils Layer (pure functions):
 │   ├── audioEngine.ts            — playClick(), playKSNote(), playSaxNote(), playEPNote(), playChordStrum(), schedulePhrase()
 │   ├── sampler.ts               — loadSamplers(), getSamplers(), buildJazzPianoVoicing(), playSmplrPianoComp() — smplr SoundFont サンプラー + ジャズピアノボイシング
 │   ├── walkingBass.ts           — generateBassLine(), playSmplrBassLine() — ウォーキングベース生成 + smplr acoustic_bass 再生
+│   ├── drumPatterns.ts          — buildDrumPattern(), playSmplrDrums() — ジャズドラムパターン生成 + smplr DrumMachine TR-808 再生
 │   ├── lickEngine.ts             — absolutePitch(), buildNotePool(), loadLickDB(), transposeLick(), mapLickToFretboard(), inferModeCandidates(), lickToGeneratedPhrase(), findBestPositionForLick(), selectBestInstance(), getTransposeSemitones(), buildLickContext(), detectIiVPattern(), isIiVLickId(), buildIiVLickContext(), sliceLick()
 │   ├── lickPlayback.ts           — findLickById(), findOriginatorIdx(), chordHasSavedLick(), buildPhraseForLick(), computeTransposeSemitones(), isLickOriginator(), playLickForChord(), buildAnacrusisPhrase(), getStrumNotes(), resolveChordPositions()
 │   ├── playbackSeq.ts            — buildPlaybackSeq(), computeCumBeats()
 │   ├── phraseAnalysis.ts         — analyzePhrase(), computeSummary()
 │   ├── swing.ts                  — swingBeatStart(), swingVolumeMult(), swingDurMult()
-│   └── __tests__/                — 742 テスト
+│   └── __tests__/                — 754 テスト
 ├── components/
 │   ├── Fretboard/                — SVG指板 (Fretboard, FretboardNote, GhostNote, PhrasePath)
 │   ├── Controls/                 — 全コントロールUI
@@ -768,7 +770,12 @@ actualBeats = (beatWidth / sumOfBeatWidths) * 4</pre>
   <li>実装: <code>buildPlaybackSeq()</code> の各エントリに <code>measureFlatIdx</code> を付与し、auto-advance effect で次コードのインデックスがループ範囲外ならループ先頭に戻す</li>
 </ul>
 
-<h2 id="metronome">Metronome</h2>
+<h2 id="metronome">Rhythm (Metronome / Drums)</h2>
+
+<p>リズムセクションは <strong>メトロノーム</strong> と <strong>ドラムパターン</strong> の2モードを切替可能。
+ミキサー内のトグルで切り替えます。</p>
+
+<h3>メトロノーム</h3>
 <table>
   <tr><th>Parameter</th><th>Accent (小節頭)</th><th>Normal</th></tr>
   <tr><td>Frequency</td><td>1200 Hz</td><td>800 Hz</td></tr>
@@ -785,10 +792,27 @@ actualBeats = (beatWidth / sumOfBeatWidths) * 4</pre>
   メトロノーム音量スライダーで音量を 0 にすることでミュート可能です。</p>
 </div>
 
+<h3>ドラムパターン (<code>drumPatterns.ts</code>)</h3>
+<p>smplr の <strong>DrumMachine (TR-808)</strong> を使用したジャズスウィングドラムパターン。
+メトロノームの代替として、よりリアルなジャズフィールでの練習が可能。</p>
+
+<table>
+  <tr><th>楽器</th><th>パターン</th></tr>
+  <tr><td>Ride Cymbal</td><td>ジャズスウィングライドパターン (4拍)</td></tr>
+  <tr><td>Hi-Hat</td><td>2拍・4拍のフットハイハット</td></tr>
+  <tr><td>Kick Drum</td><td>1拍目のキック (小節頭アクセント)</td></tr>
+</table>
+
+<ul>
+  <li><strong>スウィング対応</strong>: <code>swingEnabled</code> 時はドラムパターンにもスウィングが適用される</li>
+  <li><strong>メトロノームと排他</strong>: ドラムパターン有効時はメトロノームのクリック音は無効化</li>
+  <li><strong>音量制御</strong>: メトロノームと同じ <code>metVolume</code> スライダーで音量調節</li>
+</ul>
+
 <h2 id="volume-mixer">Volume Mixer</h2>
 <table>
   <tr><th>Channel</th><th>State</th><th>Default</th><th>Target</th></tr>
-  <tr><td>Metronome</td><td><code>metVolume</code></td><td>0.5</td><td><code>playClick()</code></td></tr>
+  <tr><td>Metronome / Drums</td><td><code>metVolume</code></td><td>0.5</td><td><code>playClick()</code> / <code>playSmplrDrums()</code></td></tr>
   <tr><td>Chord</td><td><code>chordVolume</code></td><td>0.5</td><td><code>playSmplrPianoComp()</code> / <code>playChordStrum()</code></td></tr>
   <tr><td>Bass</td><td><code>bassVolume</code></td><td>0.5</td><td><code>playSmplrBassLine()</code></td></tr>
   <tr><td>Single Note</td><td><code>noteVolume</code></td><td>0.4</td><td><code>playNote()</code> + <code>schedulePhrase()</code></td></tr>
@@ -1379,7 +1403,7 @@ GeneratedPhrase
 
 <!-- ==================== TESTING ==================== -->
 <h2 id="testing">Test Suite</h2>
-<p><code>npm test</code> — Vitest による <strong>732テスト</strong>。</p>
+<p><code>npm test</code> — Vitest による <strong>754テスト</strong>。</p>
 
 <table>
   <tr><th>Test File</th><th>Tests</th><th>Coverage</th></tr>
@@ -1392,6 +1416,8 @@ GeneratedPhrase
   <tr><td>guideTones.test.ts</td><td>22</td><td>ガイドトーン抽出、解決分類</td></tr>
   <tr><td>noteSpelling.test.ts</td><td>19</td><td>スペリング、度数マップ、resolveMode</td></tr>
   <tr><td>audioEngine.test.ts</td><td>14</td><td>Karplus-Strong, サクソフォン, エレピ, コードストラム</td></tr>
+  <tr><td>walkingBass.test.ts</td><td>10</td><td>ベースライン生成、音域検証、拍数別、アプローチノート</td></tr>
+  <tr><td>drumPatterns.test.ts</td><td>12</td><td>ドラムパターン生成、スウィング適用、ride/hihat/kick配置</td></tr>
 </table>
 
 <div class="callout warn">

@@ -84,6 +84,8 @@ export {
 export { buildPlaybackSeq, computeCumBeats } from './playbackSeq';
 export { loadSamplers, getSamplers, getSamplerStatus, playSmplrPianoComp, buildJazzPianoVoicing } from './sampler';
 export { generateBassLine, playSmplrBassLine } from './walkingBass';
+export { generateSwingDrumPattern, playDrumPattern, getDrumSampler, loadDrumSampler } from './drumPatterns';
+export type { DrumHit, DrumSamplerSet } from './drumPatterns';
 export type { SamplerStatus, SamplerSet } from './sampler';
 export type { PlaybackStep } from './playbackSeq';
 export {
