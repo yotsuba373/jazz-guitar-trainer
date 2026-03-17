@@ -115,9 +115,13 @@ export function buildJazzPianoVoicing(rootName: string, quality: string): number
   return [...lh, ...rh];
 }
 
+let compIdCounter = 0;
+
 /**
  * smplr ピアノでジャズコンピング再生。
  * rootName + quality からピアノ用ボイシングを生成し、LH→RH 順に微小遅延で発音。
+ * stopId でコードごとに voice を分離し、同一 MIDI ノートの連続でも音欠けしない。
+ * 個別 stop 関数も保持し、未再生の事前スケジュール済みノートも確実にキャンセル。
  */
 export function playSmplrPianoComp(
   piano: Soundfont,
@@ -131,6 +135,7 @@ export function playSmplrPianoComp(
   const midiNotes = buildJazzPianoVoicing(rootName, quality);
   const velocity = Math.round(volume * 100);
   const stagger = 0.012; // 12ms between notes (subtle spread, LH→RH)
+  const stopId = `comp-${++compIdCounter}`;
 
   const stopFns: (() => void)[] = [];
   for (let i = 0; i < midiNotes.length; i++) {
@@ -139,9 +144,15 @@ export function playSmplrPianoComp(
       velocity,
       time: startAt + i * stagger,
       duration: dur,
+      stopId,
     });
     stopFns.push(stop);
   }
 
-  return { stop: () => stopFns.forEach(fn => fn()) };
+  return {
+    stop: () => {
+      stopFns.forEach(fn => fn());
+      piano.stop({ stopId });
+    },
+  };
 }

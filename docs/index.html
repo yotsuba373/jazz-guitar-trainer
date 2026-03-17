@@ -702,7 +702,7 @@ degree ラベル、フレーバーテキストを持ちます。</p>
   <li><strong>Karplus-Strong (Guitar)</strong> — 物理モデリングによるギター単音シンセ (<code>playKSNote()</code>): ノイズ励起 → 6-pass移動平均 → KSループ (0.4/0.6 LP + decay 0.996) → LP 2200Hz + HighShelf -6dB</li>
   <li><strong>Sawtooth + Formant (Saxophone)</strong> — リード楽器シンセ (<code>playSaxNote()</code>): Sawtooth発振 → 並列バンドパス (F1=500Hz body, F2=1400Hz reed) → LP warmth → Sine LFO 5.5Hz ビブラート (150ms遅延)</li>
   <li><strong>Electric Piano (Chord, fallback)</strong> — エレピシンセ (<code>playEPNote()</code>): Sine基音 + 2nd倍音 (ウォーム減衰) + 3rd倍音 (アタックのみ) → LP 4500Hz。smplr ピアノ未ロード時のフォールバック</li>
-  <li><strong>SoundFont Piano (Chord)</strong> — smplr ライブラリ (<code>playSmplrPianoComp()</code>): acoustic_grand_piano SoundFont サンプルによるリアルなピアノ音。ジャズピアノボイシング (LH: Root+5th, RH: 3rd+7th シェルボイシング) を <code>buildJazzPianoVoicing()</code> で自動生成。初回アクセス時に非同期ロード、ロード完了まで再生ボタンにスピナー表示</li>
+  <li><strong>SoundFont Piano (Chord)</strong> — smplr ライブラリ (<code>playSmplrPianoComp()</code>): acoustic_grand_piano SoundFont サンプルによるリアルなピアノ音。ジャズピアノボイシング (LH: Root+5th, RH: 3rd+7th シェルボイシング) を <code>buildJazzPianoVoicing()</code> で自動生成。初回アクセス時に非同期ロード、ロード完了まで再生ボタンにスピナー表示。<code>stopId</code> でコードごとに voice グループを分離し、同一 MIDI ノートの連続でも音欠けしない。個別 stop 関数も保持し、look-ahead で事前スケジュール済みのノートも停止時に確実にキャンセル</li>
   <li><strong>Instrument Dispatcher</strong> — <code>playNote(ctx, freq, vol, time, dur, instrument)</code> でフレーズ楽器別にディスパッチ (guitar/saxophone)</li>
   <li><strong>Chord Strum</strong> — コード発音 — 練習モード: smplr ジャズピアノコンピング (<code>playSmplrPianoComp()</code>、LH Root+5th / RH 3rd+7th)、辞典モード/フォールバック: エレピシンセ (<code>playChordStrum()</code>)</li>
   <li><strong>Click</strong> — メトロノーム用オシレーター (<code>playClick()</code>)</li>
