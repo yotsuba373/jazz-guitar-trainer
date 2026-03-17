@@ -65,6 +65,7 @@ src/
 │   ├── jazzStandards.ts             — fetchJazzStandards(), extractStructuredChords(), songToProgression()
 │   ├── chartLayout.ts               — deriveChartLayout(), getChartLayout(), buildChordRows(), removeChordFromLayout(), insertChordAtBeat(), computeInsertFlatIndex(), insertEmptyMeasure(), splitSection(), mergeSections(), splitEndings(), removeEndings(), findChordMeasure()
 │   ├── chordForms.ts                — findVoicingsInPosition(), VOICING_TEMPLATES, formatVoicingLabel()
+│   ├── sampler.ts                   — loadSamplers(), getSamplers(), buildJazzPianoVoicing(), playSmplrPianoComp() — smplr SoundFont サンプラー + ジャズピアノボイシング
 │   ├── lickEngine.ts                — absolutePitch(), buildNotePool(), loadLickDB(), transposeLick(), mapLickToFretboard(), lickToGeneratedPhrase(), inferModeFromLick(), inferModeCandidates(), findBestPositionForLick(), selectBestInstance(), buildLickContext(), detectIiVPattern(), isIiVLickId(), buildIiVLickContext(), sliceLick()
 │   ├── lickPlayback.ts              — findLickById(), playLickForChord(), buildAnacrusisPhrase(), getStrumNotes(), resolveChordPositions(), computeTransposeSemitones(), isLickOriginator()
 │   ├── playbackSeq.ts               — buildPlaybackSeq(), computeCumBeats()
@@ -481,6 +482,7 @@ Footer
 - コードフォーム表示: Drop 2 / Drop 3 ボイシング (20テンプレート)、指板ハイライト、◀/▶ 切替
 - フレーズ分析: analyzePhrase(), PhraseAnalysisPanel (折りたたみUI、度数/インターバル/機能ラベル、ピアノロールSVG、デバッグコピー) — リック表示時に使用
 - 楽器選択 (ギター/サックス): Web Audio API リアルタイム合成、フレーズ再生+指板クリック共通、localStorage 永続化
+- **SoundFont ピアノコンピング** (smplr): acoustic_grand_piano SoundFont によるリアルなジャズピアノコンピング。`buildJazzPianoVoicing()` でコード品質別に LH(Root+5th) + RH(3rd+7th シェルボイシング) を自動生成。初回アクセス時に非同期ロード、ロード中はスピナー表示、ロード前は既存 EP にフォールバック
 - コードストラム: エレピ音 (Sine加算合成, 2nd/3rd倍音)
 - スウィングモード: 多次元スウィング (タイミング+ダイナミクス+アーティキュレーション)、0-100%連続制御、テンポ補正 (>200BPM)、PhrasePath視覚同期、PianoRollはストレート表示、localStorage永続化
 - リック練習UI (練習モード): ChordChart直下の折りたたみパネル (LickPanel) にコード品質に合うリック一覧表示。CSS Grid固定カラムヘッダー付きテーブルレイアウト: ★お気に入り+安定ID(署名ハッシュ)+タイプバッジ(dom7/min7/maj7/m7♭5/ii-V各色)+SVGコンター+音数/拍数+開始音・末尾音(`実音(度数)`形式)+解決音(実音のみ、2小節以上で最終小節1音+末尾休符≥1拍の場合に分離表示)+ソース名+モード候補(最大3, MODE_COLORSカラー)。テキスト検索(モード名・度数も対象)、選択→指板表示+自動再生、モード/ポジション自動推定、分析パネル対応、**リック選択をChordSlotに永続化** (lickId+lickHighOctave+lickHighInstance→コード切替時復元+進行再生時自動再生)、**8va** (同一インスタンス内オクターブ上)・**Hi** (ハイポジションインスタンス切替) 独立トグル。ルールベースフレーズ生成は削除済み (リック練習に一本化)
