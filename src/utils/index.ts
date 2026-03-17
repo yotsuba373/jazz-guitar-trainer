@@ -83,6 +83,7 @@ export {
 } from './lickEngine';
 export { buildPlaybackSeq, computeCumBeats } from './playbackSeq';
 export { loadSamplers, getSamplers, getSamplerStatus, playSmplrPianoComp, buildJazzPianoVoicing } from './sampler';
+export { generateBassLine, playSmplrBassLine } from './walkingBass';
 export type { SamplerStatus, SamplerSet } from './sampler';
 export type { PlaybackStep } from './playbackSeq';
 export {

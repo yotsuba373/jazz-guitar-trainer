@@ -3,9 +3,10 @@ import type { AudioHandle } from '../hooks/useAudioContext';
 
 export type SamplerStatus = 'idle' | 'loading' | 'ready' | 'error';
 
-/** 楽器サンプラーの集合 (Phase 2-3 で bass/drums を追加予定) */
+/** 楽器サンプラーの集合 (Phase 3 で drums を追加予定) */
 export interface SamplerSet {
   piano: Soundfont;
+  bass: Soundfont;
 }
 
 let status: SamplerStatus = 'idle';
@@ -27,8 +28,9 @@ export async function loadSamplers(
   setStatus('loading');
   try {
     const piano = new Soundfont(ctx, { instrument: 'acoustic_grand_piano' });
-    await piano.load;
-    cached = { piano };
+    const bass = new Soundfont(ctx, { instrument: 'acoustic_bass' });
+    await Promise.all([piano.load, bass.load]);
+    cached = { piano, bass };
     setStatus('ready');
   } catch {
     setStatus('error');

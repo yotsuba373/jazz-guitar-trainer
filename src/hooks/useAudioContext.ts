@@ -23,6 +23,7 @@ export function useAudioContext(volumes: {
   noteVolume: number;
   countInVolume: number;
   instrument: InstrumentType;
+  bassVolume: number;
   swingEnabled: boolean;
   swingAmount: number;
 }) {
@@ -43,6 +44,7 @@ export function useAudioContext(volumes: {
   const noteVolumeRef = useRef(volumes.noteVolume);
   const countInVolumeRef = useRef(volumes.countInVolume);
   const instrumentRef = useRef(volumes.instrument);
+  const bassVolumeRef = useRef(volumes.bassVolume);
   const swingEnabledRef = useRef(volumes.swingEnabled);
   const swingAmountRef = useRef(volumes.swingAmount);
 
@@ -78,6 +80,11 @@ export function useAudioContext(volumes: {
   }, [volumes.instrument]);
 
   useEffect(() => {
+    bassVolumeRef.current = volumes.bassVolume;
+    localStorage.setItem('bassVolume', String(volumes.bassVolume));
+  }, [volumes.bassVolume]);
+
+  useEffect(() => {
     swingEnabledRef.current = volumes.swingEnabled;
     localStorage.setItem('swingEnabled', String(volumes.swingEnabled));
   }, [volumes.swingEnabled]);
@@ -90,7 +97,7 @@ export function useAudioContext(volumes: {
   return {
     getCtx, samplerStatus,
     metVolumeRef, chordVolumeRef, chordAudioOnRef,
-    noteVolumeRef, countInVolumeRef,
+    noteVolumeRef, countInVolumeRef, bassVolumeRef,
     instrumentRef, swingEnabledRef, swingAmountRef,
   };
 }

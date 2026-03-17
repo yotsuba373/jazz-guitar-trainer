@@ -12,6 +12,8 @@ interface GlobalAudioControlsProps {
   onChordVolumeChange: (v: number) => void;
   noteVolume: number;
   onNoteVolumeChange: (v: number) => void;
+  bassVolume: number;
+  onBassVolumeChange: (v: number) => void;
   instrument: InstrumentType;
   onInstrumentChange: (inst: InstrumentType) => void;
   swingEnabled: boolean;
@@ -62,6 +64,7 @@ export function GlobalAudioControls({
   metVolume, onMetVolumeChange,
   chordVolume, onChordVolumeChange,
   noteVolume, onNoteVolumeChange,
+  bassVolume, onBassVolumeChange,
   instrument, onInstrumentChange,
   swingEnabled, onToggleSwing, swingAmount, onSwingAmountChange,
   countInEnabled, onToggleCountIn, countInVolume, onCountInVolumeChange, countInBars, isCountingIn,
@@ -102,8 +105,10 @@ export function GlobalAudioControls({
   // Mute: store pre-mute volume to restore
   const prevMetVol = useRef(metVolume || 0.5);
   const prevNoteVol = useRef(noteVolume || 0.4);
+  const prevBassVol = useRef(bassVolume || 0.5);
   const metMuted = metVolume === 0;
   const noteMuted = noteVolume === 0;
+  const bassMuted = bassVolume === 0;
 
   function toggleMetMute() {
     if (metMuted) {
@@ -119,6 +124,14 @@ export function GlobalAudioControls({
     } else {
       prevNoteVol.current = noteVolume;
       onNoteVolumeChange(0);
+    }
+  }
+  function toggleBassMute() {
+    if (bassMuted) {
+      onBassVolumeChange(prevBassVol.current || 0.5);
+    } else {
+      prevBassVol.current = bassVolume;
+      onBassVolumeChange(0);
     }
   }
   const [volOpen, setVolOpen] = useState(false);
@@ -248,6 +261,14 @@ export function GlobalAudioControls({
                 onChange={e => onChordVolumeChange(Number(e.target.value))}
                 style={{ accentColor: '#27AE60', opacity: !chordAudioOn ? 0.3 : 1 }} />
               <span className="text-[10px] text-text-dim text-right">{Math.round(chordVolume * 100)}%</span>
+
+              <MuteBtn muted={bassMuted} onToggle={toggleBassMute} color="#1ABC9C" />
+              <span className="text-[10px] text-text-dim">ベース</span>
+              <input type="range" min={0} max={1} step={0.05}
+                value={bassVolume}
+                onChange={e => onBassVolumeChange(Number(e.target.value))}
+                style={{ accentColor: '#1ABC9C', opacity: bassMuted ? 0.3 : 1 }} />
+              <span className="text-[10px] text-text-dim text-right">{Math.round(bassVolume * 100)}%</span>
 
               <MuteBtn muted={noteMuted} onToggle={toggleNoteMute} color="#FF6B9D" />
               <span className="text-[10px] text-text-dim">単音</span>

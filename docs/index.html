@@ -435,12 +435,13 @@ Utils Layer (pure functions):
 │   ├── chordForms.ts             — findVoicingsInPosition(), VOICING_TEMPLATES(20)
 │   ├── audioEngine.ts            — playClick(), playKSNote(), playSaxNote(), playEPNote(), playChordStrum(), schedulePhrase()
 │   ├── sampler.ts               — loadSamplers(), getSamplers(), buildJazzPianoVoicing(), playSmplrPianoComp() — smplr SoundFont サンプラー + ジャズピアノボイシング
+│   ├── walkingBass.ts           — generateBassLine(), playSmplrBassLine() — ウォーキングベース生成 + smplr acoustic_bass 再生
 │   ├── lickEngine.ts             — absolutePitch(), buildNotePool(), loadLickDB(), transposeLick(), mapLickToFretboard(), inferModeCandidates(), lickToGeneratedPhrase(), findBestPositionForLick(), selectBestInstance(), getTransposeSemitones(), buildLickContext(), detectIiVPattern(), isIiVLickId(), buildIiVLickContext(), sliceLick()
 │   ├── lickPlayback.ts           — findLickById(), findOriginatorIdx(), chordHasSavedLick(), buildPhraseForLick(), computeTransposeSemitones(), isLickOriginator(), playLickForChord(), buildAnacrusisPhrase(), getStrumNotes(), resolveChordPositions()
 │   ├── playbackSeq.ts            — buildPlaybackSeq(), computeCumBeats()
 │   ├── phraseAnalysis.ts         — analyzePhrase(), computeSummary()
 │   ├── swing.ts                  — swingBeatStart(), swingVolumeMult(), swingDurMult()
-│   └── __tests__/                — 732 テスト
+│   └── __tests__/                — 742 テスト
 ├── components/
 │   ├── Fretboard/                — SVG指板 (Fretboard, FretboardNote, GhostNote, PhrasePath)
 │   ├── Controls/                 — 全コントロールUI
@@ -703,6 +704,7 @@ degree ラベル、フレーバーテキストを持ちます。</p>
   <li><strong>Sawtooth + Formant (Saxophone)</strong> — リード楽器シンセ (<code>playSaxNote()</code>): Sawtooth発振 → 並列バンドパス (F1=500Hz body, F2=1400Hz reed) → LP warmth → Sine LFO 5.5Hz ビブラート (150ms遅延)</li>
   <li><strong>Electric Piano (Chord, fallback)</strong> — エレピシンセ (<code>playEPNote()</code>): Sine基音 + 2nd倍音 (ウォーム減衰) + 3rd倍音 (アタックのみ) → LP 4500Hz。smplr ピアノ未ロード時のフォールバック</li>
   <li><strong>SoundFont Piano (Chord)</strong> — smplr ライブラリ (<code>playSmplrPianoComp()</code>): acoustic_grand_piano SoundFont サンプルによるリアルなピアノ音。ジャズピアノボイシング (LH: Root+5th, RH: 3rd+7th シェルボイシング) を <code>buildJazzPianoVoicing()</code> で自動生成。初回アクセス時に非同期ロード、ロード完了まで再生ボタンにスピナー表示。<code>stopId</code> でコードごとに voice グループを分離し、同一 MIDI ノートの連続でも音欠けしない。個別 stop 関数も保持し、look-ahead で事前スケジュール済みのノートも停止時に確実にキャンセル</li>
+  <li><strong>SoundFont Bass (Walking Bass)</strong> — smplr ライブラリ (<code>playSmplrBassLine()</code>): acoustic_bass SoundFont でウォーキングベースライン再生。<code>generateBassLine()</code> がコード品質・拍数・次コードルートから自動生成 (1拍=ルートのみ、2拍=ルート+アプローチ、3-4拍=ルート→3rd/5th→5th/8va→半音アプローチ)。音域 E1(28)~G3(55)。ピアノと同じ <code>stopId</code> + 個別 stop 関数パターンで管理</li>
   <li><strong>Instrument Dispatcher</strong> — <code>playNote(ctx, freq, vol, time, dur, instrument)</code> でフレーズ楽器別にディスパッチ (guitar/saxophone)</li>
   <li><strong>Chord Strum</strong> — コード発音 — 練習モード: smplr ジャズピアノコンピング (<code>playSmplrPianoComp()</code>、LH Root+5th / RH 3rd+7th)、辞典モード/フォールバック: エレピシンセ (<code>playChordStrum()</code>)</li>
   <li><strong>Click</strong> — メトロノーム用オシレーター (<code>playClick()</code>)</li>
@@ -788,6 +790,7 @@ actualBeats = (beatWidth / sumOfBeatWidths) * 4</pre>
   <tr><th>Channel</th><th>State</th><th>Default</th><th>Target</th></tr>
   <tr><td>Metronome</td><td><code>metVolume</code></td><td>0.5</td><td><code>playClick()</code></td></tr>
   <tr><td>Chord</td><td><code>chordVolume</code></td><td>0.5</td><td><code>playSmplrPianoComp()</code> / <code>playChordStrum()</code></td></tr>
+  <tr><td>Bass</td><td><code>bassVolume</code></td><td>0.5</td><td><code>playSmplrBassLine()</code></td></tr>
   <tr><td>Single Note</td><td><code>noteVolume</code></td><td>0.4</td><td><code>playNote()</code> + <code>schedulePhrase()</code></td></tr>
   <tr><td>Count-In</td><td><code>countInVolume</code></td><td>0.5</td><td><code>playClick()</code> (カウントイン専用)</td></tr>
   <tr><td>Instrument</td><td><code>phraseInstrument</code></td><td>'guitar'</td><td>楽器選択 (guitar/saxophone)</td></tr>

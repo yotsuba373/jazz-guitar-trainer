@@ -74,6 +74,11 @@ export default function App() {
     const s = parseFloat(localStorage.getItem('noteVolume') ?? localStorage.getItem('phraseVolume') ?? '');
     return isNaN(s) ? 0.4 : s;
   });
+  // Bass volume
+  const [bassVolume, setBassVolume] = useState<number>(() => {
+    const s = parseFloat(localStorage.getItem('bassVolume') ?? '');
+    return isNaN(s) ? 0.5 : s;
+  });
   // Instrument selection for phrase/note playback
   const [instrument, setInstrument] = useState<InstrumentType>(() => {
     const s = localStorage.getItem('phraseInstrument');
@@ -186,7 +191,7 @@ export default function App() {
   // --- Audio hooks ---
   const audio = useAudioContext({
     metVolume, chordVolume, chordAudioOn, noteVolume,
-    countInVolume, instrument, swingEnabled, swingAmount,
+    countInVolume, bassVolume, instrument, swingEnabled, swingAmount,
   });
 
   // Trigger sampler load when entering practice mode
@@ -865,6 +870,8 @@ export default function App() {
           onChordVolumeChange={setChordVolume}
           noteVolume={noteVolume}
           onNoteVolumeChange={setNoteVolume}
+          bassVolume={bassVolume}
+          onBassVolumeChange={setBassVolume}
           instrument={instrument}
           onInstrumentChange={setInstrument}
           swingEnabled={swingEnabled}

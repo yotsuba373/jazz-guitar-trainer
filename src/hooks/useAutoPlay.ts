@@ -9,7 +9,7 @@ import {
   buildPlaybackSeq, computeCumBeats,
   playLickForChord, buildAnacrusisPhrase, chordHasSavedLick,
   isLickOriginator,
-  getSamplers, playSmplrPianoComp,
+  getSamplers, playSmplrPianoComp, playSmplrBassLine,
 } from '../utils';
 
 interface AutoPlayParams {
@@ -46,10 +46,12 @@ export function useAutoPlay(params: AutoPlayParams) {
   const chordStartRef = useRef(0);
   const playPosRef = useRef(0);
   const activeStrumRef = useRef<AudioHandle | null>(null);
+  const activeBassRef = useRef<AudioHandle | null>(null);
   const activePhraseStopRef = useRef<AudioHandle | null>(null);
   const songMetRef = useRef<AudioHandle[]>([]);
   const pendingNextRef = useRef<{
     strumHandle: AudioHandle | null;
+    bassHandle: AudioHandle | null;
     phraseHandle: AudioHandle | null;
     phrase: GeneratedPhrase | null;
     metNodes: AudioHandle[];
@@ -71,6 +73,7 @@ export function useAutoPlay(params: AutoPlayParams) {
   function cancelPendingNext() {
     if (pendingNextRef.current) {
       pendingNextRef.current.strumHandle?.stop();
+      pendingNextRef.current.bassHandle?.stop();
       pendingNextRef.current.phraseHandle?.stop();
       pendingNextRef.current.metNodes.forEach(h => { try { h.stop(); } catch { /* already stopped */ } });
       pendingNextRef.current = null;
@@ -88,6 +91,7 @@ export function useAutoPlay(params: AutoPlayParams) {
     advanceOriginRef.current = 'stopped';
     chordStartRef.current = 0;
     stopHandle(activeStrumRef);
+    stopHandle(activeBassRef);
     stopHandle(activePhraseStopRef);
     stopHandle(anacrusisAudioRef);
     anacrusisDisplayTimer.clear();
@@ -100,6 +104,7 @@ export function useAutoPlay(params: AutoPlayParams) {
   function scheduleChordAudio(chordIdx: number, prog: Progression, startAt: number, globalBeatOffset: number) {
     const ctx = audio.getCtx();
     let strumHandle: AudioHandle | null = null;
+    let bassHandle: AudioHandle | null = null;
     let phraseHandle: AudioHandle | null = null;
     let phrase: GeneratedPhrase | null = null;
     const metNodes: AudioHandle[] = [];
@@ -119,6 +124,24 @@ export function useAutoPlay(params: AutoPlayParams) {
         const strumNotes = getStrumNotes(chordIdx, prog.chords, prog.songKey);
         if (strumNotes.length > 0) {
           strumHandle = playChordStrum(ctx, strumNotes, audio.chordVolumeRef.current, startAt);
+        }
+      }
+    }
+
+    // Walking bass
+    if (audio.bassVolumeRef.current > 0) {
+      const samplers = getSamplers();
+      if (samplers?.bass) {
+        const chord = prog.chords[chordIdx];
+        if (chord) {
+          const layout = getChartLayout(prog);
+          const chordBeats = getChordBeatCount(layout, chordIdx);
+          const nextChord = prog.chords[chordIdx + 1];
+          bassHandle = playSmplrBassLine(
+            samplers.bass, chord.rootName, chord.quality,
+            chordBeats, nextChord?.rootName ?? null,
+            audio.bassVolumeRef.current, startAt, bpm,
+          );
         }
       }
     }
@@ -146,7 +169,7 @@ export function useAutoPlay(params: AutoPlayParams) {
       }
     }
 
-    return { strumHandle, phraseHandle, phrase, metNodes };
+    return { strumHandle, bassHandle, phraseHandle, phrase, metNodes };
   }
 
   // --- Main auto-advance effect ---
@@ -214,11 +237,13 @@ export function useAutoPlay(params: AutoPlayParams) {
 
       cancelPendingNext();
       stopHandle(activeStrumRef);
+      stopHandle(activeBassRef);
       stopHandle(activePhraseStopRef);
       stopSongMetronome();
       const cumBeats = computeCumBeats(seq, playPosRef.current);
       const result = scheduleChordAudio(activeChordIdx, activeProg, ctx.currentTime, cumBeats);
       activeStrumRef.current = result.strumHandle;
+      activeBassRef.current = result.bassHandle;
       activePhraseStopRef.current = result.phraseHandle;
       songMetRef.current = result.metNodes;
       if (result.phrase) {
@@ -292,9 +317,11 @@ export function useAutoPlay(params: AutoPlayParams) {
       playPosRef.current = nextPos;
 
       stopHandle(activeStrumRef);
+      stopHandle(activeBassRef);
       stopHandle(activePhraseStopRef);
       stopSongMetronome();
       activeStrumRef.current = pendingNextRef.current?.strumHandle ?? null;
+      activeBassRef.current = pendingNextRef.current?.bassHandle ?? null;
       activePhraseStopRef.current = pendingNextRef.current?.phraseHandle ?? null;
       songMetRef.current = pendingNextRef.current?.metNodes ?? [];
       const nextPhrase = pendingNextRef.current?.phrase ?? null;
