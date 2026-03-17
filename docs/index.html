@@ -445,7 +445,7 @@ Utils Layer (pure functions):
 │   ├── playbackSeq.ts            — buildPlaybackSeq(), computeCumBeats()
 │   ├── phraseAnalysis.ts         — analyzePhrase(), computeSummary()
 │   ├── swing.ts                  — swingBeatStart(), swingVolumeMult(), swingDurMult()
-│   └── __tests__/                — 776 テスト
+│   └── __tests__/                — 793 テスト
 ├── components/
 │   ├── Fretboard/                — SVG指板 (Fretboard, FretboardNote, GhostNote, PhrasePath)
 │   ├── Controls/                 — 全コントロールUI
@@ -1452,7 +1452,7 @@ GeneratedPhrase
 
 <!-- ==================== TESTING ==================== -->
 <h2 id="testing">Test Suite</h2>
-<p><code>npm test</code> — Vitest による <strong>776テスト</strong>。</p>
+<p><code>npm test</code> — Vitest による <strong>793テスト</strong>。</p>
 
 <table>
   <tr><th>Test File</th><th>Tests</th><th>Coverage</th></tr>
@@ -1465,9 +1465,10 @@ GeneratedPhrase
   <tr><td>guideTones.test.ts</td><td>22</td><td>ガイドトーン抽出、解決分類</td></tr>
   <tr><td>noteSpelling.test.ts</td><td>19</td><td>スペリング、度数マップ、resolveMode</td></tr>
   <tr><td>audioEngine.test.ts</td><td>14</td><td>Karplus-Strong, サクソフォン, エレピ, コードストラム</td></tr>
-  <tr><td>walkingBass.test.ts</td><td>10</td><td>ベースライン生成、音域検証、拍数別、アプローチノート</td></tr>
-  <tr><td>drumPatterns.test.ts</td><td>12</td><td>ドラムパターン生成、スウィング適用、ride/hihat/kick配置</td></tr>
-  <tr><td>backingStyles.test.ts</td><td>24</td><td>バッキングスタイル別コンピング/ベース/ドラムパターン生成</td></tr>
+  <tr><td>walkingBass.test.ts</td><td>15</td><td>ベースライン生成、音域検証、拍数別、アプローチノート、スタイル別</td></tr>
+  <tr><td>drumPatterns.test.ts</td><td>19</td><td>ドラムパターン生成、スウィング適用、ride/hihat/kick配置、スタイル別</td></tr>
+  <tr><td>compPatterns.test.ts</td><td>10</td><td>コンピングパターン生成 (Swing Charleston/Bossa/Ballad/Latin)</td></tr>
+  <tr><td>backingStyles.test.ts</td><td>17</td><td>バッキングスタイル定数構造、スタイル別統合テスト (コンピング+ベース+ドラム)</td></tr>
 </table>
 
 <div class="callout warn">

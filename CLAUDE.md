@@ -14,7 +14,7 @@ npm install
 npm run dev       # 開発サーバー起動 → http://localhost:5173
 npm run build     # tsc + vite build
 npm run lint      # ESLint
-npm test          # vitest run (776 テスト)
+npm test          # vitest run (793 テスト)
 ```
 
 Node.js が未インストールの場合は fnm を使用:
@@ -85,9 +85,10 @@ src/
 │       ├── audioEngine.test.ts      — 14 tests (Karplus-Strong, サクソフォン, エレピ, コードストラム)
 │       ├── swing.test.ts            — 25 tests (タイミング/ダイナミクス/アーティキュレーション/テンポ補正)
 │       ├── lickEngine.test.ts       — 61 tests (リックDB読込・移調・指板マッピング・モード推定・ポジション選択・インスタンス選択・8音スケール・GeneratedPhrase変換・ii-V検出・sliceLick汎用分割)
-│       ├── walkingBass.test.ts      — 10 tests (ベースライン生成、音域検証、拍数別、アプローチノート)
-│       ├── drumPatterns.test.ts    — 10 tests (ドラムパターン生成、スウィング、バリエーション)
-│       └── backingStyles.test.ts   — 24 tests (バッキングスタイル別コンピング/ベース/ドラムパターン生成)
+│       ├── walkingBass.test.ts      — 15 tests (ベースライン生成、音域検証、拍数別、アプローチノート、スタイル別)
+│       ├── drumPatterns.test.ts    — 19 tests (ドラムパターン生成、スウィング、バリエーション、スタイル別)
+│       ├── compPatterns.test.ts    — 10 tests (コンピングパターン生成、Swing Charleston/Bossa/Ballad/Latin)
+│       └── backingStyles.test.ts   — 17 tests (バッキングスタイル定数構造、スタイル別統合テスト)
 ├── hooks/
 │   ├── useTimer.ts                  — setTimeout ref管理フック (自動クリア)
 │   ├── useAudioContext.ts           — AudioContext共有 + 音量/設定ref同期 + AudioHandle
