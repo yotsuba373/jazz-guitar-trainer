@@ -3,7 +3,7 @@ import type { GeneratedPhrase, PhraseNote, Progression, Position, Mode, SongKey 
 import type { useAudioContext } from './useAudioContext';
 import { stopHandle, stopHandleArray, type AudioHandle } from './useAudioContext';
 import { useTimer } from './useTimer';
-import { playClick, playChordStrum, schedulePhrase, getStrumNotes, getChartLayout, getChordBeatCount, fretToFrequency, playNote } from '../utils';
+import { playClick, playChordStrum, schedulePhrase, getStrumNotes, getChartLayout, getChordBeatCount, fretToFrequency, playNote, getSamplers, playSmplrPianoComp } from '../utils';
 
 interface PreviewParams {
   bpm: number;
@@ -94,15 +94,26 @@ export function usePreviewPlayback(params: PreviewParams) {
     manualPhraseRef.current = result;
 
     // 2. Chord strum (delayed by anacrusis)
+    const samplers = getSamplers();
+    const doFallbackStrum = (notes: { stringIdx: number; fret: number }[], at: number) =>
+      playChordStrum(ctx, notes, audio.chordVolumeRef.current, at);
+    const doPianoComp = (chordIdx: number, at: number, dur?: number) => {
+      const chord = activeProg!.chords[chordIdx];
+      if (samplers && chord) {
+        return playSmplrPianoComp(
+          samplers.piano, chord.rootName, chord.quality,
+          audio.chordVolumeRef.current, at, dur);
+      }
+      const strumNotes = getStrumNotes(chordIdx, activeProg!.chords, songKey);
+      return strumNotes.length > 0
+        ? doFallbackStrum(strumNotes, at)
+        : { stop() {} };
+    };
     if (audio.chordAudioOnRef.current) {
       if (progMode && activeProg) {
-        const strumNotes = getStrumNotes(activeChordIdx, activeProg.chords, songKey);
-        if (strumNotes.length > 0) {
-          previewStrumRef.current.push(
-            playChordStrum(ctx, strumNotes, audio.chordVolumeRef.current, startAt + anacrusisDur));
-        }
+        previewStrumRef.current.push(doPianoComp(activeChordIdx, startAt + anacrusisDur));
       } else if (selPos && selPos.instances.length > 0) {
-        // 辞典モードストラム
+        // 辞典モードストラム (ギターボイシングのまま)
         const inst = selPos.instances[0];
         const ct = new Set(mode.chordTones);
         const strumNotes: { stringIdx: number; fret: number }[] = [];
@@ -114,8 +125,7 @@ export function usePreviewPlayback(params: PreviewParams) {
           if (strumNotes.length >= 4) break;
         }
         if (strumNotes.length > 0) {
-          previewStrumRef.current.push(
-            playChordStrum(ctx, strumNotes, audio.chordVolumeRef.current, startAt + anacrusisDur));
+          previewStrumRef.current.push(doFallbackStrum(strumNotes, startAt + anacrusisDur));
         }
       }
     }
@@ -143,11 +153,7 @@ export function usePreviewPlayback(params: PreviewParams) {
         while (ci < activeProg.chords.length) {
           const strumSec = (anacrusis + accBeats) * 2 * eighthDur;
           if (strumSec >= totalSec) break;
-          const strumNotes = getStrumNotes(ci, activeProg.chords, songKey);
-          if (strumNotes.length > 0) {
-            previewStrumRef.current.push(
-              playChordStrum(ctx, strumNotes, audio.chordVolumeRef.current, startAt + strumSec));
-          }
+          previewStrumRef.current.push(doPianoComp(ci, startAt + strumSec));
           accBeats += getChordBeatCount(layout, ci);
           ci++;
         }

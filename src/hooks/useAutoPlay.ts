@@ -9,6 +9,7 @@ import {
   buildPlaybackSeq, computeCumBeats,
   playLickForChord, buildAnacrusisPhrase, chordHasSavedLick,
   isLickOriginator,
+  getSamplers, playSmplrPianoComp,
 } from '../utils';
 
 interface AutoPlayParams {
@@ -105,9 +106,20 @@ export function useAutoPlay(params: AutoPlayParams) {
 
     // Strum
     if (audio.chordAudioOnRef.current) {
-      const strumNotes = getStrumNotes(chordIdx, prog.chords, prog.songKey);
-      if (strumNotes.length > 0) {
-        strumHandle = playChordStrum(ctx, strumNotes, audio.chordVolumeRef.current, startAt);
+      const chord = prog.chords[chordIdx];
+      const samplers = getSamplers();
+      if (samplers && chord) {
+        const layout = getChartLayout(prog);
+        const chordBeats = getChordBeatCount(layout, chordIdx);
+        const chordDur = chordBeats * (60 / bpm);
+        strumHandle = playSmplrPianoComp(
+          samplers.piano, chord.rootName, chord.quality,
+          audio.chordVolumeRef.current, startAt, chordDur);
+      } else {
+        const strumNotes = getStrumNotes(chordIdx, prog.chords, prog.songKey);
+        if (strumNotes.length > 0) {
+          strumHandle = playChordStrum(ctx, strumNotes, audio.chordVolumeRef.current, startAt);
+        }
       }
     }
 

@@ -27,6 +27,7 @@ interface GlobalAudioControlsProps {
   isPlaying?: boolean;
   onTogglePlay?: () => void;
   showPlayButton?: boolean;
+  samplerLoading?: boolean;
   loopLabel?: string;
   onClearLoop?: () => void;
   loopSelecting?: boolean;
@@ -66,7 +67,7 @@ export function GlobalAudioControls({
   countInEnabled, onToggleCountIn, countInVolume, onCountInVolumeChange, countInBars, isCountingIn,
   isPlaying, onTogglePlay, showPlayButton,
   loopLabel, onClearLoop, loopSelecting, onToggleLoopSelecting,
-  leadingSlot,
+  leadingSlot, samplerLoading,
 }: GlobalAudioControlsProps) {
   const [bpmStr, setBpmStr] = useState(String(bpm));
   useEffect(() => setBpmStr(String(bpm)), [bpm]);
@@ -136,14 +137,22 @@ export function GlobalAudioControls({
       {showPlayButton && onTogglePlay && (
         <button
           onClick={onTogglePlay}
+          disabled={samplerLoading && !isPlaying}
           className="rounded cursor-pointer px-3 h-[24px] inline-flex items-center gap-1"
           style={{
-            border: `1px solid ${isPlaying ? '#E74C3C' : '#27AE60'}`,
-            background: isPlaying ? '#2a1010' : '#102a10',
-            color: isPlaying ? '#E74C3C' : '#27AE60',
+            border: `1px solid ${samplerLoading && !isPlaying ? '#666' : isPlaying ? '#E74C3C' : '#27AE60'}`,
+            background: samplerLoading && !isPlaying ? '#1a1a1a' : isPlaying ? '#2a1010' : '#102a10',
+            color: samplerLoading && !isPlaying ? '#666' : isPlaying ? '#E74C3C' : '#27AE60',
+            opacity: samplerLoading && !isPlaying ? 0.5 : 1,
+            cursor: samplerLoading && !isPlaying ? 'not-allowed' : 'pointer',
           }}
         >
-          {isPlaying ? (
+          {samplerLoading && !isPlaying ? (
+            <svg className="animate-spin" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+              <circle cx="12" cy="12" r="10" strokeOpacity="0.3"/>
+              <path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round"/>
+            </svg>
+          ) : isPlaying ? (
             <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
               <rect x="1" y="1" width="3.5" height="10" rx="1"/>
               <rect x="7.5" y="1" width="3.5" height="10" rx="1"/>

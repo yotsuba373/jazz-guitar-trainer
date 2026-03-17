@@ -1,6 +1,8 @@
-import { useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import type { MutableRefObject } from 'react';
 import type { InstrumentType } from '../types';
+import type { SamplerStatus } from '../utils/sampler';
+import { loadSamplers } from '../utils/sampler';
 
 export interface AudioHandle { stop(): void; }
 
@@ -25,10 +27,12 @@ export function useAudioContext(volumes: {
   swingAmount: number;
 }) {
   const audioCtxRef = useRef<AudioContext | null>(null);
+  const [samplerStatus, setSamplerStatus] = useState<SamplerStatus>('idle');
 
   const getCtx = useCallback((): AudioContext => {
     if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
     if (audioCtxRef.current.state === 'suspended') audioCtxRef.current.resume();
+    loadSamplers(audioCtxRef.current, setSamplerStatus);
     return audioCtxRef.current;
   }, []);
 
@@ -84,7 +88,7 @@ export function useAudioContext(volumes: {
   }, [volumes.swingAmount]);
 
   return {
-    getCtx,
+    getCtx, samplerStatus,
     metVolumeRef, chordVolumeRef, chordAudioOnRef,
     noteVolumeRef, countInVolumeRef,
     instrumentRef, swingEnabledRef, swingAmountRef,

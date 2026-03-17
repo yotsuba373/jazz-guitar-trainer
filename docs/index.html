@@ -434,6 +434,7 @@ Utils Layer (pure functions):
 │   ├── chartLayout.ts            — deriveChartLayout(), getChartLayout(), buildChordRows(), appendChordToLayout(), removeChordFromLayout(), insertChordAtBeat(), computeInsertFlatIndex(), getMeasureBeatInfo(), splitSection(), mergeSections(), splitEndings(), removeEndings(), renameSection(), splitSectionAtEnding(), adjustEndingSplit(), getChordBeatCount()
 │   ├── chordForms.ts             — findVoicingsInPosition(), VOICING_TEMPLATES(20)
 │   ├── audioEngine.ts            — playClick(), playKSNote(), playSaxNote(), playEPNote(), playChordStrum(), schedulePhrase()
+│   ├── sampler.ts               — loadSamplers(), getSamplers(), buildJazzPianoVoicing(), playSmplrPianoComp() — smplr SoundFont サンプラー + ジャズピアノボイシング
 │   ├── lickEngine.ts             — absolutePitch(), buildNotePool(), loadLickDB(), transposeLick(), mapLickToFretboard(), inferModeCandidates(), lickToGeneratedPhrase(), findBestPositionForLick(), selectBestInstance(), getTransposeSemitones(), buildLickContext(), detectIiVPattern(), isIiVLickId(), buildIiVLickContext(), sliceLick()
 │   ├── lickPlayback.ts           — findLickById(), findOriginatorIdx(), chordHasSavedLick(), buildPhraseForLick(), computeTransposeSemitones(), isLickOriginator(), playLickForChord(), buildAnacrusisPhrase(), getStrumNotes(), resolveChordPositions()
 │   ├── playbackSeq.ts            — buildPlaybackSeq(), computeCumBeats()
@@ -700,9 +701,10 @@ degree ラベル、フレーバーテキストを持ちます。</p>
 <ul>
   <li><strong>Karplus-Strong (Guitar)</strong> — 物理モデリングによるギター単音シンセ (<code>playKSNote()</code>): ノイズ励起 → 6-pass移動平均 → KSループ (0.4/0.6 LP + decay 0.996) → LP 2200Hz + HighShelf -6dB</li>
   <li><strong>Sawtooth + Formant (Saxophone)</strong> — リード楽器シンセ (<code>playSaxNote()</code>): Sawtooth発振 → 並列バンドパス (F1=500Hz body, F2=1400Hz reed) → LP warmth → Sine LFO 5.5Hz ビブラート (150ms遅延)</li>
-  <li><strong>Electric Piano (Chord)</strong> — エレピシンセ (<code>playEPNote()</code>): Sine基音 + 2nd倍音 (ウォーム減衰) + 3rd倍音 (アタックのみ) → LP 4500Hz。コードストラムに使用</li>
+  <li><strong>Electric Piano (Chord, fallback)</strong> — エレピシンセ (<code>playEPNote()</code>): Sine基音 + 2nd倍音 (ウォーム減衰) + 3rd倍音 (アタックのみ) → LP 4500Hz。smplr ピアノ未ロード時のフォールバック</li>
+  <li><strong>SoundFont Piano (Chord)</strong> — smplr ライブラリ (<code>playSmplrPianoComp()</code>): acoustic_grand_piano SoundFont サンプルによるリアルなピアノ音。ジャズピアノボイシング (LH: Root+5th, RH: 3rd+7th シェルボイシング) を <code>buildJazzPianoVoicing()</code> で自動生成。初回アクセス時に非同期ロード、ロード完了まで再生ボタンにスピナー表示</li>
   <li><strong>Instrument Dispatcher</strong> — <code>playNote(ctx, freq, vol, time, dur, instrument)</code> でフレーズ楽器別にディスパッチ (guitar/saxophone)</li>
-  <li><strong>Chord Strum</strong> — ボイシングの同時/アルペジオ発音 (<code>playChordStrum()</code>) — ローズピアノ音</li>
+  <li><strong>Chord Strum</strong> — コード発音 — 練習モード: smplr ジャズピアノコンピング (<code>playSmplrPianoComp()</code>、LH Root+5th / RH 3rd+7th)、辞典モード/フォールバック: エレピシンセ (<code>playChordStrum()</code>)</li>
   <li><strong>Click</strong> — メトロノーム用オシレーター (<code>playClick()</code>)</li>
   <li><strong>Phrase Scheduling</strong> — <code>schedulePhrase()</code> で Web Audio API タイムスタンプに基づく正確な発音 (instrument パラメータ対応)</li>
 </ul>
@@ -785,7 +787,7 @@ actualBeats = (beatWidth / sumOfBeatWidths) * 4</pre>
 <table>
   <tr><th>Channel</th><th>State</th><th>Default</th><th>Target</th></tr>
   <tr><td>Metronome</td><td><code>metVolume</code></td><td>0.5</td><td><code>playClick()</code></td></tr>
-  <tr><td>Chord</td><td><code>chordVolume</code></td><td>0.5</td><td><code>playChordStrum()</code></td></tr>
+  <tr><td>Chord</td><td><code>chordVolume</code></td><td>0.5</td><td><code>playSmplrPianoComp()</code> / <code>playChordStrum()</code></td></tr>
   <tr><td>Single Note</td><td><code>noteVolume</code></td><td>0.4</td><td><code>playNote()</code> + <code>schedulePhrase()</code></td></tr>
   <tr><td>Count-In</td><td><code>countInVolume</code></td><td>0.5</td><td><code>playClick()</code> (カウントイン専用)</td></tr>
   <tr><td>Instrument</td><td><code>phraseInstrument</code></td><td>'guitar'</td><td>楽器選択 (guitar/saxophone)</td></tr>

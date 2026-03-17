@@ -189,6 +189,11 @@ export default function App() {
     countInVolume, instrument, swingEnabled, swingAmount,
   });
 
+  // Trigger sampler load when entering practice mode
+  useEffect(() => {
+    if (progMode) audio.getCtx();
+  }, [progMode]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const {
     playPhraseAudio, stopPreview, isPhraseAudioPlaying,
     iiVDisplayPhrase, setIiVDisplayPhrase, phraseAnimKey, clearIiVSwitchTimer, bumpAnimKey,
@@ -851,6 +856,7 @@ export default function App() {
         {progMode && <GlobalAudioControls
           bpm={bpm}
           onBpmChange={handleBpmChange}
+          samplerLoading={audio.samplerStatus === 'loading'}
           chordAudioOn={chordAudioOn}
           onToggleChordAudio={() => setChordAudioOn(p => !p)}
           metVolume={metVolume}
