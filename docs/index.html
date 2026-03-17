@@ -1268,7 +1268,7 @@ GeneratedPhrase
   <li><strong>コンタープレビュー</strong>: LickNote[] の pitch を SVG ポリラインで描画。フレーズカラー #FF6B9D、選択時は不透明、未選択時は半透明</li>
   <li><strong>折りたたみ時</strong>: 選択中リックのID + ▶/■ + 8va + Hi + ✕ ボタンをインライン表示。未選択時は「クリックで展開」ヒント</li>
   <li><strong>8va ボタン</strong>: 同一インスタンス内でオクターブ上に移動。音域が広いフレーズでプール内に収まらない場合は disabled</li>
-  <li><strong>Hi ボタン</strong>: ハイポジションインスタンスに切替。インスタンスが1つしかないポジションでは disabled。8va と独立動作（最大4通りの位置）</li>
+  <li><strong>Hi ボタン</strong>: ハイポジションインスタンスに切替。Hi=OFF は最低フレットインスタンスを優先（カバレッジ&gt;0なら）、Hi=ON は最高フレットインスタンスを選択（対称設計）。インスタンスが1つしかないポジションでは disabled。8va と独立動作（最大4通りの位置）</li>
   <li>リック選択時に指板にフレーズ曲線を即時表示 + 自動再生</li>
   <li>分析パネル (PhraseAnalysisPanel) はそのまま動作（度数/インターバル/機能ラベル）</li>
 </ul>
@@ -1278,12 +1278,12 @@ GeneratedPhrase
   <tr><th>関数</th><th>責務</th></tr>
   <tr><td>loadLickDB()</td><td>fetch('/licks.json') + キャッシュ</td></tr>
   <tr><td>transposeLick()</td><td>ピッチ値を移調</td></tr>
-  <tr><td>mapLickToFretboard()</td><td>MIDI pitch → (stringIdx, fret) マッピング。弦選択は複合スコア (弦距離×10 + フレット距離) で評価し、最初の音は中間弦 (G/D) を優先</td></tr>
+  <tr><td>mapLickToFretboard()</td><td>MIDI pitch → (stringIdx, fret) マッピング。弦選択は複合スコア (弦距離×10 + フレット距離) で評価。最初の音はプールのフレット重心にバイアスし、ポジション外への飛びを防止</td></tr>
   <tr><td>lickToGeneratedPhrase()</td><td>LickEntry → GeneratedPhrase 変換</td></tr>
   <tr><td>inferModeFromLick()</td><td>ピッチクラスからモード推定 (単一ベスト)</td></tr>
   <tr><td>inferModeCandidates()</td><td>重み付きスコアで最大3モード候補を返す</td></tr>
   <tr><td>findBestPositionForLick()</td><td>最適ポジション選択。各インスタンスを個別評価し、リック音域が完全に収まるインスタンスに +2 ボーナス</td></tr>
-  <tr><td>selectBestInstance()</td><td>ポジション内の最適インスタンス選択。カバー率 + 音域包含で評価し、リック音が異なるオクターブのインスタンスにマッピングされるのを防止</td></tr>
+  <tr><td>selectBestInstance()</td><td>ポジション内のインスタンス選択。Hi=OFF: 最低フレットインスタンス優先（カバレッジ&gt;0なら）、Hi=ON: 最高フレットインスタンス。オクターブ検証範囲: <code>OCTAVE_SHIFTS = [0, -12, 12, -24, 24]</code></td></tr>
   <tr><td>buildLickContext()</td><td>全パイプライン一括実行。8音スケール (dim W-H / H-W) にも対応 (<code>generateDimPositions</code> を使用)。省略可能な <code>overrideTransposeSemitones</code> パラメータで移調量を上書き可能</td></tr>
   <tr><td>getTransposeSemitones()</td><td>移調量計算</td></tr>
   <tr><td>detectIiVPattern()</td><td>コード配列と現在インデックスを受け取り、次コードとのルート音程が P5 (7半音) かつ品質が ii-V に対応するペアを検出。Major ii-V (m7→dom7) と Minor ii-V (m7♭5→dom7) を区別</td></tr>
