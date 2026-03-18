@@ -13,7 +13,7 @@ parse_drum_patterns.py の出力 (drum-patterns.generated.json) から推奨 WAV
   scripts/data/drum_samples_manifest.json — 分割スクリプト用マニフェスト
 
 ワークフロー:
-  1. python scripts/parse_drum_patterns.py scripts/data/export_drums.mid
+  1. python scripts/parse_drum_patterns.py scripts/output/export_drums.mid
   2. python scripts/generate_drum_sample_midi.py
   3. Cubase: drum_samples.mid をドラム VSTi トラックにインポート → ソロ → オーディオミックスダウン
   4. python scripts/split_drum_samples.py scripts/data/drum_samples_rendered.wav

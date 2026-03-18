@@ -881,7 +881,7 @@ actualBeats = (beatWidth / sumOfBeatWidths) * 4</pre>
 
 <p><strong>ワークフロー</strong>:</p>
 <pre><code># 1. DAW でマルチトラック MIDI 書き出し (トラック名=スタイル名、8小節×N パターン)
-python scripts/parse_drum_patterns.py scripts/data/export_drums.mid
+python scripts/parse_drum_patterns.py scripts/output/export_drums.mid
 
 # 2. パーサーが推奨 WAV ファイル一覧を表示 → DAW で VSTi の各パッドを推奨 vel で録音
 #    → public/drums/{kitName}/ に配置
@@ -1454,7 +1454,7 @@ interface Progression {
 
 <h3>使い方</h3>
 <pre><code># マルチトラック MIDI (推奨) — トラック名がファイル名規約に従う
-python scripts/parse_licks.py scripts/data/export_licks.mid
+python scripts/parse_licks.py scripts/output/export_licks.mid
 
 # 個別ファイル / ディレクトリ
 python scripts/parse_licks.py scripts/data/midi/licks/parker_dom7_b1.mid

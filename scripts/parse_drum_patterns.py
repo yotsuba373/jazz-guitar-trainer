@@ -4,7 +4,7 @@ MIDI ドラムパターン → JSON パーサー。
 
 2つの入力モード:
   A) マルチトラック MIDI (推奨):
-     python scripts/parse_drum_patterns.py scripts/data/export_drums.mid
+     python scripts/parse_drum_patterns.py scripts/output/export_drums.mid
      → トラック名 = スタイル名、8小節ごとに自動分割
 
   B) 個別ファイル:
