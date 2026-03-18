@@ -6,6 +6,11 @@ import { loadSamplers } from '../utils/sampler';
 
 export interface AudioHandle { stop(): void; }
 
+export interface DrumAudioHandle extends AudioHandle {
+  /** 未来のスケジュール済みヒットのみキャンセル。再生中の音は自然減衰させる */
+  letRing(): void;
+}
+
 export function stopHandle(ref: MutableRefObject<AudioHandle | null>): void {
   ref.current?.stop();
   ref.current = null;
@@ -14,6 +19,16 @@ export function stopHandle(ref: MutableRefObject<AudioHandle | null>): void {
 export function stopHandleArray(ref: MutableRefObject<AudioHandle[]>): void {
   ref.current.forEach(h => { try { h.stop(); } catch { /* already stopped */ } });
   ref.current = [];
+}
+
+/** コード遷移時にドラムを自然減衰させる。DrumAudioHandle なら letRing、そうでなければ stop */
+export function letRingDrums(ref: MutableRefObject<AudioHandle | null>): void {
+  if (ref.current && 'letRing' in ref.current) {
+    (ref.current as DrumAudioHandle).letRing();
+  } else {
+    ref.current?.stop();
+  }
+  ref.current = null;
 }
 
 export function useAudioContext(volumes: {

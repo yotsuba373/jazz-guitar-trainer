@@ -355,7 +355,7 @@
     <li><strong>カウントイン</strong> — 再生開始前に1-2小節クリック、サイクル切替 (2小節→OFF→1小節→2小節)、音量調節可、アウフタクト対応</li>
     <li><strong>小節ループ</strong> — コード譜面上で小節を選択してループ再生 (単一/範囲)、オレンジ下線ハイライト</li>
     <li><strong>表示倍率スライダー</strong> — 画面右下固定、CSS zoom で100-150% (1%刻み)、リセットボタン付き</li>
-    <li><strong>ドラムパターン</strong> — Hydrogen GM / カスタム WAV ドラム (ride/hihat/kick/snare)。MIDI パターン DB 対応 (DAW 録音→パーサー→JSON→ランダム選択)、フォールバック時は iReal Pro 風アルゴリズム生成 (フェザリング、ゴースト、コンピング、ヒューマナイゼーション)、スウィング対応、メトロノームとの切替</li>
+    <li><strong>ドラムパターン</strong> — Hydrogen GM / カスタム WAV ドラム (ride/hihat/kick/snare)。MIDI パターン DB 対応 (DAW 録音→パーサー→JSON→ランダム選択)、フォールバック時は iReal Pro 風アルゴリズム生成 (フェザリング、ゴースト、コンピング、ヒューマナイゼーション)、スウィング対応、メトロノームとの切替、コード遷移時の自然減衰 (letRing)</li>
   </ul>
 </div>
 
@@ -902,6 +902,7 @@ npm run dev</code></pre>
   <li><strong>スウィング対応</strong>: <code>swingEnabled</code> 時はライド skip note・スネアコンピングにもスウィングが適用</li>
   <li><strong>メトロノームと排他</strong>: ドラムパターン有効時はメトロノームのクリック音は無効化</li>
   <li><strong>音量制御</strong>: メトロノームと同じ <code>metVolume</code> スライダーで音量調節</li>
+  <li><strong>自然減衰 (letRing)</strong>: コード遷移時、ライドシンバル等の再生中の音を即座にカットせず自然に減衰させる。未来にスケジュール済みのヒットのみキャンセルし、既に発音された音はそのまま残る。同ピッチの重複防止のため、新パターンのヒットが旧パターンの同ピッチ音を自動的に置き換える (voice stealing)。停止ボタン・モード切替時は全音を即座に停止</li>
 </ul>
 
 <h4>コンピング設定ファイル (<code>public/comp-config.json</code>)</h4>

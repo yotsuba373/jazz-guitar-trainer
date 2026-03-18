@@ -67,7 +67,7 @@ src/
 │   ├── chordForms.ts                — findVoicingsInPosition(), VOICING_TEMPLATES, formatVoicingLabel()
 │   ├── sampler.ts                   — loadSamplers(), getSamplers(), buildJazzPianoVoicing(), playSmplrPianoComp() — smplr SoundFont サンプラー + ジャズピアノボイシング
 │   ├── walkingBass.ts               — generateBassLine(), playSmplrBassLine() — ウォーキングベース生成 + smplr acoustic_bass 再生 (スタイル別パターン対応)
-│   ├── drumPatterns.ts              — generateSwingDrumPattern(), generateDrumPattern(), playDrumPattern(), loadDrumSampler() — スタイル別ドラムパターン生成 (Swing/Bossa/Ballad/Latin) + Hydrogen GM / カスタム WAV ドラム再生。設定フィールド: prng (シード), drumSwingAmount, ghost.tripletGrid, comping.slots
+│   ├── drumPatterns.ts              — generateSwingDrumPattern(), generateDrumPattern(), playDrumPattern(), loadDrumSampler() — スタイル別ドラムパターン生成 (Swing/Bossa/Ballad/Latin) + Hydrogen GM / カスタム WAV ドラム再生。設定フィールド: prng (シード), drumSwingAmount, ghost.tripletGrid, comping.slots。DrumAudioHandle: stop() (全停止) + letRing() (自然減衰) + voice stealing (lastHitByPitch)
 │   ├── drumPatternDB.ts             — loadDrumPatternDB(), getDrumPatternDB(), loadDrumConfig(), getDrumConfig() — MIDI ドラムパターン DB ロード (public/drum-patterns.json) + ドラム設定 JSON ロード (configLoader.ts 経由)。DrumConfig に prng, drumSwingAmount, ghost.tripletGrid, comping.slots フィールド追加
 │   ├── configLoader.ts              — 汎用 JSON コンフィグローダー factory (deepMerge, createConfigLoader) + 全設定型定義 (DrumConfig/CompConfig/BassConfig/PianoConfig/AudioConfig)
 │   ├── compPatterns.ts              — generateCompPattern() — スタイル別コンピングリズムパターン生成 (Charleston, Bossa, Ballad, Latin)
@@ -500,7 +500,7 @@ Footer
 - 楽器選択 (ギター/サックス): Web Audio API リアルタイム合成、フレーズ再生+指板クリック共通、localStorage 永続化
 - **SoundFont ピアノコンピング** (smplr): acoustic_grand_piano SoundFont によるリアルなジャズピアノコンピング。`buildJazzPianoVoicing()` でコード品質別に LH(Root+5th) + RH(3rd+7th シェルボイシング) を自動生成。初回アクセス時に非同期ロード、ロード中はスピナー表示、ロード前は既存 EP にフォールバック。`stopId` でコードごとに voice を分離 (同一 MIDI ノート連続の音欠け防止) + 個別 stop 関数で事前スケジュール済みノートの確実なキャンセル
 - **ウォーキングベース** (smplr): acoustic_bass SoundFont でコード進行に合わせたベースラインを自動生成。`generateBassLine()` がコード品質・拍数・次コードルートからライン生成 (1拍=ルート、2拍=ルート+アプローチ、3-4拍=ルート→3rd/5th→5th/8va→半音アプローチ)。ミキサーにベースチャンネル (音量+ミュート) 追加
-- **ドラムパターン** (smplr Sampler + Hydrogen GM): アコースティックドラム録音 (ライド/HH/キック/スネア、各5段階ベロシティレイヤー) による iReal Pro 風有機的ジャズドラム。Swing: キック全拍フェザリング (vel 35-70) + ライドバックビートアクセント + スネアゴーストノート (確率的, vel 20-50) + スネアコンピング (vel 60-100) + ベロシティヒューマナイゼーション (seeded PRNG で小節ごとバリエーション)。`rhythmMode` でメトロノーム/ドラム排他切替、音量スライダー共用 (`metVolume`)。スウィング量・テンポ補正対応。カウントイン・プレビュー再生は常にメトロノームクリック
+- **ドラムパターン** (smplr Sampler + Hydrogen GM): アコースティックドラム録音 (ライド/HH/キック/スネア、各5段階ベロシティレイヤー) による iReal Pro 風有機的ジャズドラム。Swing: キック全拍フェザリング (vel 35-70) + ライドバックビートアクセント + スネアゴーストノート (確率的, vel 20-50) + スネアコンピング (vel 60-100) + ベロシティヒューマナイゼーション (seeded PRNG で小節ごとバリエーション)。`rhythmMode` でメトロノーム/ドラム排他切替、音量スライダー共用 (`metVolume`)。スウィング量・テンポ補正対応。カウントイン・プレビュー再生は常にメトロノームクリック。**自然減衰**: コード遷移時は `letRing()` で未来ヒットのみキャンセルし再生中の音は自然減衰、ヒットごとユニーク stopId + `lastHitByPitch` で同ピッチ voice stealing (smplr の `stop({stopId,time})` で旧ボイスを新ヒット開始時に停止予約)
 - **バッキングスタイル** (4種): Swing / Bossa / Ballad / Latin。スタイルに応じてコンピングリズム・ベースライン・ドラムパターンを一括切替。Swing=Charlestonコンピング+4フィールウォーキングベース+スウィングライド、Bossa=シンコペーションコンピング+2フィールベース+クロススティック、Ballad=全音符コンピング+2フィールベース+ソフトライド、Latin=モントゥーノ風コンピング+トゥンバオベース+ストレート8thライド。`backingStyle` を localStorage 永続化、ミキサーで選択
 - コードストラム: エレピ音 (Sine加算合成, 2nd/3rd倍音)
 - スウィングモード: 多次元スウィング (タイミング+ダイナミクス+アーティキュレーション)、0-100%連続制御、テンポ補正 (>200BPM)、PhrasePath視覚同期、PianoRollはストレート表示、localStorage永続化

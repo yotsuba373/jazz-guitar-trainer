@@ -1,6 +1,6 @@
 import { Sampler } from 'smplr';
 import type { BackingStyle } from '../types';
-import type { AudioHandle } from '../hooks/useAudioContext';
+import type { DrumAudioHandle } from '../hooks/useAudioContext';
 import { swingBeatStart, swingVolumeMult } from './swing';
 import { getDrumPatternDB, getDrumConfig, findNearestVelocity } from './drumPatternDB';
 import type { SampleMap } from './drumPatternDB';
@@ -477,13 +477,22 @@ export function generateDrumPattern(
 // Playback
 // ---------------------------------------------------------------------------
 
-let drumIdCounter = 0;
+let drumHitCounter = 0;
+
+// ピッチごとに最新の stopId を追跡 (cross-pattern voice stealing)
+// 新ヒット発音時に同ピッチの旧ボイスを停止 → 重複蓄積を防止
+const lastHitByPitch = new Map<string, { stopId: string; sampler: Sampler }>();
 
 /**
  * 2つの Sampler でアコースティックドラムパターン再生。
- * メタル楽器とボディ楽器を別チャンネルで最適化。
+ *
+ * - 各ヒットにユニーク stopId を付与 → 個別に停止/残響可能
+ * - voice stealing: 同ピッチの旧ボイスを新ヒット開始時刻に停止予約
+ * - stop(): 全ヒット即停止 (停止ボタン/モード切替)
+ * - letRing(): 未来のヒットのみキャンセル、再生中の音は自然減衰 (コード遷移)
  */
 export function playDrumPattern(
+  ctx: AudioContext,
   samplers: DrumSamplerSet,
   beats: number,
   globalBeatOffset: number,
@@ -491,18 +500,19 @@ export function playDrumPattern(
   bpm: number,
   swingAmount: number,
   style: BackingStyle = 'medium-swing',
-): AudioHandle {
+): DrumAudioHandle {
   const pattern = generateDrumPattern(beats, globalBeatOffset, swingAmount, bpm, style);
   const beatSec = 60 / bpm;
-  const stopId = `drums-${++drumIdCounter}`;
 
   const customSampler = samplers.customByStyle[style];
   const sampleMap = getDrumPatternDB()?.samples?.[style];
   const keyMap = samplers.keyMapByStyle[style];
-  const stopFns: (() => void)[] = [];
+  // 各ヒットの stopId + 時刻を記録 (letRing/stop 用)
+  const scheduledHits: { stopId: string; sampler: Sampler; time: number }[] = [];
   for (const hit of pattern) {
     let sampler: Sampler;
     let noteName: string;
+    let pitchKey: string;  // voice stealing 用キー
 
     if (hit.pitch != null && customSampler && sampleMap && keyMap) {
       // ピッチベース: スタイル別カスタム WAV Sampler (最寄りベロシティ)
@@ -513,6 +523,7 @@ export function playDrumPattern(
       if (!smplrKey) continue;
       sampler = customSampler;
       noteName = smplrKey;
+      pitchKey = `custom_${hit.pitch}`;
     } else if (hit.role) {
       const layerIdx = velocityToLayer(hit.velocity);
       // ロールベース: Hydrogen GM
@@ -520,6 +531,7 @@ export function playDrumPattern(
       if (!noteNames) continue;
       noteName = noteNames[layerIdx];
       sampler = METAL_ROLES.has(hit.role) ? samplers.metal : samplers.body;
+      pitchKey = `gm_${hit.role}`;
     } else {
       continue;
     }
@@ -533,13 +545,25 @@ export function playDrumPattern(
       continue;
     }
     try {
-      const stop = sampler.start({
+      // ヒットごとにユニーク stopId → 個別停止が可能
+      const hitStopId = `dh-${++drumHitCounter}`;
+
+      // 同ピッチの旧ボイスを新ヒット開始時刻で停止予約 (voice stealing)
+      const prev = lastHitByPitch.get(pitchKey);
+      if (prev) {
+        try { prev.sampler.stop({ stopId: prev.stopId, time: noteTime }); } catch { /* ignore */ }
+      }
+
+      sampler.start({
         note: noteName,
         velocity: noteVel,
         time: noteTime,
-        stopId,
+        stopId: hitStopId,
       });
-      stopFns.push(stop);
+      scheduledHits.push({ stopId: hitStopId, sampler, time: noteTime });
+
+      // 自身を最新ボイスとして登録
+      lastHitByPitch.set(pitchKey, { stopId: hitStopId, sampler });
     } catch (e) {
       console.warn(`[drums] start failed: note=${noteName} vel=${noteVel} time=${noteTime}`, e);
     }
@@ -547,10 +571,18 @@ export function playDrumPattern(
 
   return {
     stop: () => {
-      stopFns.forEach(fn => { try { fn(); } catch { /* ignore */ } });
-      try { samplers.metal.stop({ stopId }); } catch { /* ignore */ }
-      try { samplers.body.stop({ stopId }); } catch { /* ignore */ }
-      try { customSampler?.stop({ stopId }); } catch { /* ignore */ }
+      for (const h of scheduledHits) {
+        try { h.sampler.stop({ stopId: h.stopId }); } catch { /* ignore */ }
+      }
+    },
+    letRing: () => {
+      // 未来のヒットのみキャンセル (再生中の音は自然減衰)
+      const now = ctx.currentTime;
+      for (const h of scheduledHits) {
+        if (h.time > now + 0.03) {
+          try { h.sampler.stop({ stopId: h.stopId }); } catch { /* ignore */ }
+        }
+      }
     },
   };
 }

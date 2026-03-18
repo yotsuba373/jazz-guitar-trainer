@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import type { GeneratedPhrase, Progression, LickDB } from '../types';
 import type { useAudioContext } from './useAudioContext';
-import { stopHandle, stopHandleArray, type AudioHandle } from './useAudioContext';
+import { stopHandle, stopHandleArray, letRingDrums, type AudioHandle } from './useAudioContext';
 import { useTimer } from './useTimer';
 import {
   playClick, playChordStrum, schedulePhrase,
@@ -187,7 +187,7 @@ export function useAutoPlay(params: AutoPlayParams) {
           const customSampler = drumSampler.customByStyle[audio.backingStyleRef.current];
           if (customSampler) customSampler.output.setVolume(rhythmVol * 127);
           drumsHandle = playDrumPattern(
-            drumSampler, chordBeats, globalBeatOffset, startAt, bpm, swAmt,
+            ctx, drumSampler, chordBeats, globalBeatOffset, startAt, bpm, swAmt,
             audio.backingStyleRef.current,
           );
         }
@@ -272,7 +272,7 @@ export function useAutoPlay(params: AutoPlayParams) {
       cancelPendingNext();
       stopHandle(activeStrumRef);
       stopHandle(activeBassRef);
-      stopHandle(activeDrumsRef);
+      letRingDrums(activeDrumsRef);
       stopHandle(activePhraseStopRef);
       stopSongMetronome();
       const cumBeats = computeCumBeats(seq, playPosRef.current);
@@ -354,7 +354,7 @@ export function useAutoPlay(params: AutoPlayParams) {
 
       stopHandle(activeStrumRef);
       stopHandle(activeBassRef);
-      stopHandle(activeDrumsRef);
+      letRingDrums(activeDrumsRef);
       stopHandle(activePhraseStopRef);
       stopSongMetronome();
       activeStrumRef.current = pendingNextRef.current?.strumHandle ?? null;
