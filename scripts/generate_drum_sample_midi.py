@@ -36,7 +36,7 @@ OUTPUT_MANIFEST = os.path.join(SCRIPT_DIR, 'data', 'drum_samples_manifest.json')
 NOTE_NAMES = ['c', 'c#', 'd', 'd#', 'e', 'f', 'f#', 'g', 'g#', 'a', 'a#', 'b']
 
 # 各ノート間の間隔 (秒)。シンバル残響を含むのに十分な長さ
-SLOT_DURATION = 15.0
+SLOT_DURATION = 16.0
 
 # ノートの発音長 (秒)。短めに。実際の音は VSTi の減衰で決まる
 NOTE_DURATION = 0.1
