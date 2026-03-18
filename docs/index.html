@@ -355,7 +355,7 @@
     <li><strong>カウントイン</strong> — 再生開始前に1-2小節クリック、サイクル切替 (2小節→OFF→1小節→2小節)、音量調節可、アウフタクト対応</li>
     <li><strong>小節ループ</strong> — コード譜面上で小節を選択してループ再生 (単一/範囲)、オレンジ下線ハイライト</li>
     <li><strong>表示倍率スライダー</strong> — 画面右下固定、CSS zoom で100-150% (1%刻み)、リセットボタン付き</li>
-    <li><strong>ドラムパターン</strong> — Hydrogen GM アコースティックドラム (ride/hihat/kick/snare) による iReal Pro 風有機的ジャズドラム。キック全拍フェザリング、スネアゴーストノート+コンピング、ベロシティヒューマナイゼーション (seeded PRNG)、スウィング対応、メトロノームとの切替</li>
+    <li><strong>ドラムパターン</strong> — Hydrogen GM / カスタム WAV ドラム (ride/hihat/kick/snare)。MIDI パターン DB 対応 (DAW 録音→パーサー→JSON→ランダム選択)、フォールバック時は iReal Pro 風アルゴリズム生成 (フェザリング、ゴースト、コンピング、ヒューマナイゼーション)、スウィング対応、メトロノームとの切替</li>
   </ul>
 </div>
 
@@ -794,9 +794,67 @@ actualBeats = (beatWidth / sumOfBeatWidths) * 4</pre>
   メトロノーム音量スライダーで音量を 0 にすることでミュート可能です。</p>
 </div>
 
-<h3>ドラムパターン (<code>drumPatterns.ts</code>)</h3>
-<p><strong>Hydrogen GM アコースティックドラム</strong> (ライド/HH/キック/スネア、各5段階ベロシティレイヤー) による
-iReal Pro 風の有機的なジャズドラムパターン。seeded PRNG (Mulberry32) で小節ごとに再現可能なバリエーションを生成。</p>
+<h3>ドラムパターン (<code>drumPatterns.ts</code> + <code>drumPatternDB.ts</code>)</h3>
+<p>2層構造のドラムパターンシステム:</p>
+<ol>
+  <li><strong>MIDI パターン DB + カスタム WAV</strong> (優先): DAW で打ち込んだ4小節 MIDI → <code>parse_drum_patterns.py</code> → JSON DB → ランタイムで4小節単位でランダム選択。カスタム WAV でピッチ直結再生</li>
+  <li><strong>アルゴリズム生成</strong> (フォールバック): DB がない場合、または WAV 未配置の場合は iReal Pro 風の有機的パターンを Hydrogen GM サンプルで生成 (Mulberry32 PRNG)</li>
+</ol>
+
+<h4>MIDI ドラムパターンパーサー (<code>scripts/parse_drum_patterns.py</code>)</h4>
+
+<p>DAW で打ち込んだドラムパターンを JSON DB に変換するパーサー。</p>
+
+<table>
+  <tr><th>項目</th><th>仕様</th></tr>
+  <tr><td>入力ファイル</td><td><code>scripts/data/midi/drums/{style}_{番号}.mid</code> (例: <code>swing_1.mid</code>, <code>bossa_2.mid</code>)</td></tr>
+  <tr><td>長さ</td><td><strong>4小節 (16拍)</strong></td></tr>
+  <tr><td>拍子</td><td>4/4</td></tr>
+  <tr><td>BPM</td><td>任意 (パーサーが MIDI テンポを読み取り、ビート相対位置に正規化。テンポチェンジ非対応 — 先頭テンポのみ使用)</td></tr>
+  <tr><td>トラック</td><td>ドラムトラック (ch10 / ドラムフラグ ON)</td></tr>
+  <tr><td>量子化</td><td>120グリッド (8分/16分/三連符を正確表現)</td></tr>
+  <tr><td>ベロシティ</td><td>1-127 そのまま保持</td></tr>
+  <tr><td>出力</td><td><code>scripts/data/drum-patterns.json</code> → <code>public/drum-patterns.json</code> に自動コピー</td></tr>
+  <tr><td>依存</td><td><code>pip install pretty_midi</code></td></tr>
+</table>
+
+<p><strong>ピッチベース設計</strong>: MIDI ノート番号をそのまま保存。楽器ロール (ride/kick 等) のマッピングは不要。
+パターンの MIDI ピッチがそのままカスタム WAV のファイル名に対応するため、VSTi の楽器配置をプログラムが知る必要がない。</p>
+
+<p><strong>再生時のパターン選択</strong>:</p>
+<pre><code>4小節パターン: [m0, m1, m2, m3]
+
+再生: 小節 0  1  2  3 | 4  5  6  7 | 8 ...
+      ├─ pattern A ──┤├─ pattern B ──┤├─ ...
+      4小節ごとに seeded PRNG でランダム選択
+      小節内インデックス (0-3) で該当小節を取り出し</code></pre>
+
+<h4>カスタム WAV サンプル (任意)</h4>
+
+<p>DAW の VSTi ドラム音源から書き出した WAV をそのまま使用可能。</p>
+
+<table>
+  <tr><th>項目</th><th>仕様</th></tr>
+  <tr><td>配置先</td><td><code>public/drums/</code></td></tr>
+  <tr><td>命名規約</td><td><code>{noteName}_v{velocity}.wav</code> (例: <code>d#2_v25.wav</code>, <code>c2_v127.wav</code>)</td></tr>
+  <tr><td>ノート名表記</td><td>C3=60 convention (Cubase 等標準)</td></tr>
+  <tr><td>ベロシティ値</td><td>25 (pp) / 50 (mp) / 80 (mf) / 105 (f) / 127 (ff) — <code>velocityToLayer()</code> の閾値に対応</td></tr>
+  <tr><td>構成</td><td>使用ピッチ × 5段階ベロシティ (パーサーが必要ファイル一覧を出力)</td></tr>
+  <tr><td>検出</td><td>ドラムパターン DB のピッチから自動検出。WAV がなければ Hydrogen GM にフォールバック</td></tr>
+  <tr><td>音声加工</td><td>なし (ユーザーの音作りをそのまま使用)</td></tr>
+</table>
+
+<p><strong>WAV 書き出し手順</strong>: DAW で VSTi のドラムパッドを1打ずつ、ベロシティ 25/50/80/105/127 で録音 → オーディオミックスダウン (WAV, 44100Hz)。
+パーサー実行時に必要ファイル一覧が自動出力される。</p>
+
+<p><strong>ワークフロー</strong>:</p>
+<pre><code># 1. MIDI パターン配置後
+python scripts/parse_drum_patterns.py
+
+# 2. WAV は public/drums/ に配置するだけ (パーサー不要)
+
+# 3. 開発サーバーで確認
+npm run dev</code></pre>
 
 <table>
   <tr><th>楽器</th><th>パターン</th><th>ベロシティ</th></tr>

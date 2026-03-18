@@ -28,3 +28,7 @@ __pycache__/
 
 # Lick DB (generated from MIDI, user-specific)
 public/licks.json
+
+# Drum pattern DB + custom WAV samples (user-specific)
+public/drum-patterns.json
+public/drums/

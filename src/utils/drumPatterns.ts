@@ -2,6 +2,7 @@ import { Sampler } from 'smplr';
 import type { BackingStyle } from '../types';
 import type { AudioHandle } from '../hooks/useAudioContext';
 import { swingBeatStart, swingVolumeMult } from './swing';
+import { getDrumPatternDB } from './drumPatternDB';
 
 // ---------------------------------------------------------------------------
 // Hydrogen GM acoustic drum sample mapping
@@ -76,18 +77,56 @@ const METAL_ROLES = new Set(['ride', 'hihat']);
 // ---------------------------------------------------------------------------
 
 export interface DrumSamplerSet {
-  metal: Sampler;  // ライド/HH
-  body: Sampler;   // キック/スネア
+  metal: Sampler;           // ライド/HH (Hydrogen GM)
+  body: Sampler;            // キック/スネア (Hydrogen GM)
+  custom?: Sampler;         // カスタム WAV (ピッチベース、あれば優先)
 }
 
 let cached: DrumSamplerSet | null = null;
 let loadPromise: Promise<DrumSamplerSet> | null = null;
+
+// ---------------------------------------------------------------------------
+// カスタム WAV サンプル: ピッチベース命名 ({noteName}_v{velocity}.wav)
+// ---------------------------------------------------------------------------
+
+/** ベロシティレイヤー値 (velocityToLayer の閾値に対応) */
+const LAYER_VELOCITIES = [25, 50, 80, 105, 127];
+
+const NOTE_NAMES = ['c', 'c#', 'd', 'd#', 'e', 'f', 'f#', 'g', 'g#', 'a', 'a#', 'b'];
+
+/**
+ * MIDI ノート番号 → ファイル名用ノート名。
+ * オクターブ表記は C3=60 (Cubase 等の標準)。
+ * 例: 51 → 'd#2', 38 → 'd1', 36 → 'c1'
+ */
+export function midiToFileName(pitch: number): string {
+  const name = NOTE_NAMES[pitch % 12];
+  const octave = Math.floor(pitch / 12) - 2; // C3=60 convention: 60/12=5, 5-2=3 → C3 ✓
+  return `${name}${octave}`;
+}
+
+/**
+ * ドラムパターン DB から全ユニークピッチを抽出し、
+ * ピッチベースのカスタム Sampler 用 buffers マップを構築。
+ * キー: "p{pitch}_L{layer}" (例: "p51_L0", "p38_L2")
+ */
+function buildPitchBasedBuffers(pitches: Set<number>): Record<string, string> {
+  const buffers: Record<string, string> = {};
+  for (const pitch of pitches) {
+    const name = midiToFileName(pitch);
+    for (let i = 0; i < LAYER_VELOCITIES.length; i++) {
+      buffers[`p${pitch}_L${i}`] = `/drums/${name}_v${LAYER_VELOCITIES[i]}.wav`;
+    }
+  }
+  return buffers;
+}
 
 /** Hydrogen GM アコースティックドラム Sampler を非同期ロード (キャッシュ) */
 export async function loadDrumSampler(ctx: AudioContext): Promise<DrumSamplerSet> {
   if (cached) return cached;
   if (loadPromise) return loadPromise;
   loadPromise = (async () => {
+    // Hydrogen GM (常にロード — フォールバック用)
     const metal = new Sampler(ctx, {
       buffers: METAL_SAMPLES,
       detune: 0,
@@ -95,12 +134,42 @@ export async function loadDrumSampler(ctx: AudioContext): Promise<DrumSamplerSet
     });
     const body = new Sampler(ctx, {
       buffers: BODY_SAMPLES,
-      detune: -200,        // 1全音下げで太く温かい音
-      decayTime: 0.8,      // 長めの減衰でジャズバスドラムの響き
-      lpfCutoffHz: 2000,   // キック/スネアの存在感を残しつつ温かみ
+      detune: -200,
+      decayTime: 0.8,
+      lpfCutoffHz: 2000,
     });
     await Promise.all([metal.load, body.load]);
-    cached = { metal, body };
+
+    // カスタム WAV を試行: DB からピッチ収集 → WAV 存在チェック
+    let custom: Sampler | undefined;
+    try {
+      const db = getDrumPatternDB();
+      if (db) {
+        const pitches = new Set<number>();
+        for (const patterns of Object.values(db)) {
+          for (const p of patterns) {
+            for (const measure of p.measures) {
+              for (const h of measure) {
+                if (h.pitch != null) pitches.add(h.pitch);
+              }
+            }
+          }
+        }
+        if (pitches.size > 0) {
+          // 1つ目のピッチで存在確認
+          const testPitch = [...pitches][0];
+          const testFile = `/drums/${midiToFileName(testPitch)}_v${LAYER_VELOCITIES[0]}.wav`;
+          const resp = await fetch(testFile, { method: 'HEAD' });
+          if (resp.ok) {
+            const buffers = buildPitchBasedBuffers(pitches);
+            custom = new Sampler(ctx, { buffers });
+            await custom.load;
+          }
+        }
+      }
+    } catch { /* カスタム WAV なし → Hydrogen GM フォールバック */ }
+
+    cached = { metal, body, custom };
     return cached;
   })();
   return loadPromise;
@@ -116,7 +185,8 @@ export function getDrumSampler(): DrumSamplerSet | null {
 // ---------------------------------------------------------------------------
 
 export interface DrumHit {
-  role: string;       // 'ride' | 'hihat' | 'kick' | 'snare'
+  role?: string;      // アルゴリズム生成: 'ride' | 'hihat' | 'kick' | 'snare' | 'xstick'
+  pitch?: number;     // DB パターン: MIDI ノート番号 (例: 51=ride, 38=snare)
   beatStart: number;  // コード内ビートオフセット (0-based)
   velocity: number;   // 0-127
 }
@@ -292,6 +362,7 @@ function generateLatinDrumPattern(beats: number): DrumHit[] {
 
 /**
  * スタイル別ドラムパターン生成 (ディスパッチ関数)。
+ * DB にパターンがあれば優先、なければアルゴリズム生成にフォールバック。
  */
 export function generateDrumPattern(
   beats: number,
@@ -300,6 +371,23 @@ export function generateDrumPattern(
   bpm: number,
   style: BackingStyle = 'swing',
 ): DrumHit[] {
+  // --- DB パターン優先 (4拍小節 + カスタム WAV 時のみ) ---
+  if (beats === 4) {
+    const db = getDrumPatternDB();
+    const patterns = db?.[style];
+    if (patterns && patterns.length > 0) {
+      const measureIdx = Math.floor(globalBeatOffset / 4);
+      // 4小節ごとにパターンを選択、小節内インデックスで該当小節を取得
+      const patternGroupIdx = Math.floor(measureIdx / 4);
+      const measureInPattern = measureIdx % 4;
+      const rng = mulberry32(patternGroupIdx * 7919 + 42);
+      const idx = Math.floor(rng() * patterns.length);
+      const measure = patterns[idx].measures[measureInPattern];
+      if (measure && measure.length > 0) return measure;
+    }
+  }
+
+  // --- フォールバック: アルゴリズム生成 ---
   switch (style) {
     case 'bossa':  return generateBossaDrumPattern(beats);
     case 'ballad': return generateBalladDrumPattern(beats);
@@ -335,14 +423,26 @@ export function playDrumPattern(
   const stopFns: (() => void)[] = [];
   for (const hit of pattern) {
     const layerIdx = velocityToLayer(hit.velocity);
-    const noteNames = ROLE_BASE[hit.role];
-    if (!noteNames) continue;
-    const noteName = noteNames[layerIdx];
-    const sampler = METAL_ROLES.has(hit.role) ? samplers.metal : samplers.body;
+    let sampler: Sampler;
+    let noteName: string;
+
+    if (hit.pitch != null && samplers.custom) {
+      // ピッチベース: カスタム WAV Sampler
+      sampler = samplers.custom;
+      noteName = `p${hit.pitch}_L${layerIdx}`;
+    } else if (hit.role) {
+      // ロールベース: Hydrogen GM
+      const noteNames = ROLE_BASE[hit.role];
+      if (!noteNames) continue;
+      noteName = noteNames[layerIdx];
+      sampler = METAL_ROLES.has(hit.role) ? samplers.metal : samplers.body;
+    } else {
+      continue;
+    }
 
     const stop = sampler.start({
       note: noteName,
-      velocity: hit.velocity, // 音量は output.setVolume() で制御
+      velocity: hit.velocity,
       time: startAt + hit.beatStart * beatSec,
       stopId,
     });
@@ -354,6 +454,7 @@ export function playDrumPattern(
       stopFns.forEach(fn => fn());
       samplers.metal.stop({ stopId });
       samplers.body.stop({ stopId });
+      samplers.custom?.stop({ stopId });
     },
   };
 }

@@ -181,9 +181,10 @@ export default function App() {
   // Reset voicing index when position/mode/root changes
   useEffect(() => { setSelectedVoicingIdx(0); }, [selPosIds, modeIdx, rootName]);
 
-  // Load lick DB on mount
+  // Load lick DB + drum pattern DB on mount
   useEffect(() => {
     loadLickDB().then(db => setLickDB(db)).catch(() => setLickDB(null));
+    import('./utils/drumPatternDB').then(m => m.loadDrumPatternDB());
   }, []);
 
   const deg = mode.degrees;
