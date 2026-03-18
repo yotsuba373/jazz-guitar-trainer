@@ -128,32 +128,22 @@ def scan_wav_files(kit_folder: str) -> dict[int, list[int]]:
     return result
 
 
-def suggest_wav_layers(vels_used: list[int]) -> list[int]:
-    """
-    使用ベロシティの分布から推奨 WAV レイヤーを算出。
-    vel の幅に応じて 1〜5 レイヤーを均等配置。
-    """
-    if not vels_used:
-        return []
-    vel_min = vels_used[0]
-    vel_max = vels_used[-1]
-    spread = vel_max - vel_min
+WAV_VEL_STEP = 8  # 推奨 WAV のベロシティ間隔 (デフォルト)
 
-    if spread < 10:
-        # 狭い範囲 → 1ファイルで十分
-        return [round((vel_min + vel_max) / 2)]
-    elif spread < 30:
-        return [vel_min, vel_max]
-    elif spread < 50:
-        mid = round((vel_min + vel_max) / 2)
-        return [vel_min, mid, vel_max]
-    elif spread < 80:
-        step = spread / 3
-        return [vel_min, round(vel_min + step), round(vel_min + step * 2), vel_max]
-    else:
-        step = spread / 4
-        return [vel_min, round(vel_min + step), round(vel_min + step * 2),
-                round(vel_min + step * 3), vel_max]
+
+def suggest_wav_layers(vel_min: int, vel_max: int, step: int = WAV_VEL_STEP) -> list[int]:
+    """
+    使用ベロシティ範囲から推奨 WAV レイヤーを算出。
+    固定ステップで刻み、最大誤差 ±step/2 以内。
+    常に vel_min と vel_max を含む。
+    """
+    if vel_min == vel_max:
+        return [vel_min]
+
+    layers = list(range(vel_min, vel_max, step))
+    if layers[-1] != vel_max:
+        layers.append(vel_max)
+    return layers
 
 
 def find_nearest(velocities: list[int], target: int) -> int:
@@ -317,16 +307,20 @@ def print_report(
         kit_styles[kit].append(style)
 
     for kit_folder, styles in sorted(kit_styles.items()):
-        # キット内の全スタイルから pitch×velocity を統合
-        pitch_vels: dict[int, set[int]] = {}
+        # キット内の全スタイルから pitch×velocity を統合 (重複込み=頻度反映)
+        pitch_vels_all: dict[int, list[int]] = {}  # 重複込み (頻度反映、分位数計算用)
+        pitch_vels_unique: dict[int, set[int]] = {}  # ユニーク (範囲表示用)
         for style in styles:
             for p in patterns_db[style]:
                 for m in p['measures']:
                     for h in m:
                         pitch = h['pitch']
-                        if pitch not in pitch_vels:
-                            pitch_vels[pitch] = set()
-                        pitch_vels[pitch].add(h['velocity'])
+                        vel = h['velocity']
+                        if pitch not in pitch_vels_all:
+                            pitch_vels_all[pitch] = []
+                            pitch_vels_unique[pitch] = set()
+                        pitch_vels_all[pitch].append(vel)
+                        pitch_vels_unique[pitch].add(vel)
 
         styles_str = ', '.join(styles)
         wav_map = wav_cache.get(kit_folder, {})
@@ -334,17 +328,18 @@ def print_report(
         print(f'\n--- kit: {kit_folder} -> public/drums/{kit_folder}/ ---')
         print(f'  styles: {styles_str}')
 
-        for pitch in sorted(pitch_vels):
+        for pitch in sorted(pitch_vels_unique):
             name = midi_to_note_name(pitch)
-            vels_used = sorted(pitch_vels[pitch])
-            vel_min = vels_used[0]
-            vel_max = vels_used[-1]
+            vels_unique = sorted(pitch_vels_unique[pitch])
+            vels_freq = sorted(pitch_vels_all[pitch])  # 重複込み昇順
+            vel_min = vels_unique[0]
+            vel_max = vels_unique[-1]
             available = wav_map.get(pitch, [])
 
-            print(f'  MIDI {pitch:3d} ({name}): vel {vel_min}-{vel_max} ({len(vels_used)} values)')
+            print(f'  MIDI {pitch:3d} ({name}): vel {vel_min}-{vel_max} ({len(vels_unique)} unique, {len(vels_freq)} hits)')
 
-            # 推奨 WAV ファイル名を生成
-            recommended = suggest_wav_layers(vels_used)
+            # 推奨 WAV: 固定ステップ
+            recommended = suggest_wav_layers(vel_min, vel_max)
 
             if not available:
                 # WAV 未配置 → 推奨リスト表示
@@ -354,7 +349,7 @@ def print_report(
                 # WAV あり → マッピング表示
                 avail_str = ', '.join(f'{name}_v{v}.wav' for v in available)
                 print(f'    WAV: {avail_str}')
-                for vel in vels_used:
+                for vel in vels_unique:
                     nearest = find_nearest(available, vel)
                     wav_name = f'{name}_v{nearest}.wav'
                     if nearest == vel:
@@ -363,11 +358,11 @@ def print_report(
                         print(f'    vel {vel:3d} -> {wav_name} (nearest, diff={abs(vel-nearest)})')
 
         if not wav_map:
-            print(f'  * WAV 未配置: Hydrogen GM でフォールバック再生')
             total_wavs = sum(
-                len(suggest_wav_layers(sorted(pitch_vels[p])))
-                for p in pitch_vels
+                len(suggest_wav_layers(min(pitch_vels_unique[p]), max(pitch_vels_unique[p])))
+                for p in pitch_vels_unique
             )
+            print(f'  * WAV 未配置: Hydrogen GM でフォールバック再生')
             print(f'  * 推奨ファイル数: {total_wavs}')
 
 
