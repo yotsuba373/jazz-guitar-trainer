@@ -835,9 +835,10 @@ actualBeats = (beatWidth / sumOfBeatWidths) * 4</pre>
 
 <table>
   <tr><th>項目</th><th>仕様</th></tr>
-  <tr><td>配置先</td><td><code>public/drums/</code></td></tr>
+  <tr><td>配置先</td><td><code>public/drums/{style}/</code> (例: <code>public/drums/swing/</code>, <code>public/drums/latin/</code>)</td></tr>
   <tr><td>命名規約</td><td><code>{noteName}_v{velocity}.wav</code> (例: <code>d#2_v25.wav</code>, <code>c2_v127.wav</code>)</td></tr>
   <tr><td>ノート名表記</td><td>C3=60 convention (Cubase 等標準)</td></tr>
+  <tr><td>スタイル別キット</td><td>スタイルごとに異なる VSTi / キットの WAV を配置可能。あるスタイルだけ WAV を用意してもOK (他はフォールバック)</td></tr>
   <tr><td>ベロシティ値</td><td>25 (pp) / 50 (mp) / 80 (mf) / 105 (f) / 127 (ff) — <code>velocityToLayer()</code> の閾値に対応</td></tr>
   <tr><td>構成</td><td>使用ピッチ × 5段階ベロシティ (パーサーが必要ファイル一覧を出力)</td></tr>
   <tr><td>検出</td><td>ドラムパターン DB のピッチから自動検出。WAV がなければ Hydrogen GM にフォールバック</td></tr>

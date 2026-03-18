@@ -77,9 +77,9 @@ const METAL_ROLES = new Set(['ride', 'hihat']);
 // ---------------------------------------------------------------------------
 
 export interface DrumSamplerSet {
-  metal: Sampler;           // ライド/HH (Hydrogen GM)
-  body: Sampler;            // キック/スネア (Hydrogen GM)
-  custom?: Sampler;         // カスタム WAV (ピッチベース、あれば優先)
+  metal: Sampler;                          // ライド/HH (Hydrogen GM)
+  body: Sampler;                           // キック/スネア (Hydrogen GM)
+  customByStyle: Record<string, Sampler>;  // スタイル別カスタム WAV (ピッチベース)
 }
 
 let cached: DrumSamplerSet | null = null;
@@ -106,16 +106,16 @@ export function midiToFileName(pitch: number): string {
 }
 
 /**
- * ドラムパターン DB から全ユニークピッチを抽出し、
  * ピッチベースのカスタム Sampler 用 buffers マップを構築。
  * キー: "p{pitch}_L{layer}" (例: "p51_L0", "p38_L2")
+ * パス: /drums/{style}/{noteName}_v{velocity}.wav
  */
-function buildPitchBasedBuffers(pitches: Set<number>): Record<string, string> {
+function buildPitchBasedBuffers(style: string, pitches: Set<number>): Record<string, string> {
   const buffers: Record<string, string> = {};
   for (const pitch of pitches) {
     const name = midiToFileName(pitch);
     for (let i = 0; i < LAYER_VELOCITIES.length; i++) {
-      buffers[`p${pitch}_L${i}`] = `/drums/${name}_v${LAYER_VELOCITIES[i]}.wav`;
+      buffers[`p${pitch}_L${i}`] = `/drums/${style}/${name}_v${LAYER_VELOCITIES[i]}.wav`;
     }
   }
   return buffers;
@@ -140,13 +140,15 @@ export async function loadDrumSampler(ctx: AudioContext): Promise<DrumSamplerSet
     });
     await Promise.all([metal.load, body.load]);
 
-    // カスタム WAV を試行: DB からピッチ収集 → WAV 存在チェック
-    let custom: Sampler | undefined;
+    // スタイル別カスタム WAV を試行
+    const customByStyle: Record<string, Sampler> = {};
     try {
       const db = getDrumPatternDB();
       if (db) {
-        const pitches = new Set<number>();
-        for (const patterns of Object.values(db)) {
+        // スタイルごとにユニークピッチを収集
+        const pitchesByStyle: Record<string, Set<number>> = {};
+        for (const [style, patterns] of Object.entries(db)) {
+          const pitches = new Set<number>();
           for (const p of patterns) {
             for (const measure of p.measures) {
               for (const h of measure) {
@@ -154,22 +156,30 @@ export async function loadDrumSampler(ctx: AudioContext): Promise<DrumSamplerSet
               }
             }
           }
+          if (pitches.size > 0) pitchesByStyle[style] = pitches;
         }
-        if (pitches.size > 0) {
-          // 1つ目のピッチで存在確認
+
+        // 各スタイルの WAV 存在チェック → Sampler ロード
+        const loadTasks: Promise<void>[] = [];
+        for (const [style, pitches] of Object.entries(pitchesByStyle)) {
           const testPitch = [...pitches][0];
-          const testFile = `/drums/${midiToFileName(testPitch)}_v${LAYER_VELOCITIES[0]}.wav`;
-          const resp = await fetch(testFile, { method: 'HEAD' });
-          if (resp.ok) {
-            const buffers = buildPitchBasedBuffers(pitches);
-            custom = new Sampler(ctx, { buffers });
-            await custom.load;
-          }
+          const testFile = `/drums/${style}/${midiToFileName(testPitch)}_v${LAYER_VELOCITIES[0]}.wav`;
+          loadTasks.push(
+            fetch(testFile, { method: 'HEAD' }).then(async (resp) => {
+              if (resp.ok) {
+                const buffers = buildPitchBasedBuffers(style, pitches);
+                const sampler = new Sampler(ctx, { buffers });
+                await sampler.load;
+                customByStyle[style] = sampler;
+              }
+            }).catch(() => { /* このスタイルの WAV なし → スキップ */ }),
+          );
         }
+        await Promise.all(loadTasks);
       }
     } catch { /* カスタム WAV なし → Hydrogen GM フォールバック */ }
 
-    cached = { metal, body, custom };
+    cached = { metal, body, customByStyle };
     return cached;
   })();
   return loadPromise;
@@ -420,15 +430,16 @@ export function playDrumPattern(
   const beatSec = 60 / bpm;
   const stopId = `drums-${++drumIdCounter}`;
 
+  const customSampler = samplers.customByStyle[style];
   const stopFns: (() => void)[] = [];
   for (const hit of pattern) {
     const layerIdx = velocityToLayer(hit.velocity);
     let sampler: Sampler;
     let noteName: string;
 
-    if (hit.pitch != null && samplers.custom) {
-      // ピッチベース: カスタム WAV Sampler
-      sampler = samplers.custom;
+    if (hit.pitch != null && customSampler) {
+      // ピッチベース: スタイル別カスタム WAV Sampler
+      sampler = customSampler;
       noteName = `p${hit.pitch}_L${layerIdx}`;
     } else if (hit.role) {
       // ロールベース: Hydrogen GM
@@ -454,7 +465,7 @@ export function playDrumPattern(
       stopFns.forEach(fn => fn());
       samplers.metal.stop({ stopId });
       samplers.body.stop({ stopId });
-      samplers.custom?.stop({ stopId });
+      customSampler?.stop({ stopId });
     },
   };
 }

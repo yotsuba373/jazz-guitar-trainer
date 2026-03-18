@@ -186,22 +186,25 @@ def main():
     for key, patterns in sorted(db.items()):
         print(f'  {key}: {len(patterns)} pattern(s)')
 
-    # 全ユニークピッチから必要な WAV ファイル一覧を表示
-    all_pitches: set[int] = set()
-    for patterns in db.values():
+    # スタイル別にユニークピッチから必要な WAV ファイル一覧を表示
+    vel_layers = [25, 50, 80, 105, 127]
+    has_any = False
+    for style, patterns in sorted(db.items()):
+        pitches: set[int] = set()
         for p in patterns:
             for m in p['measures']:
                 for h in m:
-                    all_pitches.add(h['pitch'])
-
-    if all_pitches:
-        vel_layers = [25, 50, 80, 105, 127]
-        print(f'\n--- カスタム WAV サンプル (任意) ---')
-        print(f'以下のファイルを public/drums/ に配置すると VSTi 音源で再生:')
-        for pitch in sorted(all_pitches):
+                    pitches.add(h['pitch'])
+        if not pitches:
+            continue
+        if not has_any:
+            print(f'\n--- カスタム WAV サンプル (任意) ---')
+            has_any = True
+        print(f'\n  public/drums/{style}/')
+        for pitch in sorted(pitches):
             name = midi_to_note_name(pitch)
             files = [f'{name}_v{v}.wav' for v in vel_layers]
-            print(f'  MIDI {pitch:3d} ({name:4s}): {", ".join(files)}')
+            print(f'    MIDI {pitch:3d} ({name:4s}): {", ".join(files)}')
 
 
 if __name__ == '__main__':
