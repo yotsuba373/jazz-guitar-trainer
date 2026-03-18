@@ -23,7 +23,6 @@ export interface DrumPatternDB {
   patterns: Record<string, DrumPatternEntry[]>;
   samples: Record<string, SampleMap>;  // style → SampleMap
   kits: Record<string, string>;        // style → kit フォルダ名
-  gains?: Record<string, number>;      // style → 音量ブースト倍率 (デフォルト 1.0)
 }
 
 let cachedDB: DrumPatternDB | null = null;
@@ -74,3 +73,24 @@ export function clearDrumPatternDBCache(): void {
   cachedDB = null;
   loadAttempted = false;
 }
+
+// ---------------------------------------------------------------------------
+// DrumConfig: 型・デフォルト値・load/get/clear は configLoader.ts で定義
+// drumPatternDB.ts からの後方互換 re-export
+// ---------------------------------------------------------------------------
+
+export type {
+  SamplerOpts,
+  SwingDrumParams,
+  BossaDrumParams,
+  BalladDrumParams,
+  LatinDrumParams,
+  DrumConfig,
+} from './configLoader';
+
+export {
+  DEFAULT_DRUM_CONFIG,
+  loadDrumConfig,
+  getDrumConfig,
+  clearDrumConfigCache,
+} from './configLoader';

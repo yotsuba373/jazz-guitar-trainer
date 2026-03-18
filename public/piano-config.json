@@ -1,0 +1,8 @@
+{
+  "lhBase": 36,
+  "rhBase": 60,
+  "rhRange": { "low": 55, "high": 75 },
+  "duration": 2.0,
+  "velocity": 80,
+  "stagger": 0.012
+}

@@ -9,6 +9,8 @@
  * Swing is applied at playback / animation time only.
  */
 
+import { getAudioConfig } from './configLoader';
+
 /** Clamp value to [lo, hi] */
 function clamp(val: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, val));
@@ -20,7 +22,7 @@ function clamp(val: number, lo: number, hi: number): number {
  */
 function isOffbeatEighth(beatStart: number): boolean {
   const frac = beatStart - Math.floor(beatStart);
-  return Math.abs(frac - 0.5) < 0.08;
+  return Math.abs(frac - 0.5) < getAudioConfig().swing.eighthThreshold;
 }
 
 /**
@@ -28,7 +30,8 @@ function isOffbeatEighth(beatStart: number): boolean {
  */
 function isOffbeatSixteenth(beatStart: number): boolean {
   const frac = beatStart - Math.floor(beatStart);
-  return Math.abs(frac - 0.25) < 0.06 || Math.abs(frac - 0.75) < 0.06;
+  const thr = getAudioConfig().swing.sixteenthThreshold;
+  return Math.abs(frac - 0.25) < thr || Math.abs(frac - 0.75) < thr;
 }
 
 /**
@@ -37,8 +40,9 @@ function isOffbeatSixteenth(beatStart: number): boolean {
  * Based on Friberg & Sundström (2002) research.
  */
 function effectiveAmount(amount: number, bpm: number): number {
-  if (bpm <= 200) return amount;
-  return amount * clamp(1 - (bpm - 200) / 80, 0, 1);
+  const sc = getAudioConfig().swing;
+  if (bpm <= sc.tempoCompThreshold) return amount;
+  return amount * clamp(1 - (bpm - sc.tempoCompThreshold) / sc.tempoCompRange, 0, 1);
 }
 
 /**
@@ -59,26 +63,22 @@ export function swingBeatStart(
   if (duration === 'q' || duration === 't') return beatStart;
 
   const ea = effectiveAmount(amount, bpm);
+  const sc = getAudioConfig().swing;
 
   if (duration === 'e' && isOffbeatEighth(beatStart)) {
-    // Shift offbeat eighth: max shift 0.17 beats (reaches triplet feel at amount=1)
-    return beatStart + ea * 0.17;
+    return beatStart + ea * sc.timing.offbeatEighthShift;
   }
 
   if (duration === 's') {
-    // Sixteenths: proportional repositioning
     const frac = beatStart - Math.floor(beatStart);
-    if (Math.abs(frac - 0.25) < 0.06) {
-      // 2nd sixteenth: slight push
-      return beatStart + ea * 0.04;
+    if (Math.abs(frac - 0.25) < sc.sixteenthThreshold) {
+      return beatStart + ea * sc.timing.sixteenth2ndShift;
     }
-    if (Math.abs(frac - 0.5) < 0.08) {
-      // 3rd sixteenth (offbeat): same as eighth offbeat
-      return beatStart + ea * 0.17;
+    if (Math.abs(frac - 0.5) < sc.eighthThreshold) {
+      return beatStart + ea * sc.timing.offbeatEighthShift;
     }
-    if (Math.abs(frac - 0.75) < 0.06) {
-      // 4th sixteenth: proportional
-      return beatStart + ea * 0.08;
+    if (Math.abs(frac - 0.75) < sc.sixteenthThreshold) {
+      return beatStart + ea * sc.timing.sixteenth4thShift;
     }
   }
 
@@ -100,20 +100,21 @@ export function swingVolumeMult(
   if (amount <= 0) return 1.0;
   if (duration === 'q' || duration === 't') return 1.0;
 
+  const sc = getAudioConfig().swing;
+
   if (duration === 'e') {
     if (isOffbeatEighth(beatStart)) {
-      return 1.0 - amount * 0.20;
+      return 1.0 - amount * sc.dynamics.offbeatEighthCut;
     }
-    // On-beat eighth
     const frac = beatStart - Math.floor(beatStart);
-    if (Math.abs(frac) < 0.08 || Math.abs(frac - 1.0) < 0.08) {
-      return 1.0 + amount * 0.15;
+    if (Math.abs(frac) < sc.eighthThreshold || Math.abs(frac - 1.0) < sc.eighthThreshold) {
+      return 1.0 + amount * sc.dynamics.onbeatEighthBoost;
     }
   }
 
   if (duration === 's') {
     if (isOffbeatSixteenth(beatStart) || isOffbeatEighth(beatStart)) {
-      return 1.0 - amount * 0.15;
+      return 1.0 - amount * sc.dynamics.sixteenthCut;
     }
   }
 
@@ -135,19 +136,21 @@ export function swingDurMult(
   if (amount <= 0) return 1.0;
   if (duration === 'q' || duration === 't') return 1.0;
 
+  const sc = getAudioConfig().swing;
+
   if (duration === 'e') {
     if (isOffbeatEighth(beatStart)) {
-      return 1.0 - amount * 0.30;
+      return 1.0 - amount * sc.articulation.offbeatEighthShorten;
     }
     const frac = beatStart - Math.floor(beatStart);
-    if (Math.abs(frac) < 0.08 || Math.abs(frac - 1.0) < 0.08) {
-      return 1.0 + amount * 0.25;
+    if (Math.abs(frac) < sc.eighthThreshold || Math.abs(frac - 1.0) < sc.eighthThreshold) {
+      return 1.0 + amount * sc.articulation.onbeatEighthLengthen;
     }
   }
 
   if (duration === 's') {
     if (isOffbeatSixteenth(beatStart) || isOffbeatEighth(beatStart)) {
-      return 1.0 - amount * 0.20;
+      return 1.0 - amount * sc.articulation.sixteenthShorten;
     }
   }
 

@@ -5,14 +5,14 @@ import { generateBassLine } from '../walkingBass';
 import { generateDrumPattern } from '../drumPatterns';
 import type { BackingStyle } from '../../types';
 
-const ALL_STYLES: BackingStyle[] = ['medium-swing', 'bossa', 'ballad', 'latin'];
+const ALL_STYLES: BackingStyle[] = ['medium-swing', 'medium-up-swing', 'medium-up-swing-2', 'up-tempo-swing', 'bossa', 'ballad', 'latin'];
 
 // ---------------------------------------------------------------------------
 // backingStyles.ts — 定数構造
 // ---------------------------------------------------------------------------
 describe('BACKING_STYLES', () => {
-  it('4スタイル定義', () => {
-    expect(BACKING_STYLES).toHaveLength(4);
+  it('7スタイル定義', () => {
+    expect(BACKING_STYLES).toHaveLength(7);
   });
 
   it('全スタイルに key と label がある', () => {
@@ -22,9 +22,9 @@ describe('BACKING_STYLES', () => {
     }
   });
 
-  it('key が4種と一致', () => {
+  it('key が7種と一致', () => {
     const keys = BACKING_STYLES.map(s => s.key);
-    expect(keys).toEqual(['medium-swing', 'bossa', 'ballad', 'latin']);
+    expect(keys).toEqual(['medium-swing', 'medium-up-swing', 'medium-up-swing-2', 'up-tempo-swing', 'bossa', 'ballad', 'latin']);
   });
 });
 

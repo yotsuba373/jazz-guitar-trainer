@@ -1,0 +1,41 @@
+{
+  "kitGains": {
+    "bop-sticks-dry": 2.0
+  },
+  "hydrogenGM": {
+    "metal": { "detune": 0, "decayTime": 0.5 },
+    "body":  { "detune": -200, "decayTime": 0.8, "lpfCutoffHz": 2000 }
+  },
+  "customWAV": {
+    "detune": 0,
+    "decayTime": 0.5,
+    "volume": 127
+  },
+  "velocityLayers": [30, 55, 85, 110],
+  "prng": { "multiplier": 7919, "constant": 42 },
+  "drumSwingAmount": 0.65,
+  "patterns": {
+    "swing": {
+      "kick": { "base": [60, 50, 50, 50], "humanize": 6, "velRange": [35, 70] },
+      "ride": { "base": [75, 88, 70, 85], "humanize": 8, "skipBase": 50 },
+      "hihat": { "velocity": 80, "humanize": 8 },
+      "ghost": { "probability": 0.25, "base": 35, "humanize": 8, "velRange": [20, 50], "tripletGrid": [0.333, 0.667] },
+      "comping": { "probability": 0.30, "base": 80, "humanize": 10, "velRange": [60, 100], "slots": [2.5, 3.0, 3.5] }
+    },
+    "bossa": {
+      "hihat": { "velocity": 40 },
+      "xstick": { "velocity": 55 },
+      "kick": { "vels": [70, 60, 65] }
+    },
+    "ballad": {
+      "ride": { "velocity": 50 },
+      "hihat": { "velocity": 45 },
+      "kick": { "velocity": 60 }
+    },
+    "latin": {
+      "ride": { "onBeat": 65, "offBeat": 55 },
+      "kick": { "velocity": 65 },
+      "hihat": { "velocity": 55 }
+    }
+  }
+}

@@ -11,20 +11,22 @@
 
 import type { GeneratedPhrase, InstrumentType } from '../types';
 import { swingBeatStart, swingVolumeMult, swingDurMult } from './swing';
+import { getAudioConfig } from './configLoader';
 
 /** Play a metronome click sound at the given Web Audio timestamp. */
 export function playClick(accent: boolean, ctx: AudioContext, volume: number, at?: number): OscillatorNode {
   if (ctx.state === 'suspended') ctx.resume();
+  const met = getAudioConfig().metronome;
   const t = at ?? ctx.currentTime;
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
   osc.connect(gain);
   gain.connect(ctx.destination);
-  osc.frequency.value = accent ? 1200 : 800;
-  gain.gain.setValueAtTime(accent ? volume * 1.5 : volume * 1.0, t);
-  gain.gain.exponentialRampToValueAtTime(0.001, t + 0.04);
+  osc.frequency.value = accent ? met.accentFreq : met.normalFreq;
+  gain.gain.setValueAtTime(accent ? volume * met.accentGainMult : volume * met.normalGainMult, t);
+  gain.gain.exponentialRampToValueAtTime(0.001, t + met.fadeOut);
   osc.start(t);
-  osc.stop(t + 0.04);
+  osc.stop(t + met.fadeOut);
   return osc;
 }
 
@@ -47,15 +49,17 @@ export function playKSNote(
   frequency: number,
   volume: number,
   startTime: number,
-  duration = 2.0,
+  duration?: number,
 ): { stop: () => void } {
   if (ctx.state === 'suspended') ctx.resume();
+  const gc = getAudioConfig().guitar;
+  const dur = duration ?? gc.defaultDuration;
 
   const sampleRate = ctx.sampleRate;
   const N = Math.round(sampleRate / frequency);
   if (N < 1) return { stop: () => {} };
 
-  const totalSamples = Math.ceil(sampleRate * duration);
+  const totalSamples = Math.ceil(sampleRate * dur);
   const buffer = ctx.createBuffer(1, totalSamples, sampleRate);
   const data = buffer.getChannelData(0);
 
@@ -64,52 +68,51 @@ export function playKSNote(
   for (let i = 0; i < N; i++) {
     delayLine[i] = Math.random() * 2 - 1;
   }
-  // Pre-filter: 10-pass moving average — very round attack, no pick transient
-  for (let pass = 0; pass < 10; pass++) {
+  // Pre-filter: N-pass moving average — very round attack, no pick transient
+  for (let pass = 0; pass < gc.lpFilterPasses; pass++) {
     for (let i = 0; i < N - 1; i++) {
-      delayLine[i] = 0.5 * (delayLine[i] + delayLine[i + 1]);
+      delayLine[i] = gc.maCoeff * (delayLine[i] + delayLine[i + 1]);
     }
   }
 
-  // KS loop: heavier LP bias (0.3/0.7) for darker sustain + slower decay for body
-  const decay = 0.9975;
+  // KS loop: heavier LP bias for darker sustain + slower decay for body
   let idx = 0;
   for (let i = 0; i < totalSamples; i++) {
     data[i] = delayLine[idx];
     const next = (idx + 1) % N;
-    delayLine[idx] = decay * (0.3 * delayLine[idx] + 0.7 * delayLine[next]);
+    delayLine[idx] = gc.decay * (gc.loopLpCoeffs[0] * delayLine[idx] + gc.loopLpCoeffs[1] * delayLine[next]);
     idx = next;
   }
 
   const source = ctx.createBufferSource();
   source.buffer = buffer;
 
-  // Soft attack envelope (fade in over 5ms — rounder than pick)
+  // Soft attack envelope
   const gain = ctx.createGain();
   gain.gain.setValueAtTime(0, startTime);
-  gain.gain.linearRampToValueAtTime(volume * 1.2, startTime + 0.005);
+  gain.gain.linearRampToValueAtTime(volume * gc.attackGainMult, startTime + gc.softAttack);
   source.connect(gain);
 
   // Low-pass: deep treble cut — tone knob rolled off
   const lp = ctx.createBiquadFilter();
   lp.type = 'lowpass';
-  lp.frequency.value = Math.min(frequency * 2, 1800);
-  lp.Q.value = 0.6;
+  lp.frequency.value = Math.min(frequency * 2, gc.lpFreqMax);
+  lp.Q.value = gc.lpQ;
   gain.connect(lp);
 
-  // Low-mid boost: fattens the 200-400 Hz body range
+  // Low-mid boost: fattens the body range
   const pk = ctx.createBiquadFilter();
   pk.type = 'peaking';
-  pk.frequency.value = 300;
-  pk.Q.value = 0.8;
-  pk.gain.value = 4;
+  pk.frequency.value = gc.peakFreq;
+  pk.Q.value = gc.peakQ;
+  pk.gain.value = gc.peakGain;
   lp.connect(pk);
 
-  // High-shelf: further tame brightness above 1.2 kHz
+  // High-shelf: further tame brightness
   const hs = ctx.createBiquadFilter();
   hs.type = 'highshelf';
-  hs.frequency.value = 1200;
-  hs.gain.value = -9;
+  hs.frequency.value = gc.hsFreq;
+  hs.gain.value = gc.hsGain;
   pk.connect(hs);
 
   hs.connect(ctx.destination);
@@ -133,9 +136,11 @@ export function playSaxNote(
   frequency: number,
   volume: number,
   startTime: number,
-  duration = 2.0,
+  duration?: number,
 ): { stop: () => void } {
   if (ctx.state === 'suspended') ctx.resume();
+  const sc = getAudioConfig().saxophone;
+  const dur = duration ?? sc.defaultDuration;
 
   // Sawtooth oscillator — reed-like harmonic structure
   const osc = ctx.createOscillator();
@@ -145,11 +150,11 @@ export function playSaxNote(
   // Vibrato LFO — delayed onset
   const vibrato = ctx.createOscillator();
   vibrato.type = 'sine';
-  vibrato.frequency.value = 5.5;
+  vibrato.frequency.value = sc.vibratoFreq;
   const vibratoGain = ctx.createGain();
   vibratoGain.gain.setValueAtTime(0, startTime);
-  vibratoGain.gain.linearRampToValueAtTime(0, startTime + 0.15);
-  vibratoGain.gain.linearRampToValueAtTime(3, startTime + 0.4);
+  vibratoGain.gain.linearRampToValueAtTime(0, startTime + sc.vibratoDelay);
+  vibratoGain.gain.linearRampToValueAtTime(sc.vibratoDepth, startTime + sc.vibratoOnset);
   vibrato.connect(vibratoGain);
   vibratoGain.connect(osc.frequency);
   vibrato.start(startTime);
@@ -157,17 +162,17 @@ export function playSaxNote(
   // Formant filters (parallel) — body + reed
   const f1 = ctx.createBiquadFilter();
   f1.type = 'bandpass';
-  f1.frequency.value = 500;
-  f1.Q.value = 2;
+  f1.frequency.value = sc.formant1.freq;
+  f1.Q.value = sc.formant1.q;
   const f1Gain = ctx.createGain();
-  f1Gain.gain.value = 0.6;
+  f1Gain.gain.value = sc.formant1.gain;
 
   const f2 = ctx.createBiquadFilter();
   f2.type = 'bandpass';
-  f2.frequency.value = 1400;
-  f2.Q.value = 3;
+  f2.frequency.value = sc.formant2.freq;
+  f2.Q.value = sc.formant2.q;
   const f2Gain = ctx.createGain();
-  f2Gain.gain.value = 0.4;
+  f2Gain.gain.value = sc.formant2.gain;
 
   osc.connect(f1);
   f1.connect(f1Gain);
@@ -177,23 +182,23 @@ export function playSaxNote(
   // Warmth LP filter
   const lp = ctx.createBiquadFilter();
   lp.type = 'lowpass';
-  lp.frequency.value = Math.min(frequency * 6, 4000);
-  lp.Q.value = 0.7;
+  lp.frequency.value = Math.min(frequency * 6, sc.warmthLpFreqMax);
+  lp.Q.value = sc.warmthLpQ;
   f1Gain.connect(lp);
   f2Gain.connect(lp);
 
   // Envelope (slightly quieter than guitar to match perceived loudness)
   const env = ctx.createGain();
   env.gain.setValueAtTime(0, startTime);
-  env.gain.linearRampToValueAtTime(volume * 0.55, startTime + 0.02);
-  env.gain.setValueAtTime(volume * 0.55, startTime + duration - 0.05);
-  env.gain.linearRampToValueAtTime(0, startTime + duration);
+  env.gain.linearRampToValueAtTime(volume * sc.attackGainMult, startTime + sc.attackDuration);
+  env.gain.setValueAtTime(volume * sc.attackGainMult, startTime + dur - 0.05);
+  env.gain.linearRampToValueAtTime(0, startTime + dur);
   lp.connect(env);
   env.connect(ctx.destination);
 
   osc.start(startTime);
-  osc.stop(startTime + duration + 0.01);
-  vibrato.stop(startTime + duration + 0.01);
+  osc.stop(startTime + dur + 0.01);
+  vibrato.stop(startTime + dur + 0.01);
 
   return {
     stop() {
@@ -218,9 +223,11 @@ export function playEPNote(
   frequency: number,
   volume: number,
   startTime: number,
-  duration = 2.0,
+  duration?: number,
 ): { stop: () => void } {
   if (ctx.state === 'suspended') ctx.resume();
+  const ec = getAudioConfig().electricPiano;
+  const dur = duration ?? ec.defaultDuration;
 
   // Fundamental — clean sine
   const osc1 = ctx.createOscillator();
@@ -232,8 +239,8 @@ export function playEPNote(
   osc2.type = 'sine';
   osc2.frequency.setValueAtTime(frequency * 2, startTime);
   const g2 = ctx.createGain();
-  g2.gain.setValueAtTime(volume * 0.18, startTime);
-  g2.gain.exponentialRampToValueAtTime(0.001, startTime + duration * 0.6);
+  g2.gain.setValueAtTime(volume * ec.harmonic2GainMult, startTime);
+  g2.gain.exponentialRampToValueAtTime(0.001, startTime + dur * ec.harmonic2DecayRatio);
   osc2.connect(g2);
 
   // 3rd harmonic — subtle brightness on attack only
@@ -241,22 +248,22 @@ export function playEPNote(
   osc3.type = 'sine';
   osc3.frequency.setValueAtTime(frequency * 3, startTime);
   const g3 = ctx.createGain();
-  g3.gain.setValueAtTime(volume * 0.06, startTime);
-  g3.gain.exponentialRampToValueAtTime(0.001, startTime + 0.15);
+  g3.gain.setValueAtTime(volume * ec.harmonic3GainMult, startTime);
+  g3.gain.exponentialRampToValueAtTime(0.001, startTime + ec.harmonic3Decay);
   osc3.connect(g3);
 
   // Amplitude envelope: soft attack → smooth decay
   const env = ctx.createGain();
   env.gain.setValueAtTime(0, startTime);
-  env.gain.linearRampToValueAtTime(volume * 0.4, startTime + 0.01);
-  env.gain.exponentialRampToValueAtTime(volume * 0.2, startTime + 0.2);
-  env.gain.exponentialRampToValueAtTime(volume * 0.01, startTime + duration);
+  env.gain.linearRampToValueAtTime(volume * ec.attackGainMult, startTime + ec.attackDuration);
+  env.gain.exponentialRampToValueAtTime(volume * ec.decayGainMult, startTime + ec.decayDuration);
+  env.gain.exponentialRampToValueAtTime(volume * ec.releaseGainMult, startTime + dur);
 
   // Warmth LP
   const lp = ctx.createBiquadFilter();
   lp.type = 'lowpass';
-  lp.frequency.value = Math.min(frequency * 6, 4500);
-  lp.Q.value = 0.5;
+  lp.frequency.value = Math.min(frequency * 6, ec.warmthLpFreqMax);
+  lp.Q.value = ec.warmthLpQ;
 
   osc1.connect(lp);
   g2.connect(lp);
@@ -264,7 +271,7 @@ export function playEPNote(
   lp.connect(env);
   env.connect(ctx.destination);
 
-  const stopAt = startTime + duration + 0.01;
+  const stopAt = startTime + dur + 0.01;
   osc1.start(startTime);  osc1.stop(stopAt);
   osc2.start(startTime);  osc2.stop(stopAt);
   osc3.start(startTime);  osc3.stop(stopAt);
@@ -309,17 +316,20 @@ export function playChordStrum(
   notes: { stringIdx: number; fret: number }[],
   volume: number,
   startTime: number,
-  strumDelay = 0.018,
-  duration = 2.0,
+  strumDelay?: number,
+  duration?: number,
 ): { stop: () => void } {
   if (ctx.state === 'suspended') ctx.resume();
+  const cs = getAudioConfig().chordStrum;
+  const sd = strumDelay ?? cs.strumDelay;
+  const dur = duration ?? cs.defaultDuration;
 
   // Sort bass (high stringIdx) → treble (low stringIdx)
   const sorted = [...notes].sort((a, b) => b.stringIdx - a.stringIdx);
 
   const handles = sorted.map((note, i) => {
     const freq = fretToFrequency(note.stringIdx, note.fret);
-    return playEPNote(ctx, freq, volume, startTime + i * strumDelay, duration);
+    return playEPNote(ctx, freq, volume, startTime + i * sd, dur);
   });
 
   return {
@@ -374,8 +384,9 @@ export function schedulePhrase(
     // Use swung beatStart for timing so audio reflects swing feel
     const noteStart = startTime + swungBeat * beatDurSec;
     // Last note sustains longer; others get slight overlap for legato
+    const ph = getAudioConfig().phrase;
     const isLast = i === notes.length - 1;
-    const baseDur = isLast && !noLastSustain ? rhythmDur * 2 : rhythmDur * 1.2;
+    const baseDur = isLast && !noLastSustain ? rhythmDur * ph.lastNoteSustainMult : rhythmDur * ph.legatoMult;
     handles.push(playNote(ctx, freq, volume * volMult, noteStart, baseDur * durMult, instrument));
   }
 

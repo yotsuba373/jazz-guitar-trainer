@@ -1,4 +1,5 @@
 import type { BackingStyle } from '../types';
+import { getCompConfig } from './configLoader';
 
 export interface CompEvent {
   beatStart: number;  // コード内 beat offset (0-based)
@@ -18,53 +19,34 @@ export function generateCompPattern(
   style: BackingStyle,
   globalBeatOffset: number,
 ): CompEvent[] {
+  const cfg = getCompConfig();
+
   if (beats <= 1) {
-    return [{ beatStart: 0, duration: beats, velocity: 80 }];
+    return [{ beatStart: 0, duration: beats, velocity: cfg.shortChordVelocity }];
   }
 
   let events: CompEvent[];
 
   switch (style) {
+    case 'medium-up-swing':
+    case 'medium-up-swing-2':
+    case 'up-tempo-swing':
     case 'medium-swing': {
       const measureIdx = Math.floor(globalBeatOffset / 4);
-      if (measureIdx % 2 === 0) {
-        // Charleston: beat 0 (1.5拍) + and-of-2 (0.5拍)
-        events = [
-          { beatStart: 0, duration: 1.5, velocity: 80 },
-          { beatStart: 2.5, duration: 0.5, velocity: 65 },
-        ];
-      } else {
-        // Variation: beat 0 long (2拍)
-        events = [
-          { beatStart: 0, duration: 2, velocity: 75 },
-        ];
-      }
+      events = (measureIdx % 2 === 0 ? cfg.swing.even : cfg.swing.odd).map(e => ({ ...e }));
       break;
     }
     case 'bossa':
-      events = [
-        { beatStart: 0, duration: 1, velocity: 75 },
-        { beatStart: 1.5, duration: 1, velocity: 65 },
-        { beatStart: 3, duration: 0.5, velocity: 60 },
-      ];
+      events = cfg.bossa.map(e => ({ ...e }));
       break;
     case 'ballad':
-      events = [
-        { beatStart: 0, duration: 4, velocity: 70 },
-      ];
+      events = cfg.ballad.map(e => ({ ...e }));
       break;
     case 'latin':
-      events = [
-        { beatStart: 0, duration: 0.5, velocity: 75 },
-        { beatStart: 0.5, duration: 0.5, velocity: 65 },
-        { beatStart: 1.5, duration: 0.5, velocity: 70 },
-        { beatStart: 2, duration: 0.5, velocity: 65 },
-        { beatStart: 3, duration: 0.5, velocity: 70 },
-        { beatStart: 3.5, duration: 0.5, velocity: 65 },
-      ];
+      events = cfg.latin.map(e => ({ ...e }));
       break;
     default:
-      events = [{ beatStart: 0, duration: beats, velocity: 80 }];
+      events = [{ beatStart: 0, duration: beats, velocity: cfg.defaultVelocity }];
   }
 
   return events.filter(e => e.beatStart < beats);

@@ -1,6 +1,7 @@
 import { Soundfont } from 'smplr';
 import type { AudioHandle } from '../hooks/useAudioContext';
 import { loadDrumSampler } from './drumPatterns';
+import { getPianoConfig } from './configLoader';
 
 export type SamplerStatus = 'idle' | 'loading' | 'ready' | 'error';
 
@@ -99,20 +100,20 @@ const DEFAULT_TEMPLATE: VoicingTemplate = VOICING_TEMPLATES['7'];
  * RH: guide tones in octave 3-4 (MIDI 55-67), close position
  */
 export function buildJazzPianoVoicing(rootName: string, quality: string): number[] {
+  const cfg = getPianoConfig();
   const pc = ROOT_PC[rootName] ?? 0;
   const tmpl = VOICING_TEMPLATES[quality] ?? DEFAULT_TEMPLATE;
 
-  // LH: root in octave 2, other intervals relative to bass root
-  const bassRoot = 36 + pc; // C2=36 .. B2=47
+  // LH: root in configured base octave, other intervals relative to bass root
+  const bassRoot = cfg.lhBase + pc;
   const lh = tmpl.lh.map(interval => bassRoot + interval);
 
-  // RH: place voices in octave 4 area (around MIDI 60), close position
-  const rhBase = 60 + pc; // C4=60 reference
+  // RH: place voices in configured octave area, close position
+  const rhBase = cfg.rhBase + pc;
   const rh = tmpl.rh.map(interval => {
     let midi = rhBase + interval;
-    // Keep in comfortable piano comping range (MIDI 55-75, roughly G3-D#5)
-    while (midi > 75) midi -= 12;
-    while (midi < 55) midi += 12;
+    while (midi > cfg.rhRange.high) midi -= 12;
+    while (midi < cfg.rhRange.low) midi += 12;
     return midi;
   });
   rh.sort((a, b) => a - b);
@@ -135,10 +136,11 @@ export function playSmplrPianoComp(
   startAt: number,
   duration?: number,
 ): AudioHandle {
-  const dur = duration ?? 2.0;
+  const cfg = getPianoConfig();
+  const dur = duration ?? cfg.duration;
   const midiNotes = buildJazzPianoVoicing(rootName, quality);
-  const velocity = 80; // mf — 音量は output.setVolume() で制御
-  const stagger = 0.012; // 12ms between notes (subtle spread, LH→RH)
+  const velocity = cfg.velocity; // mf — 音量は output.setVolume() で制御
+  const stagger = cfg.stagger; // subtle spread, LH→RH
   const stopId = `comp-${++compIdCounter}`;
 
   const stopFns: (() => void)[] = [];

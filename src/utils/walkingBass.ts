@@ -1,6 +1,7 @@
 import type { Soundfont } from 'smplr';
 import type { BackingStyle } from '../types';
 import type { AudioHandle } from '../hooks/useAudioContext';
+import { getBassConfig } from './configLoader';
 
 export interface BassNote {
   midi: number;       // MIDI note number (E1=28 ~ G3=55)
@@ -33,22 +34,24 @@ function chordToneOffsets(quality: string): number[] {
 
 /**
  * ルートの半音値 (0-11) からベースレジスター (E2付近) の MIDI ノートを返す。
- * ベース音域: E1 (28) ~ G3 (55)。基準は E2 (40)。
+ * ベース音域・基準はコンフィグで制御。
  */
 function rootToBassMidi(rootSemi: number): number {
-  const base = 40; // E2
+  const cfg = getBassConfig();
+  const base = cfg.bassRootBase; // E2 = 40
   const eSemi = 4; // E の半音値
   let midi = base + ((rootSemi - eSemi + 12) % 12);
-  if (midi > 55) midi -= 12;
+  if (midi > cfg.midiRange.high) midi -= 12;
   return midi;
 }
 
 /** 次ルートへの半音アプローチノートを返す (半音上 or 半音下、近い方) */
 function approachNote(currentRootMidi: number, nextRootSemi: number): number {
+  const cfg = getBassConfig();
   const nextMidi = rootToBassMidi(nextRootSemi);
   const above = nextMidi + 1;
   const below = nextMidi - 1;
-  const clamp = (n: number) => Math.max(28, Math.min(55, n));
+  const clamp = (n: number) => Math.max(cfg.midiRange.low, Math.min(cfg.midiRange.high, n));
   return Math.abs(clamp(below) - currentRootMidi) <= Math.abs(clamp(above) - currentRootMidi)
     ? clamp(below) : clamp(above);
 }
@@ -69,7 +72,8 @@ export function generateBassLine(
   style: BackingStyle = 'medium-swing',
 ): BassNote[] {
   const rootMidi = rootToBassMidi(rootSemi);
-  const clamp = (n: number) => { let m = n; while (m > 55) m -= 12; while (m < 28) m += 12; return m; };
+  const { midiRange } = getBassConfig();
+  const clamp = (n: number) => { let m = n; while (m > midiRange.high) m -= 12; while (m < midiRange.low) m += 12; return m; };
   const offsets = chordToneOffsets(quality);
   const third = clamp(rootMidi + offsets[1]);
   const fifth = clamp(rootMidi + offsets[2]);
@@ -121,7 +125,7 @@ export function generateBassLine(
     notes.push({ midi: Math.random() < 0.5 ? third : fifth, beatStart: 1, duration: 1 });
   }
   if (beats >= 4) {
-    const oct = rootMidi + 12 <= 55 ? rootMidi + 12 : rootMidi;
+    const oct = rootMidi + 12 <= midiRange.high ? rootMidi + 12 : rootMidi;
     notes.push({ midi: Math.random() < 0.5 ? fifth : oct, beatStart: 2, duration: 1 });
   }
 
@@ -155,7 +159,7 @@ export function playSmplrBassLine(
   const nextRootSemi = nextRootName != null ? (ROOT_PC[nextRootName] ?? null) : null;
   const bassLine = generateBassLine(rootSemi, quality, beats, nextRootSemi, style);
   const beatSec = 60 / bpm;
-  const velocity = 90; // 音量は output.setVolume() で制御
+  const velocity = getBassConfig().velocity; // 音量は output.setVolume() で制御
   const stopId = `bass-${++bassIdCounter}`;
 
   const stopFns: (() => void)[] = [];

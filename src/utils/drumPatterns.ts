@@ -2,7 +2,7 @@ import { Sampler } from 'smplr';
 import type { BackingStyle } from '../types';
 import type { AudioHandle } from '../hooks/useAudioContext';
 import { swingBeatStart, swingVolumeMult } from './swing';
-import { getDrumPatternDB, findNearestVelocity } from './drumPatternDB';
+import { getDrumPatternDB, getDrumConfig, findNearestVelocity } from './drumPatternDB';
 import type { SampleMap } from './drumPatternDB';
 
 // ---------------------------------------------------------------------------
@@ -54,11 +54,12 @@ const BODY_SAMPLES: Record<string, string> = {
 
 /** velocity (0-127) → 5段階レイヤーの MIDI ノートオフセット (0-4) */
 function velocityToLayer(velocity: number): number {
-  if (velocity < 30) return 0;   // Softest
-  if (velocity < 55) return 1;   // Soft
-  if (velocity < 85) return 2;   // Med
-  if (velocity < 110) return 3;  // Hard
-  return 4;                       // Hardest
+  const layers = getDrumConfig().velocityLayers;
+  if (velocity < layers[0]) return 0;   // Softest
+  if (velocity < layers[1]) return 1;   // Soft
+  if (velocity < layers[2]) return 2;   // Med
+  if (velocity < layers[3]) return 3;   // Hard
+  return 4;                              // Hardest
 }
 
 /** 楽器ロール → ベースノート名 (Sampler MIDI) */
@@ -147,16 +148,17 @@ export async function loadDrumSampler(ctx: AudioContext): Promise<DrumSamplerSet
   if (loadPromise) return loadPromise;
   loadPromise = (async () => {
     // Hydrogen GM (常にロード — フォールバック用)
+    const cfg = getDrumConfig();
     const metal = new Sampler(ctx, {
       buffers: METAL_SAMPLES,
-      detune: 0,
-      decayTime: 0.5,
+      detune: cfg.hydrogenGM.metal.detune,
+      decayTime: cfg.hydrogenGM.metal.decayTime,
     });
     const body = new Sampler(ctx, {
       buffers: BODY_SAMPLES,
-      detune: -200,
-      decayTime: 0.8,
-      lpfCutoffHz: 2000,
+      detune: cfg.hydrogenGM.body.detune,
+      decayTime: cfg.hydrogenGM.body.decayTime,
+      lpfCutoffHz: cfg.hydrogenGM.body.lpfCutoffHz,
     });
     await Promise.all([metal.load, body.load]);
 
@@ -170,14 +172,8 @@ export async function loadDrumSampler(ctx: AudioContext): Promise<DrumSamplerSet
         const keyMapByKit: Record<string, Map<string, string>> = {};
         const loadTasks: Promise<void>[] = [];
 
-        // キットごとのゲイン倍率を集約 (gains は style 単位 → kit 単位に変換)
-        const gainByKit: Record<string, number> = {};
-        if (db.gains) {
-          for (const [style, gain] of Object.entries(db.gains)) {
-            const kit = db.kits[style] ?? style;
-            gainByKit[kit] = gain;
-          }
-        }
+        // キットごとのゲイン倍率を drum-config.json から取得
+        const kitGains = getDrumConfig().kitGains;
 
         // キットごとに1つの Sampler をロード
         for (const [style, sampleMap] of Object.entries(db.samples)) {
@@ -188,12 +184,13 @@ export async function loadDrumSampler(ctx: AudioContext): Promise<DrumSamplerSet
           if (Object.keys(buffers).length === 0) continue;
           samplerByKit[kitFolder] = null!;
           keyMapByKit[kitFolder] = keyMap;
-          const kitGain = gainByKit[kitFolder] ?? 1.0;
+          const kitGain = kitGains[kitFolder] ?? 1.0;
           loadTasks.push(
             (async () => {
-              const sampler = new Sampler(ctx, { buffers, detune: 0, decayTime: 0.5 });
+              const cwCfg = getDrumConfig().customWAV;
+              const sampler = new Sampler(ctx, { buffers, detune: cwCfg.detune, decayTime: cwCfg.decayTime });
               await sampler.load;
-              sampler.output.setVolume(127);
+              sampler.output.setVolume(cwCfg.volume);
               if (kitGain !== 1.0) {
                 const boost = ctx.createGain();
                 boost.gain.value = kitGain;
@@ -299,20 +296,21 @@ export function generateSwingDrumPattern(
 ): DrumHit[] {
   const hits: DrumHit[] = [];
   const measureIdx = Math.floor(globalBeatOffset / 4);
-  const rng = mulberry32(measureIdx * 7919 + 42);
+  const prng = getDrumConfig().prng;
+  const rng = mulberry32(measureIdx * prng.multiplier + prng.constant);
+  const sw = getDrumConfig().patterns.swing;
 
   // --- Kick: 全拍フェザリング ---
   for (let b = 0; b < beats; b++) {
-    const kickBase = b === 0 ? 60 : 50;
-    hits.push({ role: 'kick', beatStart: b, velocity: humanize(rng, kickBase, 6, 35, 70) });
+    const kickBase = sw.kick.base[b] ?? sw.kick.base[0];
+    hits.push({ role: 'kick', beatStart: b, velocity: humanize(rng, kickBase, sw.kick.humanize, sw.kick.velRange[0], sw.kick.velRange[1]) });
   }
 
   // --- Ride + HH ---
-  const rideBaseVels: Record<number, number> = { 0: 75, 1: 88, 2: 70, 3: 85 };
   for (let b = 0; b < beats; b++) {
     // Ride on every quarter (2,4拍にバックビートアクセント)
-    const rideVel = rideBaseVels[b] ?? 75;
-    hits.push({ role: 'ride', beatStart: b, velocity: humanize(rng, rideVel, 8) });
+    const rideVel = sw.ride.base[b] ?? sw.ride.base[0];
+    hits.push({ role: 'ride', beatStart: b, velocity: humanize(rng, rideVel, sw.ride.humanize) });
 
     // Ride skip note on "and" of 2 and 4
     if (b === 1 || b === 3) {
@@ -322,26 +320,26 @@ export function generateSwingDrumPattern(
       hits.push({
         role: 'ride',
         beatStart: swungBs,
-        velocity: Math.max(1, Math.round(humanize(rng, 50, 8) * volMult)),
+        velocity: Math.max(1, Math.round(humanize(rng, sw.ride.skipBase, sw.ride.humanize) * volMult)),
       });
     }
 
     // HH foot on 2, 4
     if (b === 1 || b === 3) {
-      hits.push({ role: 'hihat', beatStart: b, velocity: humanize(rng, 80, 8) });
+      hits.push({ role: 'hihat', beatStart: b, velocity: humanize(rng, sw.hihat.velocity, sw.hihat.humanize) });
     }
   }
 
   // --- Snare ghost notes (三連符グリッド上, 確率的) ---
   for (let b = 0; b < beats; b++) {
-    for (const tripletPos of [1 / 3, 2 / 3]) {
+    for (const tripletPos of sw.ghost.tripletGrid) {
       const pos = b + tripletPos;
       if (pos >= beats) continue;
-      if (rng() < 0.25) {
+      if (rng() < sw.ghost.probability) {
         hits.push({
           role: 'snare',
           beatStart: pos,
-          velocity: humanize(rng, 35, 8, 20, 50),
+          velocity: humanize(rng, sw.ghost.base, sw.ghost.humanize, sw.ghost.velRange[0], sw.ghost.velRange[1]),
         });
       }
     }
@@ -349,9 +347,9 @@ export function generateSwingDrumPattern(
 
   // --- Snare comping accents (0-2 per measure, 即興的) ---
   if (beats >= 4) {
-    for (const slot of [2.5, 3.0, 3.5]) {
+    for (const slot of sw.comping.slots) {
       if (slot >= beats) continue;
-      if (rng() < 0.30) {
+      if (rng() < sw.comping.probability) {
         // 裏拍位置 (0.5) は swing 適用
         const bs = slot % 1 !== 0
           ? swingBeatStart(slot, 'e', swingAmount, bpm)
@@ -359,7 +357,7 @@ export function generateSwingDrumPattern(
         hits.push({
           role: 'snare',
           beatStart: bs,
-          velocity: humanize(rng, 80, 10, 60, 100),
+          velocity: humanize(rng, sw.comping.base, sw.comping.humanize, sw.comping.velRange[0], sw.comping.velRange[1]),
         });
       }
     }
@@ -371,17 +369,18 @@ export function generateSwingDrumPattern(
 /** Bossa nova: cross-stick + HH + kick */
 function generateBossaDrumPattern(beats: number): DrumHit[] {
   const hits: DrumHit[] = [];
+  const bc = getDrumConfig().patterns.bossa;
   for (let b = 0; b < beats; b++) {
     // HH on every quarter
-    hits.push({ role: 'hihat', beatStart: b, velocity: 40 });
+    hits.push({ role: 'hihat', beatStart: b, velocity: bc.hihat.velocity });
     // Cross-stick on 2, 4
     if (b === 1 || b === 3) {
-      hits.push({ role: 'xstick', beatStart: b, velocity: 55 });
+      hits.push({ role: 'xstick', beatStart: b, velocity: bc.xstick.velocity });
     }
     // Kick on 0, and syncopated
-    if (b === 0) hits.push({ role: 'kick', beatStart: b, velocity: 70 });
-    if (b === 2 && beats >= 4) hits.push({ role: 'kick', beatStart: 2.5, velocity: 60 });
-    if (b === 3 && beats >= 4) hits.push({ role: 'kick', beatStart: 3, velocity: 65 });
+    if (b === 0) hits.push({ role: 'kick', beatStart: b, velocity: bc.kick.vels[0] });
+    if (b === 2 && beats >= 4) hits.push({ role: 'kick', beatStart: 2.5, velocity: bc.kick.vels[1] });
+    if (b === 3 && beats >= 4) hits.push({ role: 'kick', beatStart: 3, velocity: bc.kick.vels[2] });
   }
   return hits;
 }
@@ -389,15 +388,16 @@ function generateBossaDrumPattern(beats: number): DrumHit[] {
 /** Ballad: light ride + HH + soft kick */
 function generateBalladDrumPattern(beats: number): DrumHit[] {
   const hits: DrumHit[] = [];
+  const bl = getDrumConfig().patterns.ballad;
   for (let b = 0; b < beats; b++) {
     // Ride on every quarter (soft)
-    hits.push({ role: 'ride', beatStart: b, velocity: 50 });
+    hits.push({ role: 'ride', beatStart: b, velocity: bl.ride.velocity });
     // HH on 2, 4
     if (b === 1 || b === 3) {
-      hits.push({ role: 'hihat', beatStart: b, velocity: 45 });
+      hits.push({ role: 'hihat', beatStart: b, velocity: bl.hihat.velocity });
     }
     // Kick on beat 0
-    if (b === 0) hits.push({ role: 'kick', beatStart: 0, velocity: 60 });
+    if (b === 0) hits.push({ role: 'kick', beatStart: 0, velocity: bl.kick.velocity });
   }
   return hits;
 }
@@ -405,19 +405,20 @@ function generateBalladDrumPattern(beats: number): DrumHit[] {
 /** Latin: straight 8th ride + kick on 1,3 + HH on 0,2 */
 function generateLatinDrumPattern(beats: number): DrumHit[] {
   const hits: DrumHit[] = [];
+  const lt = getDrumConfig().patterns.latin;
   for (let b = 0; b < beats; b++) {
     // Ride straight 8ths (on beat + and)
-    hits.push({ role: 'ride', beatStart: b, velocity: 65 });
+    hits.push({ role: 'ride', beatStart: b, velocity: lt.ride.onBeat });
     if (b + 0.5 < beats) {
-      hits.push({ role: 'ride', beatStart: b + 0.5, velocity: 55 });
+      hits.push({ role: 'ride', beatStart: b + 0.5, velocity: lt.ride.offBeat });
     }
     // Kick on 1, 3
     if (b === 1 || b === 3) {
-      hits.push({ role: 'kick', beatStart: b, velocity: 65 });
+      hits.push({ role: 'kick', beatStart: b, velocity: lt.kick.velocity });
     }
     // HH on 0, 2
     if (b === 0 || b === 2) {
-      hits.push({ role: 'hihat', beatStart: b, velocity: 55 });
+      hits.push({ role: 'hihat', beatStart: b, velocity: lt.hihat.velocity });
     }
   }
   return hits;
@@ -442,7 +443,8 @@ export function generateDrumPattern(
       const measureIdx = Math.floor(globalBeatOffset / 4);
       const patternGroupIdx = Math.floor(measureIdx / 8);
       const measureInPattern = measureIdx % 8;
-      const rng = mulberry32(patternGroupIdx * 7919 + 42);
+      const prngCfg = getDrumConfig().prng;
+      const rng = mulberry32(patternGroupIdx * prngCfg.multiplier + prngCfg.constant);
       const idx = Math.floor(rng() * patterns.length);
       const measure = patterns[idx].measures[measureInPattern];
       if (measure && measure.length > 0) {
@@ -464,6 +466,9 @@ export function generateDrumPattern(
     case 'ballad': return generateBalladDrumPattern(beats);
     case 'latin':  return generateLatinDrumPattern(beats);
     case 'medium-swing':
+    case 'medium-up-swing':
+    case 'medium-up-swing-2':
+    case 'up-tempo-swing':
     default:       return generateSwingDrumPattern(beats, globalBeatOffset, swingAmount, bpm);
   }
 }
@@ -519,7 +524,9 @@ export function playDrumPattern(
       continue;
     }
 
-    const noteVel = hit.velocity;
+    // カスタム WAV: ベロシティレイヤーに既にダイナミクスが焼き込まれているので
+    // smplr に velocity を渡すと二重適用になる → 127 固定でサンプル本来の音量を使う
+    const noteVel = (hit.pitch != null && customSampler) ? 127 : hit.velocity;
     const noteTime = startAt + hit.beatStart * beatSec;
     if (!isFinite(noteVel) || !isFinite(noteTime)) {
       console.warn(`[drums] skip non-finite: note=${noteName} vel=${noteVel} time=${noteTime}`);

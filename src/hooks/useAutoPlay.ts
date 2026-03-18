@@ -13,6 +13,7 @@ import {
   playDrumPattern, getDrumSampler,
   generateCompPattern,
 } from '../utils';
+import { getDrumConfig } from '../utils/configLoader';
 
 interface AutoPlayParams {
   isPlaying: boolean;
@@ -180,7 +181,7 @@ export function useAutoPlay(params: AutoPlayParams) {
         if (drumSampler) {
           const layout = getChartLayout(prog);
           const chordBeats = getChordBeatCount(layout, chordIdx);
-          const swAmt = audio.swingEnabledRef.current ? 0.65 : 0;
+          const swAmt = audio.swingEnabledRef.current ? getDrumConfig().drumSwingAmount : 0;
           drumSampler.metal.output.setVolume(rhythmVol * 127);
           drumSampler.body.output.setVolume(rhythmVol * 127);
           const customSampler = drumSampler.customByStyle[audio.backingStyleRef.current];

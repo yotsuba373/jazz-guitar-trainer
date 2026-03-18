@@ -15,6 +15,7 @@ import {
   detectIiVPattern, isIiVLickId, buildIiVLickContext, getIiVTransposeSemitones,
   sliceLick, getChordBeatCount,
   findLickById, findOriginatorIdx, resolveChordPositions, buildPhraseForLick,
+  BACKING_STYLES,
 } from './utils';
 import { useAudioContext, usePreviewPlayback, useAutoPlay } from './hooks';
 import { Fretboard } from './components/Fretboard';
@@ -22,6 +23,10 @@ import { RootSelector, ModeSelector, PositionSelector, OptionBar, PhraseAnalysis
 import { PositionGrid } from './components/PositionGrid';
 import { ProgressionEditor, ProgressionPlayer } from './components/Progression';
 import { Footer } from './components/Footer';
+
+const SWING_STYLES: Set<BackingStyle> = new Set([
+  'medium-swing', 'medium-up-swing', 'medium-up-swing-2', 'up-tempo-swing', 'ballad',
+]);
 
 export default function App() {
   const [rootName, setRootName] = useState<RootName>(() => {
@@ -114,7 +119,7 @@ export default function App() {
   const [backingStyle, setBackingStyle] = useState<BackingStyle>(() =>
     progressions[activeProgIdx]?.backingStyle ?? 'medium-swing'
   );
-  const swingEnabled = backingStyle === 'medium-swing' || backingStyle === 'ballad';
+  const swingEnabled = SWING_STYLES.has(backingStyle);
   // Lick practice state
   const [lickDB, setLickDB] = useState<LickDB | null>(null);
   const [selectedLickIdx, setSelectedLickIdx] = useState<number | null>(null);
@@ -184,7 +189,11 @@ export default function App() {
   // Load lick DB + drum pattern DB on mount
   useEffect(() => {
     loadLickDB().then(db => setLickDB(db)).catch(() => setLickDB(null));
-    import('./utils/drumPatternDB').then(m => m.loadDrumPatternDB());
+    import('./utils/drumPatternDB').then(m => { m.loadDrumPatternDB(); });
+    import('./utils/configLoader').then(({ loadDrumConfig, loadCompConfig, loadBassConfig, loadPianoConfig, loadAudioConfig }) => {
+      loadDrumConfig(); loadCompConfig(); loadBassConfig();
+      loadPianoConfig(); loadAudioConfig();
+    });
   }, []);
 
   const deg = mode.degrees;
@@ -764,9 +773,11 @@ export default function App() {
 
   function handleBackingStyleChange(style: BackingStyle) {
     setBackingStyle(style);
+    const defaultBpm = BACKING_STYLES.find(s => s.key === style)?.defaultBpm ?? 120;
+    setBpm(defaultBpm);
     if (progMode && activeProg) {
       const copy = [...progressions];
-      copy[activeProgIdx] = { ...copy[activeProgIdx], backingStyle: style };
+      copy[activeProgIdx] = { ...copy[activeProgIdx], backingStyle: style, bpm: defaultBpm };
       handleSaveProgressions(copy);
     }
   }

@@ -57,7 +57,7 @@ describe('generateCompPattern', () => {
 
   describe('共通', () => {
     it('beats=1: 全スタイル共通で1イベント', () => {
-      for (const style of ['medium-swing', 'bossa', 'ballad', 'latin'] as const) {
+      for (const style of ['medium-swing', 'medium-up-swing', 'medium-up-swing-2', 'up-tempo-swing', 'bossa', 'ballad', 'latin'] as const) {
         const events = generateCompPattern(1, style, 0);
         expect(events).toHaveLength(1);
         expect(events[0]).toEqual({ beatStart: 0, duration: 1, velocity: 80 });
@@ -65,7 +65,7 @@ describe('generateCompPattern', () => {
     });
 
     it('velocity 範囲 0-127', () => {
-      for (const style of ['medium-swing', 'bossa', 'ballad', 'latin'] as const) {
+      for (const style of ['medium-swing', 'medium-up-swing', 'medium-up-swing-2', 'up-tempo-swing', 'bossa', 'ballad', 'latin'] as const) {
         const events = generateCompPattern(4, style, 0);
         for (const e of events) {
           expect(e.velocity).toBeGreaterThanOrEqual(0);
@@ -75,7 +75,7 @@ describe('generateCompPattern', () => {
     });
 
     it('全イベントの beatStart < beats', () => {
-      for (const style of ['medium-swing', 'bossa', 'ballad', 'latin'] as const) {
+      for (const style of ['medium-swing', 'medium-up-swing', 'medium-up-swing-2', 'up-tempo-swing', 'bossa', 'ballad', 'latin'] as const) {
         for (const beats of [2, 3, 4]) {
           const events = generateCompPattern(beats, style, 0);
           for (const e of events) {

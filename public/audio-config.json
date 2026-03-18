@@ -1,0 +1,81 @@
+{
+  "metronome": {
+    "accentFreq": 1200,
+    "normalFreq": 800,
+    "accentGainMult": 1.5,
+    "normalGainMult": 1.0,
+    "fadeOut": 0.04
+  },
+  "guitar": {
+    "defaultDuration": 2.0,
+    "lpFilterPasses": 10,
+    "maCoeff": 0.5,
+    "decay": 0.9975,
+    "loopLpCoeffs": [0.3, 0.7],
+    "softAttack": 0.005,
+    "attackGainMult": 1.2,
+    "lpFreqMax": 1800,
+    "lpQ": 0.6,
+    "peakFreq": 300,
+    "peakQ": 0.8,
+    "peakGain": 4,
+    "hsFreq": 1200,
+    "hsGain": -9
+  },
+  "saxophone": {
+    "defaultDuration": 2.0,
+    "vibratoFreq": 5.5,
+    "vibratoDelay": 0.15,
+    "vibratoOnset": 0.4,
+    "vibratoDepth": 3,
+    "formant1": { "freq": 500, "q": 2, "gain": 0.6 },
+    "formant2": { "freq": 1400, "q": 3, "gain": 0.4 },
+    "warmthLpFreqMax": 4000,
+    "warmthLpQ": 0.7,
+    "attackGainMult": 0.55,
+    "attackDuration": 0.02
+  },
+  "electricPiano": {
+    "defaultDuration": 2.0,
+    "harmonic2GainMult": 0.18,
+    "harmonic2DecayRatio": 0.6,
+    "harmonic3GainMult": 0.06,
+    "harmonic3Decay": 0.15,
+    "attackGainMult": 0.4,
+    "attackDuration": 0.01,
+    "decayGainMult": 0.2,
+    "decayDuration": 0.2,
+    "releaseGainMult": 0.01,
+    "warmthLpFreqMax": 4500,
+    "warmthLpQ": 0.5
+  },
+  "chordStrum": {
+    "strumDelay": 0.018,
+    "defaultDuration": 2.0
+  },
+  "phrase": {
+    "lastNoteSustainMult": 2,
+    "legatoMult": 1.2
+  },
+  "swing": {
+    "eighthThreshold": 0.08,
+    "sixteenthThreshold": 0.06,
+    "tempoCompThreshold": 200,
+    "tempoCompRange": 80,
+    "timing": {
+      "offbeatEighthShift": 0.17,
+      "sixteenth2ndShift": 0.04,
+      "sixteenth4thShift": 0.08
+    },
+    "dynamics": {
+      "offbeatEighthCut": 0.20,
+      "onbeatEighthBoost": 0.15,
+      "sixteenthCut": 0.15
+    },
+    "articulation": {
+      "offbeatEighthShorten": 0.30,
+      "onbeatEighthLengthen": 0.25,
+      "sixteenthShorten": 0.20
+    }
+  }
+}

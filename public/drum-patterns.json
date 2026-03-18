@@ -8207,11 +8207,5 @@
     "medium-up-swing": "bop-sticks-dry",
     "medium-up-swing-2": "bop-sticks-dry",
     "up-tempo-swing": "bop-sticks-dry"
-  },
-  "gains": {
-    "medium-swing": 6.0,
-    "medium-up-swing": 6.0,
-    "medium-up-swing-2": 6.0,
-    "up-tempo-swing": 6.0
   }
 }

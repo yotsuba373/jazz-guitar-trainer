@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { generateSwingDrumPattern, generateDrumPattern } from '../drumPatterns';
+import { getDrumConfig, DEFAULT_DRUM_CONFIG, clearDrumConfigCache } from '../drumPatternDB';
 
 describe('generateSwingDrumPattern', () => {
   // --- 決定性 ---
@@ -234,12 +235,39 @@ describe('generateDrumPattern', () => {
   });
 
   it('全スタイル velocity 範囲 0-127', () => {
-    for (const style of ['medium-swing', 'bossa', 'ballad', 'latin'] as const) {
+    for (const style of ['medium-swing', 'medium-up-swing', 'medium-up-swing-2', 'up-tempo-swing', 'bossa', 'ballad', 'latin'] as const) {
       const hits = generateDrumPattern(4, 0, 0.2, 120, style);
       for (const h of hits) {
         expect(h.velocity).toBeGreaterThanOrEqual(0);
         expect(h.velocity).toBeLessThanOrEqual(127);
       }
     }
+  });
+});
+
+describe('DrumConfig', () => {
+  it('getDrumConfig() は未ロード時にデフォルト値を返す', () => {
+    clearDrumConfigCache();
+    const cfg = getDrumConfig();
+    expect(cfg).toEqual(DEFAULT_DRUM_CONFIG);
+  });
+
+  it('DEFAULT_DRUM_CONFIG.velocityLayers は昇順4要素', () => {
+    const layers = DEFAULT_DRUM_CONFIG.velocityLayers;
+    expect(layers).toHaveLength(4);
+    for (let i = 1; i < layers.length; i++) {
+      expect(layers[i]).toBeGreaterThan(layers[i - 1]);
+    }
+  });
+
+  it('DEFAULT_DRUM_CONFIG.patterns にスタイル別パラメータがある', () => {
+    const p = DEFAULT_DRUM_CONFIG.patterns;
+    expect(p.swing.kick.base).toHaveLength(4);
+    expect(p.swing.ride.base).toHaveLength(4);
+    expect(p.swing.ghost.probability).toBeGreaterThan(0);
+    expect(p.swing.ghost.probability).toBeLessThan(1);
+    expect(p.bossa.kick.vels).toHaveLength(3);
+    expect(p.ballad.ride.velocity).toBeGreaterThan(0);
+    expect(p.latin.ride.onBeat).toBeGreaterThan(p.latin.ride.offBeat);
   });
 });

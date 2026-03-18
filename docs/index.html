@@ -374,7 +374,7 @@
 <pre>npm install       # 依存インストール
 npm run dev       # 開発サーバー → http://localhost:5173
 npm run build     # tsc + vite build
-npm test          # vitest run (754 tests)
+npm test          # vitest run (816 tests)
 npm run lint      # ESLint</pre>
 
 <h2 id="architecture">Architecture</h2>
@@ -437,15 +437,16 @@ Utils Layer (pure functions):
 │   ├── audioEngine.ts            — playClick(), playKSNote(), playSaxNote(), playEPNote(), playChordStrum(), schedulePhrase()
 │   ├── sampler.ts               — loadSamplers(), getSamplers(), buildJazzPianoVoicing(), playSmplrPianoComp() — smplr SoundFont サンプラー + ジャズピアノボイシング
 │   ├── walkingBass.ts           — generateBassLine(), playSmplrBassLine() — ウォーキングベース生成 + smplr acoustic_bass 再生 (スタイル別パターン対応)
-│   ├── drumPatterns.ts          — generateSwingDrumPattern(), generateDrumPattern(), playDrumPattern(), loadDrumSampler() — スタイル別ドラムパターン生成 (Swing/Bossa/Ballad/Latin) + Hydrogen GM / カスタム WAV ドラム再生
+│   ├── drumPatterns.ts          — generateSwingDrumPattern(), generateDrumPattern(), playDrumPattern(), loadDrumSampler() — スタイル別ドラムパターン生成 (Swing系4種/Bossa/Ballad/Latin) + Hydrogen GM / カスタム WAV ドラム再生
 │   ├── compPatterns.ts          — generateCompPattern() — スタイル別コンピングリズムパターン生成
-│   ├── backingStyles.ts         — BACKING_STYLES, BackingStyleDef — バッキングスタイル定義 (swing/bossa/ballad/latin)
+│   ├── backingStyles.ts         — BACKING_STYLES, BackingStyleDef — バッキングスタイル定義 (7種: swing系4種/bossa/ballad/latin)
 │   ├── lickEngine.ts             — absolutePitch(), buildNotePool(), loadLickDB(), transposeLick(), mapLickToFretboard(), inferModeCandidates(), lickToGeneratedPhrase(), findBestPositionForLick(), selectBestInstance(), getTransposeSemitones(), buildLickContext(), detectIiVPattern(), isIiVLickId(), buildIiVLickContext(), sliceLick()
 │   ├── lickPlayback.ts           — findLickById(), findOriginatorIdx(), chordHasSavedLick(), buildPhraseForLick(), computeTransposeSemitones(), isLickOriginator(), playLickForChord(), buildAnacrusisPhrase(), getStrumNotes(), resolveChordPositions()
 │   ├── playbackSeq.ts            — buildPlaybackSeq(), computeCumBeats()
 │   ├── phraseAnalysis.ts         — analyzePhrase(), computeSummary()
 │   ├── swing.ts                  — swingBeatStart(), swingVolumeMult(), swingDurMult()
-│   └── __tests__/                — 800 テスト
+│   ├── configLoader.ts           — deepMerge(), createConfigLoader() — 汎用設定ローダーファクトリ (全設定JSONで共用)
+│   └── __tests__/                — 816 テスト
 ├── components/
 │   ├── Fretboard/                — SVG指板 (Fretboard, FretboardNote, GhostNote, PhrasePath)
 │   ├── Controls/                 — 全コントロールUI
@@ -815,7 +816,7 @@ actualBeats = (beatWidth / sumOfBeatWidths) * 4</pre>
   <tr><td>トラック</td><td>ドラムフラグ不問 (DAW による差異を吸収)</td></tr>
   <tr><td>量子化</td><td>120グリッド (8分/16分/三連符を正確表現)</td></tr>
   <tr><td>ベロシティ</td><td>1-127 そのまま保持</td></tr>
-  <tr><td>キットマッピング</td><td><code>drum-kits.json</code> でスタイル → キットフォルダ名を定義。複数スタイルで同一キット共有可。<code>_gains</code> フィールドでキットごとの音量ブースト倍率も指定可能</td></tr>
+  <tr><td>キットマッピング</td><td><code>drum-kits.json</code> でスタイル → キットフォルダ名を定義。複数スタイルで同一キット共有可</td></tr>
   <tr><td>出力</td><td><code>scripts/data/drum-patterns.json</code> → <code>public/drum-patterns.json</code> に自動コピー</td></tr>
   <tr><td>依存</td><td><code>pip install pretty_midi</code></td></tr>
 </table>
@@ -844,8 +845,37 @@ actualBeats = (beatWidth / sumOfBeatWidths) * 4</pre>
   <tr><td>ベロシティレイヤー</td><td>自由 (任意の数・任意の値)。パーサーが MIDI 内の vel 分布から推奨レイヤーを提示。再生時は最寄りの WAV を自動選択</td></tr>
   <tr><td>検出</td><td><code>drum-patterns.json</code> の samples セクションから自動検出。WAV がなければ Hydrogen GM にフォールバック</td></tr>
   <tr><td>音声加工</td><td>なし (ユーザーの音作りをそのまま使用)</td></tr>
-  <tr><td>音量ブースト</td><td><code>drum-kits.json</code> の <code>_gains</code> でキットごとのゲイン倍率を設定 (デフォルト 1.0)。パーサーが <code>drum-patterns.json</code> の <code>gains</code> フィールドに変換、ランタイムで <code>GainNode.addInsert()</code> 適用。Hydrogen GM との音量差を補正</td></tr>
+  <tr><td>音量・設定</td><td><code>public/drum-config.json</code> で一括管理。キットゲイン、サンプラー設定、ベロシティ境界、パターン生成パラメータを外部化。パーサー再実行不要、ブラウザリロードのみで反映</td></tr>
   <tr><td>WAV 長さ目安</td><td>全楽器 3 秒程度で統一が楽。短い楽器は自然に減衰、長い楽器 (ライド/クラッシュ) は残響を含める</td></tr>
+</table>
+
+<h4>ドラム設定ファイル (<code>public/drum-config.json</code>)</h4>
+
+<p>ドラム再生に関わる全定数を外部 JSON で一括管理。ブラウザリロードだけで反映 (パーサー再実行不要)。
+ファイル不在時やフィールド欠落時はデフォルト値にフォールバック。</p>
+
+<table>
+  <tr><th>セクション</th><th>内容</th></tr>
+  <tr><td><code>kitGains</code></td><td>キットフォルダ名 → ゲイン倍率 (デフォルト 1.0)。Hydrogen GM との音量差を補正</td></tr>
+  <tr><td><code>hydrogenGM</code></td><td>Hydrogen GM サンプラー設定: metal (detune, decayTime) / body (detune, decayTime, lpfCutoffHz)</td></tr>
+  <tr><td><code>customWAV</code></td><td>カスタム WAV サンプラー設定: detune, decayTime, volume (setVolume値)</td></tr>
+  <tr><td><code>velocityLayers</code></td><td>5段階ベロシティ境界 (昇順4要素)</td></tr>
+  <tr><td><code>patterns.swing</code></td><td>Swing パターン生成: kick/ride/hihat/ghost/comping の各ベロシティ・確率・humanize</td></tr>
+  <tr><td><code>patterns.bossa</code></td><td>Bossa パターン生成: hihat/xstick/kick ベロシティ</td></tr>
+  <tr><td><code>patterns.ballad</code></td><td>Ballad パターン生成: ride/hihat/kick ベロシティ</td></tr>
+  <tr><td><code>patterns.latin</code></td><td>Latin パターン生成: ride onBeat/offBeat, kick, hihat ベロシティ</td></tr>
+  <tr><td><code>prng</code></td><td>擬似乱数生成: 小節ごとのパターンバリエーション用シードパラメータ</td></tr>
+  <tr><td><code>drumSwingAmount</code></td><td>ドラムパターン再生時の固定スウィング量 (デフォルト 0.65)</td></tr>
+</table>
+
+<p><strong>追加パラメータ詳細</strong>:</p>
+<table>
+  <tr><th>パラメータ</th><th>デフォルト</th><th>説明</th></tr>
+  <tr><td><code>prng.multiplier</code></td><td>7919</td><td>小節ごとのパターン生成に使う擬似乱数シードの乗数 (素数推奨)</td></tr>
+  <tr><td><code>prng.constant</code></td><td>42</td><td>擬似乱数シードの加算定数</td></tr>
+  <tr><td><code>drumSwingAmount</code></td><td>0.65</td><td>ドラムパターン再生時の固定スウィング量 (0=ストレート, 1=フル三連符) — メロディのスウィング量とは独立</td></tr>
+  <tr><td><code>patterns.swing.ghost.tripletGrid</code></td><td>[0.333, 0.667]</td><td>ゴーストノートの三連符グリッド位置 (拍内の分割比率)</td></tr>
+  <tr><td><code>patterns.swing.comping.slots</code></td><td>[2.5, 3.0, 3.5]</td><td>スネアコンピングアクセントの候補拍位置</td></tr>
 </table>
 
 <p><strong>ワークフロー</strong>:</p>
@@ -855,7 +885,7 @@ python scripts/parse_drum_patterns.py scripts/data/export_drums.mid
 # 2. パーサーが推奨 WAV ファイル一覧を表示 → DAW で VSTi の各パッドを推奨 vel で録音
 #    → public/drums/{kitName}/ に配置
 
-# 3. 開発サーバーで確認
+# 3. 開発サーバーで確認 (drum-config.json の値変更はリロードだけで反映)
 npm run dev</code></pre>
 
 <table>
@@ -874,32 +904,140 @@ npm run dev</code></pre>
   <li><strong>音量制御</strong>: メトロノームと同じ <code>metVolume</code> スライダーで音量調節</li>
 </ul>
 
+<h4>コンピング設定ファイル (<code>public/comp-config.json</code>)</h4>
+
+<p>コンピングリズムパターンの全定数を外部 JSON で一括管理。ブラウザリロードだけで反映。
+ファイル不在時やフィールド欠落時はデフォルト値にフォールバック。</p>
+
+<table>
+  <tr><th>セクション</th><th>内容</th></tr>
+  <tr><td><code>swing.even</code></td><td>Swing 偶数小節パターン: beatStart/duration ペアの配列</td></tr>
+  <tr><td><code>swing.odd</code></td><td>Swing 奇数小節パターン: beatStart/duration ペアの配列</td></tr>
+  <tr><td><code>swing.velocity</code></td><td>Swing コンピング ベロシティ (0-1)</td></tr>
+  <tr><td><code>bossa</code></td><td>Bossa パターン: events 配列 + velocity</td></tr>
+  <tr><td><code>ballad</code></td><td>Ballad パターン: events 配列 + velocity</td></tr>
+  <tr><td><code>latin</code></td><td>Latin パターン: events 配列 + velocity</td></tr>
+</table>
+
+<h4>ベース設定ファイル (<code>public/bass-config.json</code>)</h4>
+
+<p>ウォーキングベース生成の全定数を外部 JSON で一括管理。ブラウザリロードだけで反映。
+ファイル不在時やフィールド欠落時はデフォルト値にフォールバック。</p>
+
+<table>
+  <tr><th>セクション</th><th>内容</th></tr>
+  <tr><td><code>midiRange</code></td><td>ベース音域: low / high (MIDI ノート番号)</td></tr>
+  <tr><td><code>bassRootBase</code></td><td>ベースルートの基準 MIDI ノート番号</td></tr>
+  <tr><td><code>velocity</code></td><td>ベース再生ベロシティ (0-127)</td></tr>
+</table>
+
+<h4>ピアノ設定ファイル (<code>public/piano-config.json</code>)</h4>
+
+<p>ピアノボイシング構築と再生の全定数を外部 JSON で一括管理。ブラウザリロードだけで反映。
+ファイル不在時やフィールド欠落時はデフォルト値にフォールバック。</p>
+
+<table>
+  <tr><th>セクション</th><th>内容</th></tr>
+  <tr><td><code>lhBase</code></td><td>左手 (LH) ボイシングの基準 MIDI ノート番号</td></tr>
+  <tr><td><code>rhBase</code></td><td>右手 (RH) ボイシングの基準 MIDI ノート番号</td></tr>
+  <tr><td><code>rhRange</code></td><td>右手の音域幅 (半音数)</td></tr>
+  <tr><td><code>duration</code></td><td>ノート持続時間 (秒)</td></tr>
+  <tr><td><code>velocity</code></td><td>ピアノ再生ベロシティ (0-127)</td></tr>
+  <tr><td><code>stagger</code></td><td>LH/RH 間のストラガー遅延 (秒)</td></tr>
+</table>
+
+<h4>オーディオ設定ファイル (<code>public/audio-config.json</code>)</h4>
+
+<p>メトロノーム・楽器合成 (ギター/サクソフォン/エレピ)・コードストラム・フレーズ再生の全定数を外部 JSON で一括管理。
+ブラウザリロードだけで反映。ファイル不在時やフィールド欠落時はデフォルト値にフォールバック。</p>
+
+<table>
+  <tr><th>セクション</th><th>内容</th></tr>
+  <tr><td><code>metronome</code></td><td>メトロノーム設定: accent/normal の周波数・ゲイン倍率・持続時間</td></tr>
+  <tr><td><code>guitar</code></td><td>ギター (Karplus-Strong) 合成パラメータ: bufferSamples, smoothing, bodyGain, stringGain, decayFactor</td></tr>
+  <tr><td><code>saxophone</code></td><td>サクソフォン合成パラメータ: oscillator, formants, envelope, vibrato</td></tr>
+  <tr><td><code>electricPiano</code></td><td>エレクトリックピアノ合成パラメータ: harmonics, envelope</td></tr>
+  <tr><td><code>chordStrum</code></td><td>コードストラム設定: stagger, duration, gain</td></tr>
+  <tr><td><code>phrase</code></td><td>フレーズ再生設定: noteGain, legato, staccato</td></tr>
+  <tr><td><code>swing</code></td><td>スウィング変換パラメータ: 検出閾値・テンポ補正・タイミング/ダイナミクス/アーティキュレーション係数</td></tr>
+</table>
+
+<p><strong>swing セクション詳細</strong>:</p>
+<table>
+  <tr><th>パラメータ</th><th>デフォルト</th><th>説明</th></tr>
+  <tr><td><code>swing.eighthThreshold</code></td><td>0.08</td><td>8分音符裏拍検出の許容誤差 (拍の小数部が 0.5±この値なら裏拍と判定)</td></tr>
+  <tr><td><code>swing.sixteenthThreshold</code></td><td>0.06</td><td>16分音符裏拍検出の許容誤差 (0.25/0.75±この値)</td></tr>
+  <tr><td><code>swing.tempoCompThreshold</code></td><td>200</td><td>テンポ補正の開始BPM (これ以上でスウィング量が自動減衰)</td></tr>
+  <tr><td><code>swing.tempoCompRange</code></td><td>80</td><td>テンポ補正の減衰範囲 (threshold+range BPMでスウィング量≈0)</td></tr>
+  <tr><td><code>swing.timing.offbeatEighthShift</code></td><td>0.17</td><td>裏拍8分音符の後ろずらし量 (拍単位, 1.0=完全三連符フィール)</td></tr>
+  <tr><td><code>swing.timing.sixteenth2ndShift</code></td><td>0.04</td><td>16分音符2番目のずらし量</td></tr>
+  <tr><td><code>swing.timing.sixteenth4thShift</code></td><td>0.08</td><td>16分音符4番目のずらし量</td></tr>
+  <tr><td><code>swing.dynamics.offbeatEighthCut</code></td><td>0.20</td><td>裏拍8分音符の音量カット率 (amount=1で-20%)</td></tr>
+  <tr><td><code>swing.dynamics.onbeatEighthBoost</code></td><td>0.15</td><td>表拍8分音符の音量ブースト率 (amount=1で+15%)</td></tr>
+  <tr><td><code>swing.dynamics.sixteenthCut</code></td><td>0.15</td><td>裏拍16分音符の音量カット率</td></tr>
+  <tr><td><code>swing.articulation.offbeatEighthShorten</code></td><td>0.30</td><td>裏拍8分音符のスタッカート率 (amount=1で-30%短縮)</td></tr>
+  <tr><td><code>swing.articulation.onbeatEighthLengthen</code></td><td>0.25</td><td>表拍8分音符のレガート率 (amount=1で+25%延長)</td></tr>
+  <tr><td><code>swing.articulation.sixteenthShorten</code></td><td>0.20</td><td>裏拍16分音符のスタッカート率</td></tr>
+</table>
+
+<h4>汎用設定ローダー (<code>src/utils/configLoader.ts</code>)</h4>
+
+<p>全設定 JSON ファイルの読み込みに共通する <code>deepMerge</code> + <code>createConfigLoader</code> ファクトリを提供。
+<code>createConfigLoader(url, defaults)</code> が <code>loadXxxConfig()</code> / <code>getXxxConfig()</code> ペアを生成。
+fetch → deepMerge (デフォルト値とマージ) → キャッシュの一連の処理を統一化。
+ファイル不在やネットワークエラー時はデフォルト値にフォールバック。</p>
+
 <h3>バッキングスタイル (<code>backingStyles.ts</code> / <code>compPatterns.ts</code>)</h3>
-<p>4種類のバッキングスタイルを提供。スタイルに応じてコンピングリズム・ベースライン・ドラムパターンを一括切替。
+<p>7種類のバッキングスタイルを提供 (スウィング系4種 + Bossa/Ballad/Latin)。スタイルに応じてコンピングリズム・ベースライン・ドラムパターンを一括切替。
 <code>backingStyle</code>, <code>swingEnabled</code>, <code>swingAmount</code> は <code>Progression</code> オブジェクトに曲ごと保存され、進行切替時に復元。ミキサーのドロップダウンで選択。</p>
 
 <table>
-  <tr><th>Style</th><th>Comping</th><th>Bass</th><th>Drums</th></tr>
+  <tr><th>Style</th><th>Default BPM</th><th>Comping</th><th>Bass</th><th>Drums</th></tr>
   <tr>
-    <td><strong>Swing</strong></td>
+    <td><strong>Medium Swing</strong></td>
+    <td>120</td>
     <td>Charleston (1拍半+裏拍) / 2拍ホールド交互</td>
     <td>4フィール ウォーキングベース (Root→3rd/5th→5th/8va→アプローチ)</td>
-    <td>スウィングライド + 2,4拍HH + 1拍目キック</td>
+    <td>スウィングライド + 2,4拍HH + 1拍目キック (DB パターン優先)</td>
+  </tr>
+  <tr>
+    <td><strong>Medium Up Swing</strong></td>
+    <td>160</td>
+    <td>同上 (Charleston)</td>
+    <td>同上 (4フィール)</td>
+    <td>DB パターン (medium-up-swing) / フォールバック: アルゴリズム生成</td>
+  </tr>
+  <tr>
+    <td><strong>Medium Up Swing 2</strong></td>
+    <td>200</td>
+    <td>同上 (Charleston)</td>
+    <td>同上 (4フィール)</td>
+    <td>DB パターン (medium-up-swing-2) / フォールバック: アルゴリズム生成</td>
+  </tr>
+  <tr>
+    <td><strong>Up-Tempo Swing</strong></td>
+    <td>282</td>
+    <td>同上 (Charleston)</td>
+    <td>同上 (4フィール)</td>
+    <td>DB パターン (up-tempo-swing) / フォールバック: アルゴリズム生成</td>
   </tr>
   <tr>
     <td><strong>Bossa</strong></td>
+    <td>140</td>
     <td>シンコペーション (1拍+裏拍+3拍目)</td>
     <td>2フィール (Root + 5th)</td>
     <td>クロススティック 2,4拍 + 4分HH + シンコペーションキック</td>
   </tr>
   <tr>
     <td><strong>Ballad</strong></td>
+    <td>72</td>
     <td>全音符ホールド (4拍)</td>
     <td>2フィール (Root + アプローチ)</td>
     <td>ソフトライド 4分 + 2,4拍HH + 1拍目ソフトキック</td>
   </tr>
   <tr>
     <td><strong>Latin</strong></td>
+    <td>180</td>
     <td>モントゥーノ風 (8分音符シンコペーション、6イベント/4拍)</td>
     <td>トゥンバオ (Root + 5thシンコペーション + オクターブ)</td>
     <td>ストレート8thライド + 1,3拍キック + 0,2拍HH</td>
@@ -913,7 +1051,7 @@ npm run dev</code></pre>
 
 <h4>ベースライン (<code>walkingBass.ts</code>)</h4>
 <p><code>generateBassLine()</code> の <code>style</code> パラメータでスタイル別パターンに分岐。
-Swing はウォーキング (4フィール)、Bossa/Ballad は2フィール、Latin はトゥンバオ。</p>
+全スウィング系 (Medium Swing / Medium Up Swing / Medium Up Swing 2 / Up-Tempo Swing) はウォーキング (4フィール)、Bossa/Ballad は2フィール、Latin はトゥンバオ。</p>
 
 <h4>ドラムパターン (<code>drumPatterns.ts</code>)</h4>
 <p><code>generateDrumPattern()</code> がスタイル別ディスパッチ関数として各パターン生成関数に分岐。</p>
@@ -927,7 +1065,7 @@ Swing はウォーキング (4フィール)、Bossa/Ballad は2フィール、La
   <tr><td>Single Note</td><td><code>noteVolume</code></td><td>0.4</td><td><code>playNote()</code> + <code>schedulePhrase()</code></td></tr>
   <tr><td>Count-In</td><td><code>countInVolume</code></td><td>0.5</td><td><code>playClick()</code> (カウントイン専用)</td></tr>
   <tr><td>Instrument</td><td><code>phraseInstrument</code></td><td>'guitar'</td><td>楽器選択 (guitar/saxophone)</td></tr>
-  <tr><td>Backing Style</td><td><code>Progression.backingStyle</code></td><td>'swing'</td><td>スタイル選択 (swing/bossa/ballad/latin) — 曲ごと保存</td></tr>
+  <tr><td>Backing Style</td><td><code>Progression.backingStyle</code></td><td>'medium-swing'</td><td>スタイル選択 (7種: medium-swing/medium-up-swing/medium-up-swing-2/up-tempo-swing/bossa/ballad/latin) — 曲ごと保存</td></tr>
   <tr><td>Swing</td><td><code>Progression.swingEnabled</code></td><td>false</td><td>ON/OFFトグル — 曲ごと保存</td></tr>
   <tr><td>Swing Amount</td><td><code>Progression.swingAmount</code></td><td>0.2</td><td>0-1 (デフォルト20%) — 曲ごと保存</td></tr>
 </table>
@@ -1517,7 +1655,7 @@ GeneratedPhrase
 
 <!-- ==================== TESTING ==================== -->
 <h2 id="testing">Test Suite</h2>
-<p><code>npm test</code> — Vitest による <strong>800テスト</strong>。</p>
+<p><code>npm test</code> — Vitest による <strong>816テスト</strong>。</p>
 
 <table>
   <tr><th>Test File</th><th>Tests</th><th>Coverage</th></tr>
