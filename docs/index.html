@@ -355,7 +355,7 @@
     <li><strong>カウントイン</strong> — 再生開始前に1-2小節クリック、サイクル切替 (2小節→OFF→1小節→2小節)、音量調節可、アウフタクト対応</li>
     <li><strong>小節ループ</strong> — コード譜面上で小節を選択してループ再生 (単一/範囲)、オレンジ下線ハイライト</li>
     <li><strong>表示倍率スライダー</strong> — 画面右下固定、CSS zoom で100-150% (1%刻み)、リセットボタン付き</li>
-    <li><strong>ドラムパターン</strong> — smplr DrumMachine (TR-808) によるジャズスウィングドラムパターン (ride/hihat/kick)、スウィング対応、メトロノームとの切替</li>
+    <li><strong>ドラムパターン</strong> — Hydrogen GM アコースティックドラム (ride/hihat/kick/snare) による iReal Pro 風有機的ジャズドラム。キック全拍フェザリング、スネアゴーストノート+コンピング、ベロシティヒューマナイゼーション (seeded PRNG)、スウィング対応、メトロノームとの切替</li>
   </ul>
 </div>
 
@@ -445,7 +445,7 @@ Utils Layer (pure functions):
 │   ├── playbackSeq.ts            — buildPlaybackSeq(), computeCumBeats()
 │   ├── phraseAnalysis.ts         — analyzePhrase(), computeSummary()
 │   ├── swing.ts                  — swingBeatStart(), swingVolumeMult(), swingDurMult()
-│   └── __tests__/                — 793 テスト
+│   └── __tests__/                — 800 テスト
 ├── components/
 │   ├── Fretboard/                — SVG指板 (Fretboard, FretboardNote, GhostNote, PhrasePath)
 │   ├── Controls/                 — 全コントロールUI
@@ -795,18 +795,21 @@ actualBeats = (beatWidth / sumOfBeatWidths) * 4</pre>
 </div>
 
 <h3>ドラムパターン (<code>drumPatterns.ts</code>)</h3>
-<p>smplr の <strong>DrumMachine (TR-808)</strong> を使用したジャズスウィングドラムパターン。
-メトロノームの代替として、よりリアルなジャズフィールでの練習が可能。</p>
+<p><strong>Hydrogen GM アコースティックドラム</strong> (ライド/HH/キック/スネア、各5段階ベロシティレイヤー) による
+iReal Pro 風の有機的なジャズドラムパターン。seeded PRNG (Mulberry32) で小節ごとに再現可能なバリエーションを生成。</p>
 
 <table>
-  <tr><th>楽器</th><th>パターン</th></tr>
-  <tr><td>Ride Cymbal</td><td>ジャズスウィングライドパターン (4拍)</td></tr>
-  <tr><td>Hi-Hat</td><td>2拍・4拍のフットハイハット</td></tr>
-  <tr><td>Kick Drum</td><td>1拍目のキック (小節頭アクセント)</td></tr>
+  <tr><th>楽器</th><th>パターン</th><th>ベロシティ</th></tr>
+  <tr><td>Ride Cymbal</td><td>"Spang-a-lang" — 全4分 + 2,4拍裏 skip note</td><td>2,4拍アクセント (80-96) / 1,3拍 (62-83) / skip (42-58)</td></tr>
+  <tr><td>Hi-Hat (foot)</td><td>2拍・4拍ペダル</td><td>72-88</td></tr>
+  <tr><td>Kick Drum</td><td>全拍フェザリング</td><td>beat 1: 54-66 / 他: 44-56</td></tr>
+  <tr><td>Snare (ghost)</td><td>三連符グリッド上に確率25%で配置</td><td>20-50</td></tr>
+  <tr><td>Snare (comp)</td><td>1小節0-2ヒット、候補位置 [2.5, 3.0, 3.5] から確率30%</td><td>60-100</td></tr>
 </table>
 
 <ul>
-  <li><strong>スウィング対応</strong>: <code>swingEnabled</code> 時はドラムパターンにもスウィングが適用される</li>
+  <li><strong>ベロシティヒューマナイゼーション</strong>: 全ヒットに ±ランダム揺れ (同一ベロシティの連続を防止)</li>
+  <li><strong>スウィング対応</strong>: <code>swingEnabled</code> 時はライド skip note・スネアコンピングにもスウィングが適用</li>
   <li><strong>メトロノームと排他</strong>: ドラムパターン有効時はメトロノームのクリック音は無効化</li>
   <li><strong>音量制御</strong>: メトロノームと同じ <code>metVolume</code> スライダーで音量調節</li>
 </ul>
@@ -1452,7 +1455,7 @@ GeneratedPhrase
 
 <!-- ==================== TESTING ==================== -->
 <h2 id="testing">Test Suite</h2>
-<p><code>npm test</code> — Vitest による <strong>793テスト</strong>。</p>
+<p><code>npm test</code> — Vitest による <strong>800テスト</strong>。</p>
 
 <table>
   <tr><th>Test File</th><th>Tests</th><th>Coverage</th></tr>
@@ -1466,7 +1469,7 @@ GeneratedPhrase
   <tr><td>noteSpelling.test.ts</td><td>19</td><td>スペリング、度数マップ、resolveMode</td></tr>
   <tr><td>audioEngine.test.ts</td><td>14</td><td>Karplus-Strong, サクソフォン, エレピ, コードストラム</td></tr>
   <tr><td>walkingBass.test.ts</td><td>15</td><td>ベースライン生成、音域検証、拍数別、アプローチノート、スタイル別</td></tr>
-  <tr><td>drumPatterns.test.ts</td><td>19</td><td>ドラムパターン生成、スウィング適用、ride/hihat/kick配置、スタイル別</td></tr>
+  <tr><td>drumPatterns.test.ts</td><td>26</td><td>ドラムパターン生成、フェザリング、ゴーストノート、コンピング、スウィング、スタイル別</td></tr>
   <tr><td>compPatterns.test.ts</td><td>10</td><td>コンピングパターン生成 (Swing Charleston/Bossa/Ballad/Latin)</td></tr>
   <tr><td>backingStyles.test.ts</td><td>17</td><td>バッキングスタイル定数構造、スタイル別統合テスト (コンピング+ベース+ドラム)</td></tr>
 </table>

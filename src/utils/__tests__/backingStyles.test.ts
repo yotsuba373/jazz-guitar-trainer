@@ -113,11 +113,11 @@ describe('スタイル別統合: 全楽器パターン生成', () => {
     expect(drums.some(h => h.role === 'ride')).toBe(true);
   });
 
-  it('Bossa: ベース2音 + ドラムにsnare (cross-stick)', () => {
+  it('Bossa: ベース2音 + ドラムにxstick (cross-stick)', () => {
     const bass = generateBassLine(0, 'm7', 4, 7, 'bossa');
     const drums = generateDrumPattern(4, 0, 0, 140, 'bossa');
     expect(bass).toHaveLength(2); // 2-feel
-    expect(drums.some(h => h.role === 'snare')).toBe(true);
+    expect(drums.some(h => h.role === 'xstick')).toBe(true);
   });
 
   it('Ballad: ベース2音 + ドラム低ベロシティ', () => {

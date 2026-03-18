@@ -14,7 +14,7 @@ npm install
 npm run dev       # 開発サーバー起動 → http://localhost:5173
 npm run build     # tsc + vite build
 npm run lint      # ESLint
-npm test          # vitest run (793 テスト)
+npm test          # vitest run (800 テスト)
 ```
 
 Node.js が未インストールの場合は fnm を使用:
@@ -86,7 +86,7 @@ src/
 │       ├── swing.test.ts            — 25 tests (タイミング/ダイナミクス/アーティキュレーション/テンポ補正)
 │       ├── lickEngine.test.ts       — 61 tests (リックDB読込・移調・指板マッピング・モード推定・ポジション選択・インスタンス選択・8音スケール・GeneratedPhrase変換・ii-V検出・sliceLick汎用分割)
 │       ├── walkingBass.test.ts      — 15 tests (ベースライン生成、音域検証、拍数別、アプローチノート、スタイル別)
-│       ├── drumPatterns.test.ts    — 19 tests (ドラムパターン生成、スウィング、バリエーション、スタイル別)
+│       ├── drumPatterns.test.ts    — 26 tests (ドラムパターン生成、フェザリング、ゴーストノート、コンピング、スウィング、スタイル別)
 │       ├── compPatterns.test.ts    — 10 tests (コンピングパターン生成、Swing Charleston/Bossa/Ballad/Latin)
 │       └── backingStyles.test.ts   — 17 tests (バッキングスタイル定数構造、スタイル別統合テスト)
 ├── hooks/
@@ -496,7 +496,7 @@ Footer
 - 楽器選択 (ギター/サックス): Web Audio API リアルタイム合成、フレーズ再生+指板クリック共通、localStorage 永続化
 - **SoundFont ピアノコンピング** (smplr): acoustic_grand_piano SoundFont によるリアルなジャズピアノコンピング。`buildJazzPianoVoicing()` でコード品質別に LH(Root+5th) + RH(3rd+7th シェルボイシング) を自動生成。初回アクセス時に非同期ロード、ロード中はスピナー表示、ロード前は既存 EP にフォールバック。`stopId` でコードごとに voice を分離 (同一 MIDI ノート連続の音欠け防止) + 個別 stop 関数で事前スケジュール済みノートの確実なキャンセル
 - **ウォーキングベース** (smplr): acoustic_bass SoundFont でコード進行に合わせたベースラインを自動生成。`generateBassLine()` がコード品質・拍数・次コードルートからライン生成 (1拍=ルート、2拍=ルート+アプローチ、3-4拍=ルート→3rd/5th→5th/8va→半音アプローチ)。ミキサーにベースチャンネル (音量+ミュート) 追加
-- **ドラムパターン** (smplr Sampler + Hydrogen GM): アコースティックドラム録音 (ライドシンバル/ハイハット/キック、各5段階ベロシティレイヤー) によるジャズスウィングドラムパターン。`rhythmMode` でメトロノーム/ドラム排他切替、音量スライダー共用 (`metVolume`)。スウィング量・テンポ補正対応。カウントイン・プレビュー再生は常にメトロノームクリック
+- **ドラムパターン** (smplr Sampler + Hydrogen GM): アコースティックドラム録音 (ライド/HH/キック/スネア、各5段階ベロシティレイヤー) による iReal Pro 風有機的ジャズドラム。Swing: キック全拍フェザリング (vel 35-70) + ライドバックビートアクセント + スネアゴーストノート (確率的, vel 20-50) + スネアコンピング (vel 60-100) + ベロシティヒューマナイゼーション (seeded PRNG で小節ごとバリエーション)。`rhythmMode` でメトロノーム/ドラム排他切替、音量スライダー共用 (`metVolume`)。スウィング量・テンポ補正対応。カウントイン・プレビュー再生は常にメトロノームクリック
 - **バッキングスタイル** (4種): Swing / Bossa / Ballad / Latin。スタイルに応じてコンピングリズム・ベースライン・ドラムパターンを一括切替。Swing=Charlestonコンピング+4フィールウォーキングベース+スウィングライド、Bossa=シンコペーションコンピング+2フィールベース+クロススティック、Ballad=全音符コンピング+2フィールベース+ソフトライド、Latin=モントゥーノ風コンピング+トゥンバオベース+ストレート8thライド。`backingStyle` を localStorage 永続化、ミキサーで選択
 - コードストラム: エレピ音 (Sine加算合成, 2nd/3rd倍音)
 - スウィングモード: 多次元スウィング (タイミング+ダイナミクス+アーティキュレーション)、0-100%連続制御、テンポ補正 (>200BPM)、PhrasePath視覚同期、PianoRollはストレート表示、localStorage永続化
