@@ -170,6 +170,15 @@ export async function loadDrumSampler(ctx: AudioContext): Promise<DrumSamplerSet
         const keyMapByKit: Record<string, Map<string, string>> = {};
         const loadTasks: Promise<void>[] = [];
 
+        // キットごとのゲイン倍率を集約 (gains は style 単位 → kit 単位に変換)
+        const gainByKit: Record<string, number> = {};
+        if (db.gains) {
+          for (const [style, gain] of Object.entries(db.gains)) {
+            const kit = db.kits[style] ?? style;
+            gainByKit[kit] = gain;
+          }
+        }
+
         // キットごとに1つの Sampler をロード
         for (const [style, sampleMap] of Object.entries(db.samples)) {
           const kitFolder = db.kits[style] ?? style;
@@ -179,11 +188,17 @@ export async function loadDrumSampler(ctx: AudioContext): Promise<DrumSamplerSet
           if (Object.keys(buffers).length === 0) continue;
           samplerByKit[kitFolder] = null!;
           keyMapByKit[kitFolder] = keyMap;
+          const kitGain = gainByKit[kitFolder] ?? 1.0;
           loadTasks.push(
             (async () => {
               const sampler = new Sampler(ctx, { buffers, detune: 0, decayTime: 0.5 });
               await sampler.load;
-              sampler.output.setVolume(80);
+              sampler.output.setVolume(127);
+              if (kitGain !== 1.0) {
+                const boost = ctx.createGain();
+                boost.gain.value = kitGain;
+                sampler.output.addInsert(boost);
+              }
               samplerByKit[kitFolder] = sampler;
             })().catch(() => { delete samplerByKit[kitFolder]; }),
           );

@@ -23,6 +23,7 @@ export interface DrumPatternDB {
   patterns: Record<string, DrumPatternEntry[]>;
   samples: Record<string, SampleMap>;  // style → SampleMap
   kits: Record<string, string>;        // style → kit フォルダ名
+  gains?: Record<string, number>;      // style → 音量ブースト倍率 (デフォルト 1.0)
 }
 
 let cachedDB: DrumPatternDB | null = null;

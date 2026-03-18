@@ -86,12 +86,12 @@ def snap_to_grid(value: float) -> float:
     return round(value * GRID) / GRID
 
 
-def load_kit_mapping() -> dict[str, str]:
-    """drum-kits.json を読み込み、style → kit フォルダ名の辞書を返す"""
+def load_kit_mapping() -> tuple[dict[str, str], dict[str, float]]:
+    """drum-kits.json を読み込み、(style → kit フォルダ名, kit → gain 倍率) を返す"""
     if not os.path.exists(KITS_PATH):
         print(f'[WARN] drum-kits.json not found at {KITS_PATH}')
         print(f'[WARN] スタイル名をそのままキットフォルダ名として使用します')
-        return {}
+        return {}, {}
     with open(KITS_PATH, 'r', encoding='utf-8') as f:
         raw = json.load(f)
     mapping = {}
@@ -99,7 +99,11 @@ def load_kit_mapping() -> dict[str, str]:
         if k.startswith('_'):
             continue
         mapping[k.lower()] = v
-    return mapping
+    gains = {}
+    if '_gains' in raw and isinstance(raw['_gains'], dict):
+        for kit_name, gain_val in raw['_gains'].items():
+            gains[kit_name] = float(gain_val)
+    return mapping, gains
 
 
 def scan_wav_files(kit_folder: str) -> dict[int, list[int]]:
@@ -372,10 +376,12 @@ def print_report(
 
 def main():
     # キットマッピング読み込み
-    kit_mapping = load_kit_mapping()
+    kit_mapping, kit_gains = load_kit_mapping()
     if kit_mapping:
         kits_used = sorted(set(kit_mapping.values()))
         print(f'Loaded drum-kits.json: {len(kit_mapping)} style(s) → {len(kits_used)} kit(s) ({", ".join(kits_used)})')
+    if kit_gains:
+        print(f'Kit gains: {kit_gains}')
 
     patterns_db: dict[str, list[dict]] = {}
     total_patterns = 0
@@ -482,12 +488,21 @@ def main():
         if wav_map:
             samples_db[style] = {str(p): vels for p, vels in sorted(wav_map.items())}
 
+    # キットごとの gain 倍率 (スタイル→gain にマッピング)
+    gains_db: dict[str, float] = {}
+    for style in patterns_db:
+        kit_folder = kits_db[style]
+        if kit_folder in kit_gains:
+            gains_db[style] = kit_gains[kit_folder]
+
     # JSON 出力
-    db = {
+    db: dict = {
         'patterns': patterns_db,
         'samples': samples_db,
         'kits': kits_db,
     }
+    if gains_db:
+        db['gains'] = gains_db
     with open(OUTPUT_PATH, 'w', encoding='utf-8') as f:
         json.dump(db, f, indent=2, ensure_ascii=False)
     print(f'\nWrote {total_patterns} pattern(s) across {len(patterns_db)} style(s) to {OUTPUT_PATH}')

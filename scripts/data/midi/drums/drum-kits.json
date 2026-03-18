@@ -1,0 +1,11 @@
+{
+  "_comment": "スタイル → ドラムキット (WAV フォルダ名) のマッピング。同じキットを複数スタイルで共有可能。",
+  "_gains_comment": "キットごとの音量ブースト倍率 (デフォルト 1.0)。Hydrogen GM との音量差を補正。",
+  "medium-swing": "bop-sticks-dry",
+  "medium-up-swing": "bop-sticks-dry",
+  "medium-up-swing-2": "bop-sticks-dry",
+  "up-tempo-swing": "bop-sticks-dry",
+  "_gains": {
+    "bop-sticks-dry": 6.0
+  }
+}
