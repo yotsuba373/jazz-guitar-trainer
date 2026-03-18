@@ -5,7 +5,7 @@ from pathlib import Path
 import urllib.request
 
 URL = "https://jazzomat.hfm-weimar.de/download/downloads/wjazzd.db"
-DATA_DIR = Path(__file__).parent / "data"
+DATA_DIR = Path(__file__).parent / "output"
 DB_PATH = DATA_DIR / "wjazzd.db"
 
 

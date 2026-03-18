@@ -22,9 +22,12 @@ npm-debug.log*
 # Claude Code
 .claude/
 
-# Python analysis data (large downloads)
-scripts/data/
+# Python: generated/downloaded output (re-creatable by running scripts)
+scripts/output/
+scripts/data/*.generated.json
+scripts/data/*.db
+scripts/data/*.wav
+scripts/data/midi/
+scripts/data/omnibook/
+scripts/data/drum_samples*
 __pycache__/
-
-# WAV samples and generated DBs are tracked in Git (LFS for WAV)
-# Only parser intermediate outputs under scripts/data/ are ignored (above)

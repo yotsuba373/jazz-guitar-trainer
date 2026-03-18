@@ -4,15 +4,15 @@ MIDI ドラムパターン → JSON パーサー。
 
 2つの入力モード:
   A) マルチトラック MIDI (推奨):
-     python scripts/parse_drum_patterns.py scripts/data/midi/drums/export_drums.mid
+     python scripts/parse_drum_patterns.py scripts/data/export_drums.mid
      → トラック名 = スタイル名、8小節ごとに自動分割
 
   B) 個別ファイル:
-     scripts/data/midi/drums/{style}_{番号}.mid (8小節, 4/4)
+     scripts/output/midi/drums/{style}_{番号}.mid (8小節, 4/4)
      python scripts/parse_drum_patterns.py
      → ファイル名からスタイルを判定
 
-出力: scripts/data/drum-patterns.generated.json → public/drum-patterns.generated.json にコピー
+出力: public/drum-patterns.generated.json
 
 依存: pip install pretty_midi
 """
@@ -20,7 +20,7 @@ MIDI ドラムパターン → JSON パーサー。
 import json
 import os
 import re
-import shutil
+
 import sys
 
 import pretty_midi
@@ -35,10 +35,9 @@ MEASURES_PER_PATTERN = 8
 BEATS_PER_PATTERN = BEATS_PER_MEASURE * MEASURES_PER_PATTERN  # 32
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-DRUMS_DIR = os.path.join(SCRIPT_DIR, 'data', 'midi', 'drums')
-KITS_PATH = os.path.join(DRUMS_DIR, 'drum-kits.json')
-OUTPUT_PATH = os.path.join(SCRIPT_DIR, 'data', 'drum-patterns.generated.json')
-PUBLIC_PATH = os.path.join(SCRIPT_DIR, '..', 'public', 'drum-patterns.generated.json')
+DRUMS_DIR = os.path.join(SCRIPT_DIR, 'output', 'midi', 'drums')
+KITS_PATH = os.path.join(SCRIPT_DIR, 'data', 'drum-kits.json')
+OUTPUT_PATH = os.path.join(SCRIPT_DIR, '..', 'public', 'drum-patterns.generated.json')
 PUBLIC_DRUMS = os.path.join(SCRIPT_DIR, '..', 'public', 'drums')
 
 # ファイル名パターン: {style}_{番号}.mid (style にハイフン許容)
@@ -491,9 +490,6 @@ def main():
     with open(OUTPUT_PATH, 'w', encoding='utf-8') as f:
         json.dump(db, f, indent=2, ensure_ascii=False)
     print(f'\nWrote {total_patterns} pattern(s) across {len(patterns_db)} style(s) to {OUTPUT_PATH}')
-
-    shutil.copy2(OUTPUT_PATH, PUBLIC_PATH)
-    print(f'Copied to {PUBLIC_PATH}')
 
     # サマリー
     for key, patterns in sorted(patterns_db.items()):

@@ -5,7 +5,7 @@ Cubaseから書き出した全トラック入りMIDIを、
 トラック名ごとに個別MIDIファイルに分割する。
 
 使い方:
-  python scripts/split_midi.py scripts/data/export.mid scripts/data/midi/
+  python scripts/split_midi.py scripts/data/export_licks.mid scripts/output/midi/
 
 トラック名がそのままファイル名になる:
   トラック "parker_dom7_b1" → parker_dom7_b1.mid
@@ -63,7 +63,7 @@ if __name__ == "__main__":
     if len(sys.argv) < 3:
         print(__doc__)
         print("使用例:")
-        print("  python scripts/split_midi.py scripts/data/export.mid scripts/data/midi/")
+        print("  python scripts/split_midi.py scripts/data/export_licks.mid scripts/output/midi/")
         sys.exit(1)
 
     split_midi(sys.argv[1], sys.argv[2])

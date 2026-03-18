@@ -1,4 +1,5 @@
 public/drums/**/*.wav filter=lfs diff=lfs merge=lfs -text
 public/bass/**/*.wav filter=lfs diff=lfs merge=lfs -text
+scripts/data/*.mid filter=lfs diff=lfs merge=lfs -text
 public/drums/**/*.wav !text !filter !merge !diff
 public/bass/**/*.wav !text !filter !merge !diff

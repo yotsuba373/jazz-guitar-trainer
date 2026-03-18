@@ -16,7 +16,7 @@ from parse_licks import (
     TYPE_ROOT_OFFSET, BEATS_PER_MEASURE,
 )
 
-MIDI_DIR = os.path.join(os.path.dirname(__file__), "data", "midi")
+MIDI_DIR = os.path.join(os.path.dirname(__file__), "output", "midi")
 NOTE_NAMES = ["C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"]
 
 

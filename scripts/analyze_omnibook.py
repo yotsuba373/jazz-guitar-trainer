@@ -16,7 +16,7 @@ warnings.filterwarnings("ignore")
 
 import music21  # noqa: E402
 
-DATA_DIR = Path(__file__).parent / "data" / "omnibook"
+DATA_DIR = Path(__file__).parent / "output" / "omnibook"
 OUTPUT_DIR = Path(__file__).parent / "output"
 
 # ---------------------------------------------------------------------------

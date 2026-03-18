@@ -22,7 +22,7 @@ import soundfile as sf
 import numpy as np
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-DEFAULT_MANIFEST = os.path.join(SCRIPT_DIR, 'data', 'drum_samples_manifest.json')
+DEFAULT_MANIFEST = os.path.join(SCRIPT_DIR, 'output', 'drum_samples_manifest.json')
 PUBLIC_DRUMS = os.path.join(SCRIPT_DIR, '..', 'public', 'drums')
 
 # 無音トリム: この振幅以下が続いたら末尾をカット

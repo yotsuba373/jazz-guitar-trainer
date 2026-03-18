@@ -28,10 +28,10 @@ import sys
 import pretty_midi
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-PATTERNS_PATH = os.path.join(SCRIPT_DIR, 'data', 'drum-patterns.generated.json')
-KITS_PATH = os.path.join(SCRIPT_DIR, 'data', 'midi', 'drums', 'drum-kits.json')
-OUTPUT_MIDI = os.path.join(SCRIPT_DIR, 'data', 'drum_samples.mid')
-OUTPUT_MANIFEST = os.path.join(SCRIPT_DIR, 'data', 'drum_samples_manifest.json')
+PATTERNS_PATH = os.path.join(SCRIPT_DIR, '..', 'public', 'drum-patterns.generated.json')
+KITS_PATH = os.path.join(SCRIPT_DIR, 'data', 'drum-kits.json')
+OUTPUT_MIDI = os.path.join(SCRIPT_DIR, 'output', 'drum_samples.mid')
+OUTPUT_MANIFEST = os.path.join(SCRIPT_DIR, 'output', 'drum_samples_manifest.json')
 
 NOTE_NAMES = ['c', 'c#', 'd', 'd#', 'e', 'f', 'f#', 'g', 'g#', 'a', 'a#', 'b']
 

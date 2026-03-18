@@ -12,7 +12,7 @@ from collections import Counter, defaultdict
 from datetime import date
 from pathlib import Path
 
-DB_PATH = Path(__file__).parent / "data" / "wjazzd.db"
+DB_PATH = Path(__file__).parent / "output" / "wjazzd.db"
 OUTPUT_DIR = Path(__file__).parent / "output"
 
 # ---------------------------------------------------------------------------

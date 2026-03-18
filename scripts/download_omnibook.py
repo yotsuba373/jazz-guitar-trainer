@@ -7,7 +7,7 @@ from pathlib import Path
 import urllib.request
 
 URL = "https://homepages.loria.fr/evincent/omnibook/omnibook_xml.zip"
-DATA_DIR = Path(__file__).parent / "data" / "omnibook"
+DATA_DIR = Path(__file__).parent / "output" / "omnibook"
 
 
 def download_and_extract():
