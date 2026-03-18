@@ -171,10 +171,26 @@ export async function loadDrumSampler(ctx: AudioContext): Promise<DrumSamplerSet
           const kitFolder = db.kits[style] ?? style;
           if (samplerByKit[kitFolder]) {
             customByStyle[style] = samplerByKit[kitFolder];
+            console.log(`[drums] ${style} → custom kit "${kitFolder}"`);
+          } else {
+            console.warn(`[drums] ${style} → fallback (kit "${kitFolder}" WAV not found)`);
+          }
+        }
+      }
+
+      // パターンはあるがサンプル情報がないスタイルをログ
+      if (db?.patterns) {
+        for (const style of Object.keys(db.patterns)) {
+          if (!db.samples?.[style]) {
+            console.warn(`[drums] ${style} → fallback (no WAV samples configured)`);
           }
         }
       }
     } catch { /* カスタム WAV なし → Hydrogen GM フォールバック */ }
+
+    if (Object.keys(customByStyle).length === 0) {
+      console.log('[drums] No custom kits loaded, using Hydrogen GM for all styles');
+    }
 
     cached = { metal, body, customByStyle };
     return cached;

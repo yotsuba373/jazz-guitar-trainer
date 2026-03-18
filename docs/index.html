@@ -803,17 +803,19 @@ actualBeats = (beatWidth / sumOfBeatWidths) * 4</pre>
 
 <h4>MIDI ドラムパターンパーサー (<code>scripts/parse_drum_patterns.py</code>)</h4>
 
-<p>DAW で打ち込んだドラムパターンを JSON DB に変換するパーサー。</p>
+<p>DAW で打ち込んだドラムパターンを JSON DB に変換するパーサー。2つの入力モード対応。</p>
 
 <table>
   <tr><th>項目</th><th>仕様</th></tr>
-  <tr><td>入力ファイル</td><td><code>scripts/data/midi/drums/{style}_{番号}.mid</code> (例: <code>swing_1.mid</code>, <code>bossa_2.mid</code>)</td></tr>
-  <tr><td>長さ</td><td><strong>8小節 (32拍)</strong></td></tr>
+  <tr><td>入力 (推奨)</td><td>マルチトラック MIDI: <code>python scripts/parse_drum_patterns.py export_drums.mid</code><br>トラック名 = スタイル名 (例: "medium-swing")、8小節ごとに自動分割</td></tr>
+  <tr><td>入力 (個別)</td><td><code>scripts/data/midi/drums/{style}_{番号}.mid</code> を配置して引数なし実行</td></tr>
+  <tr><td>長さ</td><td><strong>8小節 (32拍)</strong> 単位。連続録音を自動分割</td></tr>
   <tr><td>拍子</td><td>4/4</td></tr>
-  <tr><td>BPM</td><td>任意 (パーサーが MIDI テンポを読み取り、ビート相対位置に正規化。テンポチェンジ非対応 — 先頭テンポのみ使用)</td></tr>
-  <tr><td>トラック</td><td>ドラムトラック (ch10 / ドラムフラグ ON)</td></tr>
+  <tr><td>BPM</td><td>任意 (ビート相対に正規化。先頭テンポのみ使用)</td></tr>
+  <tr><td>トラック</td><td>ドラムフラグ不問 (DAW による差異を吸収)</td></tr>
   <tr><td>量子化</td><td>120グリッド (8分/16分/三連符を正確表現)</td></tr>
   <tr><td>ベロシティ</td><td>1-127 そのまま保持</td></tr>
+  <tr><td>キットマッピング</td><td><code>drum-kits.json</code> でスタイル → キットフォルダ名を定義。複数スタイルで同一キット共有可</td></tr>
   <tr><td>出力</td><td><code>scripts/data/drum-patterns.json</code> → <code>public/drum-patterns.json</code> に自動コピー</td></tr>
   <tr><td>依存</td><td><code>pip install pretty_midi</code></td></tr>
 </table>
@@ -835,24 +837,22 @@ actualBeats = (beatWidth / sumOfBeatWidths) * 4</pre>
 
 <table>
   <tr><th>項目</th><th>仕様</th></tr>
-  <tr><td>配置先</td><td><code>public/drums/{style}/</code> (例: <code>public/drums/swing/</code>, <code>public/drums/latin/</code>)</td></tr>
-  <tr><td>命名規約</td><td><code>{noteName}_v{velocity}.wav</code> (例: <code>d#2_v25.wav</code>, <code>c2_v127.wav</code>)</td></tr>
+  <tr><td>配置先</td><td><code>public/drums/{kitName}/</code> (例: <code>public/drums/jazz-kit/</code>)<br>キット名は <code>drum-kits.json</code> で定義</td></tr>
+  <tr><td>命名規約</td><td><code>{noteName}_v{velocity}.wav</code> (例: <code>d#2_v61.wav</code>, <code>c1_v47.wav</code>)</td></tr>
   <tr><td>ノート名表記</td><td>C3=60 convention (Cubase 等標準)</td></tr>
-  <tr><td>スタイル別キット</td><td>スタイルごとに異なる VSTi / キットの WAV を配置可能。あるスタイルだけ WAV を用意してもOK (他はフォールバック)</td></tr>
-  <tr><td>ベロシティ値</td><td>25 (pp) / 50 (mp) / 80 (mf) / 105 (f) / 127 (ff) — <code>velocityToLayer()</code> の閾値に対応</td></tr>
-  <tr><td>構成</td><td>使用ピッチ × 5段階ベロシティ (パーサーが必要ファイル一覧を出力)</td></tr>
-  <tr><td>検出</td><td>ドラムパターン DB のピッチから自動検出。WAV がなければ Hydrogen GM にフォールバック</td></tr>
+  <tr><td>キット共有</td><td><code>drum-kits.json</code> で複数スタイルが同一キットを共有可能</td></tr>
+  <tr><td>ベロシティレイヤー</td><td>自由 (任意の数・任意の値)。パーサーが MIDI 内の vel 分布から推奨レイヤーを提示。再生時は最寄りの WAV を自動選択</td></tr>
+  <tr><td>検出</td><td><code>drum-patterns.json</code> の samples セクションから自動検出。WAV がなければ Hydrogen GM にフォールバック</td></tr>
   <tr><td>音声加工</td><td>なし (ユーザーの音作りをそのまま使用)</td></tr>
+  <tr><td>WAV 長さ目安</td><td>全楽器 3 秒程度で統一が楽。短い楽器は自然に減衰、長い楽器 (ライド/クラッシュ) は残響を含める</td></tr>
 </table>
 
-<p><strong>WAV 書き出し手順</strong>: DAW で VSTi のドラムパッドを1打ずつ、ベロシティ 25/50/80/105/127 で録音 → オーディオミックスダウン (WAV, 44100Hz)。
-パーサー実行時に必要ファイル一覧が自動出力される。</p>
-
 <p><strong>ワークフロー</strong>:</p>
-<pre><code># 1. MIDI パターン配置後
-python scripts/parse_drum_patterns.py
+<pre><code># 1. DAW でマルチトラック MIDI 書き出し (トラック名=スタイル名、8小節×N パターン)
+python scripts/parse_drum_patterns.py scripts/data/export_drums.mid
 
-# 2. WAV は public/drums/ に配置するだけ (パーサー不要)
+# 2. パーサーが推奨 WAV ファイル一覧を表示 → DAW で VSTi の各パッドを推奨 vel で録音
+#    → public/drums/{kitName}/ に配置
 
 # 3. 開発サーバーで確認
 npm run dev</code></pre>
@@ -1268,11 +1268,13 @@ interface Progression {
 リック練習システム（ユーザーが候補から選んで練習）の入力データ。</p>
 
 <h3>使い方</h3>
-<pre><code># 単一ファイル
-python scripts/parse_licks.py scripts/data/midi/parker_dom7_1.mid
+<pre><code># マルチトラック MIDI (推奨) — トラック名がファイル名規約に従う
+python scripts/parse_licks.py scripts/data/export_licks.mid
 
-# ディレクトリ内の全MIDIファイル
+# 個別ファイル / ディレクトリ
+python scripts/parse_licks.py scripts/data/midi/parker_dom7_b1.mid
 python scripts/parse_licks.py scripts/data/midi/</code></pre>
+<p>マルチトラック MIDI は2トラック以上のノート付きトラックで自動判定。<code>public/licks.json</code> に自動コピー。</p>
 
 <h3>入力規約</h3>
 <table>

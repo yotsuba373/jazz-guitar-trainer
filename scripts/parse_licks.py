@@ -4,30 +4,37 @@ MIDI リックパーサー
 DAWからエクスポートしたMIDIファイルをリックタイプ別に分割し、
 リックデータベース (JSON) を生成する。
 
-使い方:
-  python scripts/parse_licks.py scripts/data/midi/parker_dom7_1.mid
-  python scripts/parse_licks.py scripts/data/midi/    # ディレクトリ内の全MIDIを処理
+2つの入力モード:
+  A) マルチトラック MIDI (推奨):
+     python scripts/parse_licks.py scripts/data/midi/export_licks.mid
+     → トラック名がファイル名規約に従う (例: "cannonball_dom7_b1")
+
+  B) 個別ファイル / ディレクトリ:
+     python scripts/parse_licks.py scripts/data/midi/parker_dom7_b1.mid
+     python scripts/parse_licks.py scripts/data/midi/
 
 入力規約:
   - BPM 120, 4/4拍子, DAW側でクオンタイズ済み
   - 演奏キー: dom7=G7, min7=Dm7, maj7=Cmaj7, m7b5=Dm7b5, ii-V=Cメジャー/マイナー基準
     (パーサーが自動的にCルートに移調して保存)
-  - ファイル名: {ソース}_{タイプ}_b{小節数}[_a{アウフタクト}].mid
-    例: parker_dom7_b1.mid, cannonball_maj-ii-v-long_b3_a1.mid
-    ソースなしも可: dom7_b1.mid
+  - トラック名/ファイル名: {ソース}_{タイプ}_b{小節数}[_a{アウフタクト}]
+    例: parker_dom7_b1, cannonball_maj-ii-v-long_b3_a1
+    ソースなしも可: dom7_b1
   - 有効なタイプ:
     dom7, min7, maj7, m7b5,
     maj-ii-v-short, maj-ii-v-long, min-ii-v-short
-  - _N サフィックス必須 (N = 1リックあたりの小節数)
+  - _bN サフィックス必須 (N = 1リックあたりの小節数)
   - 連続で弾く、空リックはスキップ
 
 出力:
   scripts/data/licks.json — タイプ別統合リックDB
+  → public/licks.json にコピー
 """
 import os
 import sys
 import json
 import hashlib
+import shutil
 import pretty_midi
 
 # ── 定数 ──
@@ -129,55 +136,36 @@ def build_lick_from_notes(raw_notes, total_beats, root_offset=0):
     }
 
 
-def parse_midi_file(filepath, measures_per_lick=1, root_offset=0):
+def parse_notes(all_notes, sec_per_beat, measures_per_lick=1, root_offset=0):
     """
-    MIDIファイルを読み込み、リックとして切り出す。
+    ノートリストからリックを切り出す (共通ロジック)。
 
     Args:
-        filepath: MIDIファイルパス
+        all_notes: pretty_midi.Note のリスト
+        sec_per_beat: 1拍あたりの秒数
         measures_per_lick: 1リックあたりの小節数
         root_offset: 演奏キーのCからの半音数 (移調用)
 
     Returns:
         list of dict
     """
-    midi = pretty_midi.PrettyMIDI(filepath)
-
-    # テンポ取得 (最初のテンポを使用)
-    tempo_times, tempos = midi.get_tempo_changes()
-    bpm = tempos[0] if len(tempos) > 0 else 120.0
-    sec_per_beat = 60.0 / bpm
-    sec_per_measure = sec_per_beat * BEATS_PER_MEASURE
-
-    # 1リックあたりの秒数・拍数
-    sec_per_lick = sec_per_measure * measures_per_lick
-    beats_per_lick = BEATS_PER_MEASURE * measures_per_lick
-
-    # 全ノートを収集 (全トラック統合)
-    all_notes = []
-    for instrument in midi.instruments:
-        if instrument.is_drum:
-            continue
-        for note in instrument.notes:
-            all_notes.append(note)
-
     if not all_notes:
         return []
 
-    # 開始時刻でソート
     all_notes.sort(key=lambda n: (n.start, n.pitch))
 
-    # 全体の長さからリック数を推定
+    sec_per_measure = sec_per_beat * BEATS_PER_MEASURE
+    sec_per_lick = sec_per_measure * measures_per_lick
+    beats_per_lick = BEATS_PER_MEASURE * measures_per_lick
+
     last_end = max(n.end for n in all_notes)
     total_licks = int(last_end / sec_per_lick) + 1
 
-    # リックスロットごとにノートを分類
     licks = []
     for i in range(total_licks):
         slot_start = i * sec_per_lick
         slot_end = slot_start + sec_per_lick
 
-        # このスロット内に開始するノートを収集
         raw_notes = []
         for note in all_notes:
             if slot_start - 0.001 <= note.start < slot_end - 0.001:
@@ -186,7 +174,6 @@ def parse_midi_file(filepath, measures_per_lick=1, root_offset=0):
 
                 beat_start = snap_to_grid(beat_start)
                 duration = snap_to_grid(duration)
-                # リック境界を超えないようクリップ
                 if beat_start + duration > beats_per_lick:
                     duration = snap_to_grid(beats_per_lick - beat_start)
                 duration = max(duration, 1.0 / GRID)
@@ -202,6 +189,24 @@ def parse_midi_file(filepath, measures_per_lick=1, root_offset=0):
             licks.append(lick)
 
     return licks
+
+
+def parse_midi_file(filepath, measures_per_lick=1, root_offset=0):
+    """MIDIファイルを読み込み、リックとして切り出す。"""
+    midi = pretty_midi.PrettyMIDI(filepath)
+
+    tempo_times, tempos = midi.get_tempo_changes()
+    bpm = tempos[0] if len(tempos) > 0 else 120.0
+    sec_per_beat = 60.0 / bpm
+
+    all_notes = []
+    for instrument in midi.instruments:
+        if instrument.is_drum:
+            continue
+        for note in instrument.notes:
+            all_notes.append(note)
+
+    return parse_notes(all_notes, sec_per_beat, measures_per_lick, root_offset)
 
 
 def parse_filename(filepath):
@@ -293,8 +298,89 @@ def format_lick_preview(lick):
     return " ".join(parts)
 
 
+def add_licks_to_db(db, lick_type, licks, source=None, anacrusis=0):
+    """リックを DB に追加 (重複チェック付き)。追加数を返す。"""
+    for lick in licks:
+        if source:
+            lick["source"] = source
+        if anacrusis > 0:
+            lick["anacrusis"] = anacrusis * BEATS_PER_MEASURE
+
+    if lick_type not in db:
+        db[lick_type] = []
+
+    existing_sigs = set()
+    for existing in db[lick_type]:
+        existing_sigs.add(lick_signature(existing))
+
+    added = 0
+    for lick in licks:
+        sig = lick_signature(lick)
+        if sig not in existing_sigs:
+            lick["id"] = lick_id(lick_type, lick)
+            db[lick_type].append(lick)
+            existing_sigs.add(sig)
+            added += 1
+            preview = format_lick_preview(lick)
+            print(f"    + [{lick['noteCount']}音, {lick['beats']}拍] {preview}")
+
+    skipped = len(licks) - added
+    detected_label = f"{len(licks)} リック検出"
+    print(f"    {detected_label}, {added} 追加" +
+          (f" (重複 {skipped} スキップ)" if skipped else ""))
+    return added
+
+
+def process_multi_track(filepath):
+    """マルチトラック MIDI を処理。トラック名 = ファイル名規約。"""
+    midi = pretty_midi.PrettyMIDI(filepath)
+    tempo_times, tempos = midi.get_tempo_changes()
+    bpm = tempos[0] if len(tempos) > 0 else 120.0
+    sec_per_beat = 60.0 / bpm
+
+    db = {}
+    total_new = 0
+
+    print(f"\n[Multi-track mode] {filepath} (BPM={bpm})")
+
+    for instrument in midi.instruments:
+        if instrument.is_drum:
+            continue
+        if not instrument.notes:
+            continue
+
+        track_name = (instrument.name or "").strip()
+        if not track_name:
+            print(f"  スキップ: 名前のないトラック ({len(instrument.notes)} ノート)")
+            continue
+
+        # トラック名をファイル名規約としてパース
+        source, lick_type, measures, anacrusis = parse_filename(track_name + ".mid")
+        if lick_type is None:
+            print(f"  スキップ: {track_name}")
+            print(f"    形式: {{ソース}}_{{タイプ}}_b{{小節数}}[_a{{アウフタクト}}] (例: parker_dom7_b1)")
+            print(f"    有効タイプ: {', '.join(sorted(VALID_TYPES))}")
+            continue
+
+        ana_label = f", ana={anacrusis}小節" if anacrusis > 0 else ""
+        source_label = f" [{source}]" if source else ""
+        print(f"  Track: {track_name} -> {lick_type}{source_label} ({measures}小節/リック{ana_label})")
+
+        root_offset = TYPE_ROOT_OFFSET.get(lick_type, 0)
+        all_notes = list(instrument.notes)
+        licks = parse_notes(all_notes, sec_per_beat, measures, root_offset)
+
+        if not licks:
+            print(f"    ノートが見つかりません")
+            continue
+
+        total_new += add_licks_to_db(db, lick_type, licks, source, anacrusis)
+
+    return db, total_new
+
+
 def process_files(paths):
-    """ファイルまたはディレクトリを処理"""
+    """個別ファイルまたはディレクトリを処理"""
     midi_files = []
     for p in paths:
         if os.path.isdir(p):
@@ -306,13 +392,12 @@ def process_files(paths):
 
     if not midi_files:
         print("MIDIファイルが見つかりません")
-        return
+        return {}, 0
 
-    # 毎回ゼロから構築 (MIDIファイルがマスターデータ)
-    output_path = os.path.join(os.path.dirname(__file__), "data", "licks.json")
     db = {}
-
     total_new = 0
+
+    print(f"\n[Individual file mode]")
 
     for filepath in midi_files:
         source, lick_type, measures, anacrusis = parse_filename(filepath)
@@ -329,47 +414,27 @@ def process_files(paths):
         root_offset = TYPE_ROOT_OFFSET.get(lick_type, 0)
         licks = parse_midi_file(filepath, measures, root_offset)
 
-        # メタ情報を各リックに付与
-        for lick in licks:
-            if source:
-                lick["source"] = source
-            if anacrusis > 0:
-                lick["anacrusis"] = anacrusis * BEATS_PER_MEASURE  # 拍数で記録
-
         if not licks:
             print(f"    ノートが見つかりません")
             continue
 
-        if lick_type not in db:
-            db[lick_type] = []
+        total_new += add_licks_to_db(db, lick_type, licks, source, anacrusis)
 
-        # 重複チェック (ピッチ列+リズムが一致するものは追加しない)
-        existing_sigs = set()
-        for existing in db[lick_type]:
-            existing_sigs.add(lick_signature(existing))
+    return db, total_new
 
-        added = 0
-        for lick in licks:
-            sig = lick_signature(lick)
-            if sig not in existing_sigs:
-                lick["id"] = lick_id(lick_type, lick)
-                db[lick_type].append(lick)
-                existing_sigs.add(sig)
-                added += 1
-                # プレビュー表示
-                preview = format_lick_preview(lick)
-                print(f"    + [{lick['noteCount']}音, {lick['beats']}拍] {preview}")
 
-        skipped = len(licks) - added
-        detected_label = f"{len(licks)} リック検出"
-        print(f"    {detected_label}, {added} 追加" +
-              (f" (重複 {skipped} スキップ)" if skipped else ""))
-        total_new += added
+def save_and_report(db, total_new):
+    """DB を保存してサマリーを表示"""
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    output_path = os.path.join(script_dir, "data", "licks.json")
+    public_path = os.path.join(script_dir, "..", "public", "licks.json")
 
-    # 保存
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     with open(output_path, "w") as f:
         json.dump(db, f, indent=2)
+
+    # public/ にコピー
+    shutil.copy2(output_path, public_path)
 
     # サマリー
     print()
@@ -383,16 +448,35 @@ def process_files(paths):
         print(f"  {t:20s}: {count:4d} リック")
     print(f"  {'合計':20s}: {total:4d} リック")
     print(f"\n保存先: {output_path}")
+    print(f"コピー: {public_path}")
     print(f"新規追加: {total_new}")
+
+
+def is_multi_track_export(filepath):
+    """マルチトラック MIDI かどうかを判定 (2トラック以上のノート付き非ドラムトラック)"""
+    try:
+        midi = pretty_midi.PrettyMIDI(filepath)
+        note_tracks = [i for i in midi.instruments if not i.is_drum and i.notes]
+        return len(note_tracks) >= 2
+    except Exception:
+        return False
 
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         print(__doc__)
         print("使用例:")
-        print("  python scripts/parse_licks.py scripts/data/midi/parker_dom7_b1.mid              # 1小節リック")
-        print("  python scripts/parse_licks.py scripts/data/midi/cannonball_maj-ii-v-long_b3_a1.mid  # 3小節, アウフタクト1小節")
-        print("  python scripts/parse_licks.py scripts/data/midi/                                # 全ファイル")
+        print("  python scripts/parse_licks.py scripts/data/midi/export_licks.mid              # マルチトラック (推奨)")
+        print("  python scripts/parse_licks.py scripts/data/midi/parker_dom7_b1.mid            # 個別ファイル")
+        print("  python scripts/parse_licks.py scripts/data/midi/                              # ディレクトリ内全ファイル")
         sys.exit(1)
 
-    process_files(sys.argv[1:])
+    args = sys.argv[1:]
+
+    # 単一ファイル指定でマルチトラックなら自動判定
+    if len(args) == 1 and os.path.isfile(args[0]) and is_multi_track_export(args[0]):
+        db, total_new = process_multi_track(args[0])
+    else:
+        db, total_new = process_files(args)
+
+    save_and_report(db, total_new)
