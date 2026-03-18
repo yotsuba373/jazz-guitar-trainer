@@ -26,11 +26,5 @@ npm-debug.log*
 scripts/data/
 __pycache__/
 
-# Generated DBs (auto-generated from MIDI by parsers, user-specific)
-public/licks.generated.json
-public/drum-patterns.generated.json
-public/bass-patterns.generated.json
-
-# Custom WAV samples (user-specific)
-public/drums/
-public/bass/
+# WAV samples and generated DBs are tracked in Git (LFS for WAV)
+# Only parser intermediate outputs under scripts/data/ are ignored (above)
