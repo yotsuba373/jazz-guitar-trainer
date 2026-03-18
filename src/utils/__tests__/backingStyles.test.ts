@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { BACKING_STYLES } from '../backingStyles';
 import { generateCompPattern, type CompEvent } from '../compPatterns';
-import { generateBassLine } from '../walkingBass';
+import { generateBassLine } from '../bassPatterns';
 import { generateDrumPattern } from '../drumPatterns';
 import type { BackingStyle } from '../../types';
 

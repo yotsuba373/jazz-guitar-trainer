@@ -375,7 +375,7 @@ describe('loadLickDB', () => {
       status: 404,
     });
 
-    await expect(loadLickDB()).rejects.toThrow('Failed to load licks.json');
+    await expect(loadLickDB()).rejects.toThrow('Failed to load licks.generated.json');
   });
 });
 

@@ -131,12 +131,16 @@ export interface BassConfig {
   midiRange: { low: number; high: number };
   bassRootBase: number;
   velocity: number;
+  kitGains: Record<string, number>;
+  customWAV: { detune: number; decayTime: number; volume: number };
 }
 
 export const DEFAULT_BASS_CONFIG: BassConfig = {
   midiRange: { low: 28, high: 55 },
   bassRootBase: 40,
   velocity: 90,
+  kitGains: {},
+  customWAV: { detune: 0, decayTime: 0.8, volume: 127 },
 };
 
 const bassConfig = createConfigLoader<BassConfig>('/bass-config.json', DEFAULT_BASS_CONFIG);

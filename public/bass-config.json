@@ -1,5 +1,7 @@
 {
   "midiRange": { "low": 28, "high": 55 },
   "bassRootBase": 40,
-  "velocity": 90
+  "velocity": 90,
+  "kitGains": {},
+  "customWAV": { "detune": 0, "decayTime": 0.8, "volume": 127 }
 }

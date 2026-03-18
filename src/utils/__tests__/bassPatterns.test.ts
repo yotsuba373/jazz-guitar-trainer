@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { generateBassLine } from '../walkingBass';
+import { generateBassLine, getBassSampler, getBassPatternDB, clearBassPatternDBCache } from '../bassPatterns';
+import { getBassConfig, clearBassConfigCache } from '../configLoader';
 
 describe('generateBassLine', () => {
   it('1拍コード: ルートのみ', () => {
@@ -127,5 +128,40 @@ describe('generateBassLine', () => {
       const notes = generateBassLine(0, 'maj7', 2, 7, style);
       expect(notes).toHaveLength(2);
     }
+  });
+});
+
+describe('BassConfig カスタム WAV フィールド', () => {
+  it('デフォルト BassConfig にカスタム WAV フィールドが存在', () => {
+    clearBassConfigCache();
+    const cfg = getBassConfig();
+    expect(cfg.kitGains).toEqual({});
+    expect(cfg.customWAV).toEqual({ detune: 0, decayTime: 0.8, volume: 127 });
+  });
+
+  it('デフォルト BassConfig に samples/kits が含まれない', () => {
+    const cfg = getBassConfig();
+    expect(cfg).not.toHaveProperty('samples');
+    expect(cfg).not.toHaveProperty('kits');
+  });
+
+  it('デフォルト BassConfig の既存フィールドが維持', () => {
+    const cfg = getBassConfig();
+    expect(cfg.midiRange).toEqual({ low: 28, high: 55 });
+    expect(cfg.bassRootBase).toBe(40);
+    expect(cfg.velocity).toBe(90);
+  });
+});
+
+describe('BassPatternDB', () => {
+  it('未ロード時は null', () => {
+    clearBassPatternDBCache();
+    expect(getBassPatternDB()).toBeNull();
+  });
+});
+
+describe('BassSamplerSet', () => {
+  it('未ロード時は null', () => {
+    expect(getBassSampler()).toBeNull();
   });
 });

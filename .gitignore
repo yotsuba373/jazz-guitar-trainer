@@ -26,9 +26,11 @@ npm-debug.log*
 scripts/data/
 __pycache__/
 
-# Lick DB (generated from MIDI, user-specific)
-public/licks.json
+# Generated DBs (auto-generated from MIDI by parsers, user-specific)
+public/licks.generated.json
+public/drum-patterns.generated.json
+public/bass-patterns.generated.json
 
-# Drum pattern DB + custom WAV samples (user-specific)
-public/drum-patterns.json
+# Custom WAV samples (user-specific)
 public/drums/
+public/bass/

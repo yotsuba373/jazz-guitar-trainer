@@ -111,8 +111,8 @@ let cachedDB: LickDB | null = null;
 
 export async function loadLickDB(): Promise<LickDB> {
   if (cachedDB) return cachedDB;
-  const resp = await fetch('/licks.json');
-  if (!resp.ok) throw new Error(`Failed to load licks.json: ${resp.status}`);
+  const resp = await fetch('/licks.generated.json');
+  if (!resp.ok) throw new Error(`Failed to load licks.generated.json: ${resp.status}`);
   cachedDB = await resp.json() as LickDB;
   return cachedDB;
 }

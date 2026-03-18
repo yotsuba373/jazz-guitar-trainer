@@ -12,7 +12,7 @@ MIDI ドラムパターン → JSON パーサー。
      python scripts/parse_drum_patterns.py
      → ファイル名からスタイルを判定
 
-出力: scripts/data/drum-patterns.json → public/drum-patterns.json にコピー
+出力: scripts/data/drum-patterns.generated.json → public/drum-patterns.generated.json にコピー
 
 依存: pip install pretty_midi
 """
@@ -37,8 +37,8 @@ BEATS_PER_PATTERN = BEATS_PER_MEASURE * MEASURES_PER_PATTERN  # 32
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DRUMS_DIR = os.path.join(SCRIPT_DIR, 'data', 'midi', 'drums')
 KITS_PATH = os.path.join(DRUMS_DIR, 'drum-kits.json')
-OUTPUT_PATH = os.path.join(SCRIPT_DIR, 'data', 'drum-patterns.json')
-PUBLIC_PATH = os.path.join(SCRIPT_DIR, '..', 'public', 'drum-patterns.json')
+OUTPUT_PATH = os.path.join(SCRIPT_DIR, 'data', 'drum-patterns.generated.json')
+PUBLIC_PATH = os.path.join(SCRIPT_DIR, '..', 'public', 'drum-patterns.generated.json')
 PUBLIC_DRUMS = os.path.join(SCRIPT_DIR, '..', 'public', 'drums')
 
 # ファイル名パターン: {style}_{番号}.mid (style にハイフン許容)
@@ -471,7 +471,7 @@ def main():
     for style in patterns_db:
         kits_db[style] = kit_mapping.get(style, style)
 
-    # WAV スキャン
+    # WAV スキャン (キット軸で正規化: samples[kitName] → SampleMap)
     wav_cache: dict[str, dict[int, list[int]]] = {}
     samples_db: dict[str, dict[str, list[int]]] = {}
     for style in patterns_db:
@@ -479,8 +479,8 @@ def main():
         if kit_folder not in wav_cache:
             wav_cache[kit_folder] = scan_wav_files(kit_folder)
         wav_map = wav_cache[kit_folder]
-        if wav_map:
-            samples_db[style] = {str(p): vels for p, vels in sorted(wav_map.items())}
+        if wav_map and kit_folder not in samples_db:
+            samples_db[kit_folder] = {str(p): vels for p, vels in sorted(wav_map.items())}
 
     # JSON 出力 (gains は drum-config.json に一元化したため出力しない)
     db: dict = {

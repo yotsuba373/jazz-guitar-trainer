@@ -162,7 +162,7 @@ export async function loadDrumSampler(ctx: AudioContext): Promise<DrumSamplerSet
     });
     await Promise.all([metal.load, body.load]);
 
-    // キット別カスタム WAV を試行 (同キットを共有するスタイルは Sampler も共有)
+    // キット別カスタム WAV を試行
     const customByStyle: Record<string, Sampler> = {};
     const keyMapByStyle: Record<string, Map<string, string>> = {};
     try {
@@ -175,10 +175,8 @@ export async function loadDrumSampler(ctx: AudioContext): Promise<DrumSamplerSet
         // キットごとのゲイン倍率を drum-config.json から取得
         const kitGains = getDrumConfig().kitGains;
 
-        // キットごとに1つの Sampler をロード
-        for (const [style, sampleMap] of Object.entries(db.samples)) {
-          const kitFolder = db.kits[style] ?? style;
-          if (samplerByKit[kitFolder] !== undefined) continue;
+        // キットごとに1つの Sampler をロード (samples はキット軸)
+        for (const [kitFolder, sampleMap] of Object.entries(db.samples)) {
           if (Object.keys(sampleMap).length === 0) continue;
           const { buffers, keyMap } = buildBuffersFromSampleMap(kitFolder, sampleMap);
           if (Object.keys(buffers).length === 0) continue;
@@ -203,8 +201,8 @@ export async function loadDrumSampler(ctx: AudioContext): Promise<DrumSamplerSet
         await Promise.all(loadTasks);
 
         // スタイル → キットの Sampler + keyMap をマッピング
-        for (const style of Object.keys(db.samples)) {
-          const kitFolder = db.kits[style] ?? style;
+        for (const [style] of Object.entries(db.kits)) {
+          const kitFolder = db.kits[style];
           if (samplerByKit[kitFolder]) {
             customByStyle[style] = samplerByKit[kitFolder];
             keyMapByStyle[style] = keyMapByKit[kitFolder];
@@ -215,11 +213,11 @@ export async function loadDrumSampler(ctx: AudioContext): Promise<DrumSamplerSet
         }
       }
 
-      // パターンはあるがサンプル情報がないスタイルをログ
+      // パターンはあるがキットマッピングがないスタイルをログ
       if (db?.patterns) {
         for (const style of Object.keys(db.patterns)) {
-          if (!db.samples?.[style]) {
-            console.warn(`[drums] ${style} → fallback (no WAV samples configured)`);
+          if (!db.kits?.[style]) {
+            console.warn(`[drums] ${style} → fallback (no kit mapping configured)`);
           }
         }
       }
@@ -505,7 +503,9 @@ export function playDrumPattern(
   const beatSec = 60 / bpm;
 
   const customSampler = samplers.customByStyle[style];
-  const sampleMap = getDrumPatternDB()?.samples?.[style];
+  const db = getDrumPatternDB();
+  const kitFolder = db?.kits?.[style] ?? style;
+  const sampleMap = db?.samples?.[kitFolder];
   const keyMap = samplers.keyMapByStyle[style];
   // 各ヒットの stopId + 時刻を記録 (letRing/stop 用)
   const scheduledHits: { stopId: string; sampler: Sampler; time: number }[] = [];

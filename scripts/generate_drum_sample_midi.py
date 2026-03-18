@@ -2,7 +2,7 @@
 """
 ドラムサンプル書き出し用 MIDI 生成。
 
-parse_drum_patterns.py の出力 (drum-patterns.json) から推奨 WAV リストを読み取り、
+parse_drum_patterns.py の出力 (drum-patterns.generated.json) から推奨 WAV リストを読み取り、
 各ピッチ×ベロシティを一定間隔で並べた MIDI ファイルを生成する。
 
 使い方:
@@ -28,7 +28,7 @@ import sys
 import pretty_midi
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-PATTERNS_PATH = os.path.join(SCRIPT_DIR, 'data', 'drum-patterns.json')
+PATTERNS_PATH = os.path.join(SCRIPT_DIR, 'data', 'drum-patterns.generated.json')
 KITS_PATH = os.path.join(SCRIPT_DIR, 'data', 'midi', 'drums', 'drum-kits.json')
 OUTPUT_MIDI = os.path.join(SCRIPT_DIR, 'data', 'drum_samples.mid')
 OUTPUT_MANIFEST = os.path.join(SCRIPT_DIR, 'data', 'drum_samples_manifest.json')
@@ -63,7 +63,7 @@ def suggest_wav_layers(vel_min: int, vel_max: int, step: int = WAV_VEL_STEP) -> 
 
 
 def main():
-    # drum-patterns.json 読み込み
+    # drum-patterns.generated.json 読み込み
     if not os.path.isfile(PATTERNS_PATH):
         print(f'[ERROR] {PATTERNS_PATH} not found')
         print('Run parse_drum_patterns.py first.')
@@ -76,7 +76,7 @@ def main():
     kits_map = db.get('kits', {})
 
     if not patterns:
-        print('[ERROR] No patterns in drum-patterns.json')
+        print('[ERROR] No patterns in drum-patterns.generated.json')
         sys.exit(1)
 
     # drum-kits.json 読み込み (フォールバック: スタイル名をキット名に)

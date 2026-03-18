@@ -89,7 +89,7 @@ function analyzeCoverages(
 // Main
 // ---------------------------------------------------------------------------
 async function main() {
-  const dbPath = new URL('../public/licks.json', import.meta.url);
+  const dbPath = new URL('../public/licks.generated.json', import.meta.url);
   const db = JSON.parse(fs.readFileSync(dbPath, 'utf-8'));
 
   // Find the lick by ID

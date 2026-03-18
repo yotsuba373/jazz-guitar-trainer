@@ -1,7 +1,7 @@
 /**
  * ドラムパターン DB のロード・取得。
  *
- * public/drum-patterns.json を fetch してキャッシュ。
+ * public/drum-patterns.generated.json を fetch してキャッシュ。
  * DB がなくてもアルゴリズム生成にフォールバックするため、ロード失敗はエラーにしない。
  */
 
@@ -21,7 +21,7 @@ export type SampleMap = Record<string, number[]>;
 
 export interface DrumPatternDB {
   patterns: Record<string, DrumPatternEntry[]>;
-  samples: Record<string, SampleMap>;  // style → SampleMap
+  samples: Record<string, SampleMap>;  // kitName → SampleMap
   kits: Record<string, string>;        // style → kit フォルダ名
 }
 
@@ -34,7 +34,7 @@ export async function loadDrumPatternDB(): Promise<DrumPatternDB | null> {
   if (loadAttempted) return null;
   loadAttempted = true;
   try {
-    const resp = await fetch('/drum-patterns.json');
+    const resp = await fetch('/drum-patterns.generated.json');
     if (!resp.ok) return null;
     const data = await resp.json() as DrumPatternDB;
     if (!data.patterns || Object.keys(data.patterns).length === 0) return null;

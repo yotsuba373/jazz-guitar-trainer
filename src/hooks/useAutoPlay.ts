@@ -10,6 +10,7 @@ import {
   playLickForChord, buildAnacrusisPhrase, chordHasSavedLick,
   isLickOriginator,
   getSamplers, playSmplrPianoComp, playSmplrBassLine,
+  getBassSampler,
   playDrumPattern, getDrumSampler,
   generateCompPattern,
 } from '../utils';
@@ -145,16 +146,18 @@ export function useAutoPlay(params: AutoPlayParams) {
 
     // Walking bass
     if (audio.bassAudioOnRef.current) {
-      const samplers = getSamplers();
-      if (samplers?.bass) {
+      const bassSamplers = getBassSampler();
+      if (bassSamplers) {
         const chord = prog.chords[chordIdx];
         if (chord) {
           const layout = getChartLayout(prog);
           const chordBeats = getChordBeatCount(layout, chordIdx);
           const nextChord = prog.chords[chordIdx + 1];
-          samplers.bass.output.setVolume(audio.bassVolumeRef.current * 127);
+          bassSamplers.soundfont.output.setVolume(audio.bassVolumeRef.current * 127);
+          const customSampler = bassSamplers.customByStyle[audio.backingStyleRef.current];
+          if (customSampler) customSampler.output.setVolume(audio.bassVolumeRef.current * 127);
           bassHandle = playSmplrBassLine(
-            samplers.bass, chord.rootName, chord.quality,
+            ctx, bassSamplers, chord.rootName, chord.quality,
             chordBeats, nextChord?.rootName ?? null, startAt, bpm,
             audio.backingStyleRef.current,
           );
@@ -271,7 +274,7 @@ export function useAutoPlay(params: AutoPlayParams) {
 
       cancelPendingNext();
       stopHandle(activeStrumRef);
-      stopHandle(activeBassRef);
+      letRingDrums(activeBassRef);
       letRingDrums(activeDrumsRef);
       stopHandle(activePhraseStopRef);
       stopSongMetronome();
@@ -353,7 +356,7 @@ export function useAutoPlay(params: AutoPlayParams) {
       playPosRef.current = nextPos;
 
       stopHandle(activeStrumRef);
-      stopHandle(activeBassRef);
+      letRingDrums(activeBassRef);
       letRingDrums(activeDrumsRef);
       stopHandle(activePhraseStopRef);
       stopSongMetronome();
