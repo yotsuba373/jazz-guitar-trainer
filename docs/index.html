@@ -437,7 +437,7 @@ Utils Layer (pure functions):
 │   ├── audioEngine.ts            — playClick(), playKSNote(), playSaxNote(), playEPNote(), playChordStrum(), schedulePhrase()
 │   ├── sampler.ts               — loadSamplers(), getSamplers(), buildJazzPianoVoicing(), playSmplrPianoComp() — smplr SoundFont サンプラー + ジャズピアノボイシング
 │   ├── walkingBass.ts           — generateBassLine(), playSmplrBassLine() — ウォーキングベース生成 + smplr acoustic_bass 再生 (スタイル別パターン対応)
-│   ├── drumPatterns.ts          — generateSwingDrumPattern(), generateDrumPattern(), playDrumPattern() — スタイル別ドラムパターン生成 (Swing/Bossa/Ballad/Latin) + Hydrogen GM ドラム再生
+│   ├── drumPatterns.ts          — generateSwingDrumPattern(), generateDrumPattern(), playDrumPattern(), loadDrumSampler() — スタイル別ドラムパターン生成 (Swing/Bossa/Ballad/Latin) + Hydrogen GM / カスタム WAV ドラム再生
 │   ├── compPatterns.ts          — generateCompPattern() — スタイル別コンピングリズムパターン生成
 │   ├── backingStyles.ts         — BACKING_STYLES, BackingStyleDef — バッキングスタイル定義 (swing/bossa/ballad/latin)
 │   ├── lickEngine.ts             — absolutePitch(), buildNotePool(), loadLickDB(), transposeLick(), mapLickToFretboard(), inferModeCandidates(), lickToGeneratedPhrase(), findBestPositionForLick(), selectBestInstance(), getTransposeSemitones(), buildLickContext(), detectIiVPattern(), isIiVLickId(), buildIiVLickContext(), sliceLick()
@@ -815,7 +815,7 @@ actualBeats = (beatWidth / sumOfBeatWidths) * 4</pre>
   <tr><td>トラック</td><td>ドラムフラグ不問 (DAW による差異を吸収)</td></tr>
   <tr><td>量子化</td><td>120グリッド (8分/16分/三連符を正確表現)</td></tr>
   <tr><td>ベロシティ</td><td>1-127 そのまま保持</td></tr>
-  <tr><td>キットマッピング</td><td><code>drum-kits.json</code> でスタイル → キットフォルダ名を定義。複数スタイルで同一キット共有可</td></tr>
+  <tr><td>キットマッピング</td><td><code>drum-kits.json</code> でスタイル → キットフォルダ名を定義。複数スタイルで同一キット共有可。<code>_gains</code> フィールドでキットごとの音量ブースト倍率も指定可能</td></tr>
   <tr><td>出力</td><td><code>scripts/data/drum-patterns.json</code> → <code>public/drum-patterns.json</code> に自動コピー</td></tr>
   <tr><td>依存</td><td><code>pip install pretty_midi</code></td></tr>
 </table>
@@ -844,6 +844,7 @@ actualBeats = (beatWidth / sumOfBeatWidths) * 4</pre>
   <tr><td>ベロシティレイヤー</td><td>自由 (任意の数・任意の値)。パーサーが MIDI 内の vel 分布から推奨レイヤーを提示。再生時は最寄りの WAV を自動選択</td></tr>
   <tr><td>検出</td><td><code>drum-patterns.json</code> の samples セクションから自動検出。WAV がなければ Hydrogen GM にフォールバック</td></tr>
   <tr><td>音声加工</td><td>なし (ユーザーの音作りをそのまま使用)</td></tr>
+  <tr><td>音量ブースト</td><td><code>drum-kits.json</code> の <code>_gains</code> でキットごとのゲイン倍率を設定 (デフォルト 1.0)。パーサーが <code>drum-patterns.json</code> の <code>gains</code> フィールドに変換、ランタイムで <code>GainNode.addInsert()</code> 適用。Hydrogen GM との音量差を補正</td></tr>
   <tr><td>WAV 長さ目安</td><td>全楽器 3 秒程度で統一が楽。短い楽器は自然に減衰、長い楽器 (ライド/クラッシュ) は残響を含める</td></tr>
 </table>
 
