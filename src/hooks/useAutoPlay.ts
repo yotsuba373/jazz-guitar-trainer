@@ -183,6 +183,8 @@ export function useAutoPlay(params: AutoPlayParams) {
           const swAmt = audio.swingEnabledRef.current ? 0.65 : 0;
           drumSampler.metal.output.setVolume(rhythmVol * 127);
           drumSampler.body.output.setVolume(rhythmVol * 127);
+          const customSampler = drumSampler.customByStyle[audio.backingStyleRef.current];
+          if (customSampler) customSampler.output.setVolume(rhythmVol * 127);
           drumsHandle = playDrumPattern(
             drumSampler, chordBeats, globalBeatOffset, startAt, bpm, swAmt,
             audio.backingStyleRef.current,

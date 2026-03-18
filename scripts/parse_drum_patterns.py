@@ -49,7 +49,7 @@ FILENAME_RE = re.compile(
 
 # WAV ファイル名パターン: {noteName}_v{velocity}.wav
 WAV_RE = re.compile(
-    r'^(?P<note>[a-g]#?\-?\d+)_v(?P<vel>\d+)\.wav$',
+    r'^(?P<note>[a-g][s#]?\-?\d+)_v(?P<vel>\d+)\.wav$',
     re.IGNORECASE,
 )
 
@@ -61,18 +61,18 @@ NOTE_NAMES = ['c', 'c#', 'd', 'd#', 'e', 'f', 'f#', 'g', 'g#', 'a', 'a#', 'b']
 
 
 def midi_to_note_name(pitch: int) -> str:
-    """MIDI ノート番号 → ファイル名用ノート名 (C3=60 convention)"""
-    name = NOTE_NAMES[pitch % 12]
+    """MIDI ノート番号 → ファイル名用ノート名 (C3=60 convention, # → s)"""
+    name = NOTE_NAMES[pitch % 12].replace('#', 's')
     octave = pitch // 12 - 2
     return f'{name}{octave}'
 
 
 def note_name_to_midi(name: str) -> int | None:
-    """ファイル名用ノート名 → MIDI ノート番号。不正なら None"""
-    m = re.match(r'^([a-g]#?)(-?\d+)$', name.lower())
+    """ファイル名用ノート名 → MIDI ノート番号。s → # に変換して検索"""
+    m = re.match(r'^([a-g][s#]?)(-?\d+)$', name.lower())
     if not m:
         return None
-    note = m.group(1)
+    note = m.group(1).replace('s', '#')
     octave = int(m.group(2))
     try:
         idx = NOTE_NAMES.index(note)

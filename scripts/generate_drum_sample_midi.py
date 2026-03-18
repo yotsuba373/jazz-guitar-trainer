@@ -48,7 +48,7 @@ BPM = 120
 
 
 def midi_to_note_name(pitch: int) -> str:
-    name = NOTE_NAMES[pitch % 12]
+    name = NOTE_NAMES[pitch % 12].replace('#', 's')
     octave = pitch // 12 - 2
     return f'{name}{octave}'
 

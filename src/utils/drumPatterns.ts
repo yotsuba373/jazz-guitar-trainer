@@ -81,6 +81,7 @@ export interface DrumSamplerSet {
   metal: Sampler;                          // ライド/HH (Hydrogen GM)
   body: Sampler;                           // キック/スネア (Hydrogen GM)
   customByStyle: Record<string, Sampler>;  // スタイル別カスタム WAV (ピッチベース)
+  keyMapByStyle: Record<string, Map<string, string>>;  // (pitch_vel) → smplr note key
 }
 
 let cached: DrumSamplerSet | null = null;
@@ -95,29 +96,49 @@ const NOTE_NAMES = ['c', 'c#', 'd', 'd#', 'e', 'f', 'f#', 'g', 'g#', 'a', 'a#', 
 /**
  * MIDI ノート番号 → ファイル名用ノート名。
  * オクターブ表記は C3=60 (Cubase 等の標準)。
- * 例: 51 → 'd#2', 38 → 'd1', 36 → 'c1'
+ * 例: 51 → 'ds2', 38 → 'd1', 36 → 'c1'
+ * # は URL/ファイル名で問題になるため s (sharp) に置換
  */
 export function midiToFileName(pitch: number): string {
-  const name = NOTE_NAMES[pitch % 12];
+  const name = NOTE_NAMES[pitch % 12].replace('#', 's');
   const octave = Math.floor(pitch / 12) - 2;
+  return `${name}${octave}`;
+}
+
+/** MIDI ノート番号 → smplr 用音名 (C#表記, smplr が内部パース可能な形式) */
+const SMPLR_NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+function midiToSmplrNote(midi: number): string {
+  const name = SMPLR_NOTE_NAMES[midi % 12];
+  const octave = Math.floor(midi / 12) - 1; // smplr convention: C4=60 → octave = 60/12-1 = 4
   return `${name}${octave}`;
 }
 
 /**
  * SampleMap からカスタム Sampler 用 buffers マップを構築。
- * キー: "p{pitch}_v{fileVelocity}" (例: "p51_v20", "p38_v80")
- * パス: /drums/{style}/{noteName}_v{velocity}.wav
+ * smplr は buffers キーを音名としてパースするため、
+ * 各 (pitch, velocity) ペアにユニークな MIDI 番号 (0-127) を割り当てる。
+ * 逆引きテーブル (pitch,vel) → smplr キー も返す。
  */
-function buildBuffersFromSampleMap(style: string, sampleMap: SampleMap): Record<string, string> {
+function buildBuffersFromSampleMap(
+  kitFolder: string,
+  sampleMap: SampleMap,
+): { buffers: Record<string, string>; keyMap: Map<string, string> } {
   const buffers: Record<string, string> = {};
+  const keyMap = new Map<string, string>();  // "pitch_vel" → smplr note key
+  let slotIdx = 0;
+
   for (const [pitchStr, velocities] of Object.entries(sampleMap)) {
     const pitch = Number(pitchStr);
-    const name = midiToFileName(pitch);
+    const fileName = midiToFileName(pitch);
     for (const v of velocities) {
-      buffers[`p${pitch}_v${v}`] = `/drums/${style}/${name}_v${v}.wav`;
+      // ユニークな MIDI 番号を割り当て (0 から連番)
+      const smplrKey = midiToSmplrNote(slotIdx);
+      buffers[smplrKey] = `/drums/${kitFolder}/${fileName}_v${v}.wav`;
+      keyMap.set(`${pitch}_${v}`, smplrKey);
+      slotIdx++;
     }
   }
-  return buffers;
+  return { buffers, keyMap };
 }
 
 /** Hydrogen GM アコースティックドラム Sampler を非同期ロード (キャッシュ) */
@@ -141,36 +162,40 @@ export async function loadDrumSampler(ctx: AudioContext): Promise<DrumSamplerSet
 
     // キット別カスタム WAV を試行 (同キットを共有するスタイルは Sampler も共有)
     const customByStyle: Record<string, Sampler> = {};
+    const keyMapByStyle: Record<string, Map<string, string>> = {};
     try {
       const db = getDrumPatternDB();
       if (db?.samples && db?.kits) {
         const samplerByKit: Record<string, Sampler> = {};
+        const keyMapByKit: Record<string, Map<string, string>> = {};
         const loadTasks: Promise<void>[] = [];
 
         // キットごとに1つの Sampler をロード
         for (const [style, sampleMap] of Object.entries(db.samples)) {
           const kitFolder = db.kits[style] ?? style;
-          if (samplerByKit[kitFolder] !== undefined) continue; // ロード済みor処理中
+          if (samplerByKit[kitFolder] !== undefined) continue;
           if (Object.keys(sampleMap).length === 0) continue;
-          const buffers = buildBuffersFromSampleMap(kitFolder, sampleMap);
+          const { buffers, keyMap } = buildBuffersFromSampleMap(kitFolder, sampleMap);
           if (Object.keys(buffers).length === 0) continue;
-          // プレースホルダーをセットして重複ロード防止
           samplerByKit[kitFolder] = null!;
+          keyMapByKit[kitFolder] = keyMap;
           loadTasks.push(
             (async () => {
-              const sampler = new Sampler(ctx, { buffers });
+              const sampler = new Sampler(ctx, { buffers, detune: 0, decayTime: 0.5 });
               await sampler.load;
+              sampler.output.setVolume(80);
               samplerByKit[kitFolder] = sampler;
             })().catch(() => { delete samplerByKit[kitFolder]; }),
           );
         }
         await Promise.all(loadTasks);
 
-        // スタイル → キットの Sampler をマッピング
+        // スタイル → キットの Sampler + keyMap をマッピング
         for (const style of Object.keys(db.samples)) {
           const kitFolder = db.kits[style] ?? style;
           if (samplerByKit[kitFolder]) {
             customByStyle[style] = samplerByKit[kitFolder];
+            keyMapByStyle[style] = keyMapByKit[kitFolder];
             console.log(`[drums] ${style} → custom kit "${kitFolder}"`);
           } else {
             console.warn(`[drums] ${style} → fallback (kit "${kitFolder}" WAV not found)`);
@@ -192,7 +217,7 @@ export async function loadDrumSampler(ctx: AudioContext): Promise<DrumSamplerSet
       console.log('[drums] No custom kits loaded, using Hydrogen GM for all styles');
     }
 
-    cached = { metal, body, customByStyle };
+    cached = { metal, body, customByStyle, keyMapByStyle };
     return cached;
   })();
   return loadPromise;
@@ -394,19 +419,27 @@ export function generateDrumPattern(
   bpm: number,
   style: BackingStyle = 'medium-swing',
 ): DrumHit[] {
-  // --- DB パターン優先 (4拍小節 + カスタム WAV 時のみ) ---
-  if (beats === 4) {
+  // --- DB パターン優先 ---
+  {
     const db = getDrumPatternDB();
     const patterns = db?.patterns?.[style];
     if (patterns && patterns.length > 0) {
       const measureIdx = Math.floor(globalBeatOffset / 4);
-      // 4小節ごとにパターンを選択、小節内インデックスで該当小節を取得
       const patternGroupIdx = Math.floor(measureIdx / 8);
       const measureInPattern = measureIdx % 8;
       const rng = mulberry32(patternGroupIdx * 7919 + 42);
       const idx = Math.floor(rng() * patterns.length);
       const measure = patterns[idx].measures[measureInPattern];
-      if (measure && measure.length > 0) return measure;
+      if (measure && measure.length > 0) {
+        if (beats === 4) {
+          return measure;
+        }
+        // beats < 4: 小節内のオフセットに応じてスライス
+        const beatOffset = globalBeatOffset % 4;
+        return measure.filter(h =>
+          h.beatStart >= beatOffset && h.beatStart < beatOffset + beats
+        ).map(h => ({ ...h, beatStart: h.beatStart - beatOffset }));
+      }
     }
   }
 
@@ -445,18 +478,21 @@ export function playDrumPattern(
 
   const customSampler = samplers.customByStyle[style];
   const sampleMap = getDrumPatternDB()?.samples?.[style];
+  const keyMap = samplers.keyMapByStyle[style];
   const stopFns: (() => void)[] = [];
   for (const hit of pattern) {
     let sampler: Sampler;
     let noteName: string;
 
-    if (hit.pitch != null && customSampler && sampleMap) {
+    if (hit.pitch != null && customSampler && sampleMap && keyMap) {
       // ピッチベース: スタイル別カスタム WAV Sampler (最寄りベロシティ)
       const velocities = sampleMap[String(hit.pitch)];
       if (!velocities || velocities.length === 0) continue;
       const nearestVel = findNearestVelocity(velocities, hit.velocity);
+      const smplrKey = keyMap.get(`${hit.pitch}_${nearestVel}`);
+      if (!smplrKey) continue;
       sampler = customSampler;
-      noteName = `p${hit.pitch}_v${nearestVel}`;
+      noteName = smplrKey;
     } else if (hit.role) {
       const layerIdx = velocityToLayer(hit.velocity);
       // ロールベース: Hydrogen GM
@@ -468,21 +504,31 @@ export function playDrumPattern(
       continue;
     }
 
-    const stop = sampler.start({
-      note: noteName,
-      velocity: hit.velocity,
-      time: startAt + hit.beatStart * beatSec,
-      stopId,
-    });
-    stopFns.push(stop);
+    const noteVel = hit.velocity;
+    const noteTime = startAt + hit.beatStart * beatSec;
+    if (!isFinite(noteVel) || !isFinite(noteTime)) {
+      console.warn(`[drums] skip non-finite: note=${noteName} vel=${noteVel} time=${noteTime}`);
+      continue;
+    }
+    try {
+      const stop = sampler.start({
+        note: noteName,
+        velocity: noteVel,
+        time: noteTime,
+        stopId,
+      });
+      stopFns.push(stop);
+    } catch (e) {
+      console.warn(`[drums] start failed: note=${noteName} vel=${noteVel} time=${noteTime}`, e);
+    }
   }
 
   return {
     stop: () => {
-      stopFns.forEach(fn => fn());
-      samplers.metal.stop({ stopId });
-      samplers.body.stop({ stopId });
-      customSampler?.stop({ stopId });
+      stopFns.forEach(fn => { try { fn(); } catch { /* ignore */ } });
+      try { samplers.metal.stop({ stopId }); } catch { /* ignore */ }
+      try { samplers.body.stop({ stopId }); } catch { /* ignore */ }
+      try { customSampler?.stop({ stopId }); } catch { /* ignore */ }
     },
   };
 }
