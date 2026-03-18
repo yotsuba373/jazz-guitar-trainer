@@ -6,7 +6,7 @@ export interface BackingStyleDef {
 }
 
 export const BACKING_STYLES: BackingStyleDef[] = [
-  { key: 'swing',  label: 'Swing' },
+  { key: 'medium-swing',  label: 'Swing' },
   { key: 'bossa',  label: 'Bossa' },
   { key: 'ballad', label: 'Ballad' },
   { key: 'latin',  label: 'Latin' },

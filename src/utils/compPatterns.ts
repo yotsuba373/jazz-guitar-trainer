@@ -25,7 +25,7 @@ export function generateCompPattern(
   let events: CompEvent[];
 
   switch (style) {
-    case 'swing': {
+    case 'medium-swing': {
       const measureIdx = Math.floor(globalBeatOffset / 4);
       if (measureIdx % 2 === 0) {
         // Charleston: beat 0 (1.5拍) + and-of-2 (0.5拍)

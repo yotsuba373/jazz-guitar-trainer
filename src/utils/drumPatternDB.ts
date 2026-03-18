@@ -13,7 +13,17 @@ export interface DrumPatternEntry {
   measures: DrumHit[][];
 }
 
-export type DrumPatternDB = Record<string, DrumPatternEntry[]>;
+/**
+ * スタイル別サンプルマップ: pitch(文字列) → 利用可能ベロシティ値の昇順配列。
+ * 例: { "51": [20, 60, 100, 127], "38": [40, 80] }
+ */
+export type SampleMap = Record<string, number[]>;
+
+export interface DrumPatternDB {
+  patterns: Record<string, DrumPatternEntry[]>;
+  samples: Record<string, SampleMap>;  // style → SampleMap
+  kits: Record<string, string>;        // style → kit フォルダ名
+}
 
 let cachedDB: DrumPatternDB | null = null;
 let loadAttempted = false;
@@ -27,7 +37,7 @@ export async function loadDrumPatternDB(): Promise<DrumPatternDB | null> {
     const resp = await fetch('/drum-patterns.json');
     if (!resp.ok) return null;
     const data = await resp.json() as DrumPatternDB;
-    if (Object.keys(data).length === 0) return null;
+    if (!data.patterns || Object.keys(data.patterns).length === 0) return null;
     cachedDB = data;
     return cachedDB;
   } catch {
@@ -38,6 +48,24 @@ export async function loadDrumPatternDB(): Promise<DrumPatternDB | null> {
 /** ロード済み DB を同期取得 (未ロードなら null) */
 export function getDrumPatternDB(): DrumPatternDB | null {
   return cachedDB;
+}
+
+/**
+ * 利用可能なベロシティ値の中から最も近いものを返す。
+ * velocities は昇順ソート済みを想定。
+ */
+export function findNearestVelocity(velocities: number[], target: number): number {
+  if (velocities.length === 1) return velocities[0];
+  let best = velocities[0];
+  let bestDist = Math.abs(target - best);
+  for (let i = 1; i < velocities.length; i++) {
+    const dist = Math.abs(target - velocities[i]);
+    if (dist < bestDist) {
+      best = velocities[i];
+      bestDist = dist;
+    }
+  }
+  return best;
 }
 
 /** テスト用: キャッシュクリア */

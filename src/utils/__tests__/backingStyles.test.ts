@@ -5,7 +5,7 @@ import { generateBassLine } from '../walkingBass';
 import { generateDrumPattern } from '../drumPatterns';
 import type { BackingStyle } from '../../types';
 
-const ALL_STYLES: BackingStyle[] = ['swing', 'bossa', 'ballad', 'latin'];
+const ALL_STYLES: BackingStyle[] = ['medium-swing', 'bossa', 'ballad', 'latin'];
 
 // ---------------------------------------------------------------------------
 // backingStyles.ts — 定数構造
@@ -24,7 +24,7 @@ describe('BACKING_STYLES', () => {
 
   it('key が4種と一致', () => {
     const keys = BACKING_STYLES.map(s => s.key);
-    expect(keys).toEqual(['swing', 'bossa', 'ballad', 'latin']);
+    expect(keys).toEqual(['medium-swing', 'bossa', 'ballad', 'latin']);
   });
 });
 
@@ -42,7 +42,7 @@ describe('generateCompPattern', () => {
   });
 
   it('Swing (偶数小節): Charleston パターン (2イベント)', () => {
-    const events = generateCompPattern(4, 'swing', 0); // globalBeatOffset=0 → measureIdx=0 (偶数)
+    const events = generateCompPattern(4, 'medium-swing', 0); // globalBeatOffset=0 → measureIdx=0 (偶数)
     expect(events).toHaveLength(2);
     expect(events[0].beatStart).toBe(0);
     expect(events[0].duration).toBe(1.5);
@@ -50,7 +50,7 @@ describe('generateCompPattern', () => {
   });
 
   it('Swing (奇数小節): ロングバリエーション (1イベント)', () => {
-    const events = generateCompPattern(4, 'swing', 4); // globalBeatOffset=4 → measureIdx=1 (奇数)
+    const events = generateCompPattern(4, 'medium-swing', 4); // globalBeatOffset=4 → measureIdx=1 (奇数)
     expect(events).toHaveLength(1);
     expect(events[0].beatStart).toBe(0);
     expect(events[0].duration).toBe(2);
@@ -107,8 +107,8 @@ describe('generateCompPattern', () => {
 // ---------------------------------------------------------------------------
 describe('スタイル別統合: 全楽器パターン生成', () => {
   it('Swing: ベース4音 + ドラムにride含む', () => {
-    const bass = generateBassLine(0, 'maj7', 4, 7, 'swing');
-    const drums = generateDrumPattern(4, 0, 0.2, 140, 'swing');
+    const bass = generateBassLine(0, 'maj7', 4, 7, 'medium-swing');
+    const drums = generateDrumPattern(4, 0, 0.2, 140, 'medium-swing');
     expect(bass).toHaveLength(4); // 4-feel
     expect(drums.some(h => h.role === 'ride')).toBe(true);
   });

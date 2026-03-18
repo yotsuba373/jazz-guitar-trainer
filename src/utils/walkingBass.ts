@@ -66,7 +66,7 @@ export function generateBassLine(
   quality: string,
   beats: number,
   nextRootSemi: number | null,
-  style: BackingStyle = 'swing',
+  style: BackingStyle = 'medium-swing',
 ): BassNote[] {
   const rootMidi = rootToBassMidi(rootSemi);
   const clamp = (n: number) => { let m = n; while (m > 55) m -= 12; while (m < 28) m += 12; return m; };
@@ -149,7 +149,7 @@ export function playSmplrBassLine(
   nextRootName: string | null,
   startAt: number,
   bpm: number,
-  style: BackingStyle = 'swing',
+  style: BackingStyle = 'medium-swing',
 ): AudioHandle {
   const rootSemi = ROOT_PC[rootName] ?? 0;
   const nextRootSemi = nextRootName != null ? (ROOT_PC[nextRootName] ?? null) : null;

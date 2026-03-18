@@ -112,9 +112,9 @@ export default function App() {
     (localStorage.getItem('rhythmMode') as RhythmMode) || 'metronome'
   );
   const [backingStyle, setBackingStyle] = useState<BackingStyle>(() =>
-    progressions[activeProgIdx]?.backingStyle ?? 'swing'
+    progressions[activeProgIdx]?.backingStyle ?? 'medium-swing'
   );
-  const swingEnabled = backingStyle === 'swing' || backingStyle === 'ballad';
+  const swingEnabled = backingStyle === 'medium-swing' || backingStyle === 'ballad';
   // Lick practice state
   const [lickDB, setLickDB] = useState<LickDB | null>(null);
   const [selectedLickIdx, setSelectedLickIdx] = useState<number | null>(null);
@@ -954,7 +954,7 @@ export default function App() {
                 chordPrefs={chordPrefs}
                 activeChordIdx={activeChordIdx}
                 onSave={handleSaveProgressions}
-                onSelectProg={(idx) => { setActiveProgIdx(idx); localStorage.setItem('activeProgIdx', String(idx)); setActiveChordIdx(0); setIsPlaying(false); setBpm(progressions[idx]?.bpm ?? 120); setLoopRange(progressions[idx]?.loopRange ?? null); setBackingStyle(progressions[idx]?.backingStyle ?? 'swing'); }}
+                onSelectProg={(idx) => { setActiveProgIdx(idx); localStorage.setItem('activeProgIdx', String(idx)); setActiveChordIdx(0); setIsPlaying(false); setBpm(progressions[idx]?.bpm ?? 120); setLoopRange(progressions[idx]?.loopRange ?? null); setBackingStyle(progressions[idx]?.backingStyle ?? 'medium-swing'); }}
                 onClose={() => setEditing(false)}
                 backingStyle={backingStyle}
                 onBackingStyleChange={handleBackingStyleChange}

@@ -2,7 +2,8 @@ import { Sampler } from 'smplr';
 import type { BackingStyle } from '../types';
 import type { AudioHandle } from '../hooks/useAudioContext';
 import { swingBeatStart, swingVolumeMult } from './swing';
-import { getDrumPatternDB } from './drumPatternDB';
+import { getDrumPatternDB, findNearestVelocity } from './drumPatternDB';
+import type { SampleMap } from './drumPatternDB';
 
 // ---------------------------------------------------------------------------
 // Hydrogen GM acoustic drum sample mapping
@@ -89,9 +90,6 @@ let loadPromise: Promise<DrumSamplerSet> | null = null;
 // カスタム WAV サンプル: ピッチベース命名 ({noteName}_v{velocity}.wav)
 // ---------------------------------------------------------------------------
 
-/** ベロシティレイヤー値 (velocityToLayer の閾値に対応) */
-const LAYER_VELOCITIES = [25, 50, 80, 105, 127];
-
 const NOTE_NAMES = ['c', 'c#', 'd', 'd#', 'e', 'f', 'f#', 'g', 'g#', 'a', 'a#', 'b'];
 
 /**
@@ -101,21 +99,22 @@ const NOTE_NAMES = ['c', 'c#', 'd', 'd#', 'e', 'f', 'f#', 'g', 'g#', 'a', 'a#', 
  */
 export function midiToFileName(pitch: number): string {
   const name = NOTE_NAMES[pitch % 12];
-  const octave = Math.floor(pitch / 12) - 2; // C3=60 convention: 60/12=5, 5-2=3 → C3 ✓
+  const octave = Math.floor(pitch / 12) - 2;
   return `${name}${octave}`;
 }
 
 /**
- * ピッチベースのカスタム Sampler 用 buffers マップを構築。
- * キー: "p{pitch}_L{layer}" (例: "p51_L0", "p38_L2")
+ * SampleMap からカスタム Sampler 用 buffers マップを構築。
+ * キー: "p{pitch}_v{fileVelocity}" (例: "p51_v20", "p38_v80")
  * パス: /drums/{style}/{noteName}_v{velocity}.wav
  */
-function buildPitchBasedBuffers(style: string, pitches: Set<number>): Record<string, string> {
+function buildBuffersFromSampleMap(style: string, sampleMap: SampleMap): Record<string, string> {
   const buffers: Record<string, string> = {};
-  for (const pitch of pitches) {
+  for (const [pitchStr, velocities] of Object.entries(sampleMap)) {
+    const pitch = Number(pitchStr);
     const name = midiToFileName(pitch);
-    for (let i = 0; i < LAYER_VELOCITIES.length; i++) {
-      buffers[`p${pitch}_L${i}`] = `/drums/${style}/${name}_v${LAYER_VELOCITIES[i]}.wav`;
+    for (const v of velocities) {
+      buffers[`p${pitch}_v${v}`] = `/drums/${style}/${name}_v${v}.wav`;
     }
   }
   return buffers;
@@ -140,42 +139,40 @@ export async function loadDrumSampler(ctx: AudioContext): Promise<DrumSamplerSet
     });
     await Promise.all([metal.load, body.load]);
 
-    // スタイル別カスタム WAV を試行
+    // キット別カスタム WAV を試行 (同キットを共有するスタイルは Sampler も共有)
     const customByStyle: Record<string, Sampler> = {};
     try {
       const db = getDrumPatternDB();
-      if (db) {
-        // スタイルごとにユニークピッチを収集
-        const pitchesByStyle: Record<string, Set<number>> = {};
-        for (const [style, patterns] of Object.entries(db)) {
-          const pitches = new Set<number>();
-          for (const p of patterns) {
-            for (const measure of p.measures) {
-              for (const h of measure) {
-                if (h.pitch != null) pitches.add(h.pitch);
-              }
-            }
-          }
-          if (pitches.size > 0) pitchesByStyle[style] = pitches;
-        }
-
-        // 各スタイルの WAV 存在チェック → Sampler ロード
+      if (db?.samples && db?.kits) {
+        const samplerByKit: Record<string, Sampler> = {};
         const loadTasks: Promise<void>[] = [];
-        for (const [style, pitches] of Object.entries(pitchesByStyle)) {
-          const testPitch = [...pitches][0];
-          const testFile = `/drums/${style}/${midiToFileName(testPitch)}_v${LAYER_VELOCITIES[0]}.wav`;
+
+        // キットごとに1つの Sampler をロード
+        for (const [style, sampleMap] of Object.entries(db.samples)) {
+          const kitFolder = db.kits[style] ?? style;
+          if (samplerByKit[kitFolder] !== undefined) continue; // ロード済みor処理中
+          if (Object.keys(sampleMap).length === 0) continue;
+          const buffers = buildBuffersFromSampleMap(kitFolder, sampleMap);
+          if (Object.keys(buffers).length === 0) continue;
+          // プレースホルダーをセットして重複ロード防止
+          samplerByKit[kitFolder] = null!;
           loadTasks.push(
-            fetch(testFile, { method: 'HEAD' }).then(async (resp) => {
-              if (resp.ok) {
-                const buffers = buildPitchBasedBuffers(style, pitches);
-                const sampler = new Sampler(ctx, { buffers });
-                await sampler.load;
-                customByStyle[style] = sampler;
-              }
-            }).catch(() => { /* このスタイルの WAV なし → スキップ */ }),
+            (async () => {
+              const sampler = new Sampler(ctx, { buffers });
+              await sampler.load;
+              samplerByKit[kitFolder] = sampler;
+            })().catch(() => { delete samplerByKit[kitFolder]; }),
           );
         }
         await Promise.all(loadTasks);
+
+        // スタイル → キットの Sampler をマッピング
+        for (const style of Object.keys(db.samples)) {
+          const kitFolder = db.kits[style] ?? style;
+          if (samplerByKit[kitFolder]) {
+            customByStyle[style] = samplerByKit[kitFolder];
+          }
+        }
       }
     } catch { /* カスタム WAV なし → Hydrogen GM フォールバック */ }
 
@@ -379,17 +376,17 @@ export function generateDrumPattern(
   globalBeatOffset: number,
   swingAmount: number,
   bpm: number,
-  style: BackingStyle = 'swing',
+  style: BackingStyle = 'medium-swing',
 ): DrumHit[] {
   // --- DB パターン優先 (4拍小節 + カスタム WAV 時のみ) ---
   if (beats === 4) {
     const db = getDrumPatternDB();
-    const patterns = db?.[style];
+    const patterns = db?.patterns?.[style];
     if (patterns && patterns.length > 0) {
       const measureIdx = Math.floor(globalBeatOffset / 4);
       // 4小節ごとにパターンを選択、小節内インデックスで該当小節を取得
-      const patternGroupIdx = Math.floor(measureIdx / 4);
-      const measureInPattern = measureIdx % 4;
+      const patternGroupIdx = Math.floor(measureIdx / 8);
+      const measureInPattern = measureIdx % 8;
       const rng = mulberry32(patternGroupIdx * 7919 + 42);
       const idx = Math.floor(rng() * patterns.length);
       const measure = patterns[idx].measures[measureInPattern];
@@ -402,7 +399,7 @@ export function generateDrumPattern(
     case 'bossa':  return generateBossaDrumPattern(beats);
     case 'ballad': return generateBalladDrumPattern(beats);
     case 'latin':  return generateLatinDrumPattern(beats);
-    case 'swing':
+    case 'medium-swing':
     default:       return generateSwingDrumPattern(beats, globalBeatOffset, swingAmount, bpm);
   }
 }
@@ -424,24 +421,28 @@ export function playDrumPattern(
   startAt: number,
   bpm: number,
   swingAmount: number,
-  style: BackingStyle = 'swing',
+  style: BackingStyle = 'medium-swing',
 ): AudioHandle {
   const pattern = generateDrumPattern(beats, globalBeatOffset, swingAmount, bpm, style);
   const beatSec = 60 / bpm;
   const stopId = `drums-${++drumIdCounter}`;
 
   const customSampler = samplers.customByStyle[style];
+  const sampleMap = getDrumPatternDB()?.samples?.[style];
   const stopFns: (() => void)[] = [];
   for (const hit of pattern) {
-    const layerIdx = velocityToLayer(hit.velocity);
     let sampler: Sampler;
     let noteName: string;
 
-    if (hit.pitch != null && customSampler) {
-      // ピッチベース: スタイル別カスタム WAV Sampler
+    if (hit.pitch != null && customSampler && sampleMap) {
+      // ピッチベース: スタイル別カスタム WAV Sampler (最寄りベロシティ)
+      const velocities = sampleMap[String(hit.pitch)];
+      if (!velocities || velocities.length === 0) continue;
+      const nearestVel = findNearestVelocity(velocities, hit.velocity);
       sampler = customSampler;
-      noteName = `p${hit.pitch}_L${layerIdx}`;
+      noteName = `p${hit.pitch}_v${nearestVel}`;
     } else if (hit.role) {
+      const layerIdx = velocityToLayer(hit.velocity);
       // ロールベース: Hydrogen GM
       const noteNames = ROLE_BASE[hit.role];
       if (!noteNames) continue;

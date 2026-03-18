@@ -797,7 +797,7 @@ actualBeats = (beatWidth / sumOfBeatWidths) * 4</pre>
 <h3>ドラムパターン (<code>drumPatterns.ts</code> + <code>drumPatternDB.ts</code>)</h3>
 <p>2層構造のドラムパターンシステム:</p>
 <ol>
-  <li><strong>MIDI パターン DB + カスタム WAV</strong> (優先): DAW で打ち込んだ4小節 MIDI → <code>parse_drum_patterns.py</code> → JSON DB → ランタイムで4小節単位でランダム選択。カスタム WAV でピッチ直結再生</li>
+  <li><strong>MIDI パターン DB + カスタム WAV</strong> (優先): DAW で打ち込んだ8小節 MIDI → <code>parse_drum_patterns.py</code> → JSON DB → ランタイムで8小節単位でランダム選択。カスタム WAV でピッチ直結再生</li>
   <li><strong>アルゴリズム生成</strong> (フォールバック): DB がない場合、または WAV 未配置の場合は iReal Pro 風の有機的パターンを Hydrogen GM サンプルで生成 (Mulberry32 PRNG)</li>
 </ol>
 
@@ -808,7 +808,7 @@ actualBeats = (beatWidth / sumOfBeatWidths) * 4</pre>
 <table>
   <tr><th>項目</th><th>仕様</th></tr>
   <tr><td>入力ファイル</td><td><code>scripts/data/midi/drums/{style}_{番号}.mid</code> (例: <code>swing_1.mid</code>, <code>bossa_2.mid</code>)</td></tr>
-  <tr><td>長さ</td><td><strong>4小節 (16拍)</strong></td></tr>
+  <tr><td>長さ</td><td><strong>8小節 (32拍)</strong></td></tr>
   <tr><td>拍子</td><td>4/4</td></tr>
   <tr><td>BPM</td><td>任意 (パーサーが MIDI テンポを読み取り、ビート相対位置に正規化。テンポチェンジ非対応 — 先頭テンポのみ使用)</td></tr>
   <tr><td>トラック</td><td>ドラムトラック (ch10 / ドラムフラグ ON)</td></tr>
@@ -822,12 +822,12 @@ actualBeats = (beatWidth / sumOfBeatWidths) * 4</pre>
 パターンの MIDI ピッチがそのままカスタム WAV のファイル名に対応するため、VSTi の楽器配置をプログラムが知る必要がない。</p>
 
 <p><strong>再生時のパターン選択</strong>:</p>
-<pre><code>4小節パターン: [m0, m1, m2, m3]
+<pre><code>8小節パターン: [m0, m1, m2, m3, m4, m5, m6, m7]
 
-再生: 小節 0  1  2  3 | 4  5  6  7 | 8 ...
-      ├─ pattern A ──┤├─ pattern B ──┤├─ ...
-      4小節ごとに seeded PRNG でランダム選択
-      小節内インデックス (0-3) で該当小節を取り出し</code></pre>
+再生: 小節 0  1  2  3  4  5  6  7 | 8  9  10 11 12 13 14 15 | ...
+      ├──────── pattern A ────────┤├──────── pattern B ────────┤
+      8小節ごとに seeded PRNG でランダム選択
+      小節内インデックス (0-7) で該当小節を取り出し</code></pre>
 
 <h4>カスタム WAV サンプル (任意)</h4>
 
