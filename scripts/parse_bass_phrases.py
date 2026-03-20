@@ -138,8 +138,9 @@ def parse_quality(harmony_elem) -> str:
     return base_quality
 
 
-def parse_musicxml(path: Path) -> list[MXLMeasure]:
-    """Parse MusicXML into a list of measures with chords and repeat info."""
+def parse_musicxml(path: Path) -> tuple[list[MXLMeasure], ET.Element]:
+    """Parse MusicXML into a list of measures with chords and repeat info.
+    Returns (measures, xml_root) — xml_root is needed for D.C./D.S. detection."""
     tree = ET.parse(path)
     root = tree.getroot()
     measures = []
@@ -218,7 +219,7 @@ def parse_musicxml(path: Path) -> list[MXLMeasure]:
 
         measures.append(m)
 
-    return measures
+    return measures, root
 
 
 def extract_style(path: Path) -> str:
@@ -232,7 +233,39 @@ def extract_style(path: Path) -> str:
     return "medium-swing"
 
 
-def expand_form(measures: list[MXLMeasure]) -> list[MXLMeasure]:
+def _scan_dacapo(measures_xml_root, measure_numbers: set[int]) -> Optional[int]:
+    """Scan raw XML for dacapo sound attribute in given measure numbers.
+    Returns the measure number containing dacapo, or None."""
+    if measures_xml_root is None:
+        return None
+    for m_elem in measures_xml_root.findall(".//measure"):
+        mnum = int(m_elem.get("number", "0"))
+        if mnum not in measure_numbers:
+            continue
+        for direction in m_elem.findall("direction"):
+            sound = direction.find("sound")
+            if sound is not None and "dacapo" in sound.attrib:
+                return mnum
+    return None
+
+
+def _scan_fine(measures_xml_root) -> Optional[int]:
+    """Scan raw XML for fine sound attribute. Returns the measure number, or None."""
+    if measures_xml_root is None:
+        return None
+    for m_elem in measures_xml_root.findall(".//measure"):
+        mnum = int(m_elem.get("number", "0"))
+        for direction in m_elem.findall("direction"):
+            sound = direction.find("sound")
+            if sound is not None and "fine" in sound.attrib:
+                return mnum
+    return None
+
+
+def expand_form(
+    measures: list[MXLMeasure],
+    xml_root=None,
+) -> list[MXLMeasure]:
     """
     Expand repeats and endings into a flat measure sequence (one chorus).
 
@@ -240,9 +273,14 @@ def expand_form(measures: list[MXLMeasure]) -> list[MXLMeasure]:
     - Simple repeats (no endings): play region twice
     - Endings 1,2: ending 1 extends to backward repeat, ending 2 same length after
     - Ending 3 (AABA): A1+ending1, A2+ending2, B section, A3+ending3
+    - D.C. al Fine / D.C. al 2nd: after B section, da capo to repeat region,
+      play main body + ending 2 (up to Fine), then stop
     """
     result = []
     i = 0
+
+    # Build measure-number → index mapping for dacapo lookup
+    mnum_set = {m.number for m in measures}
 
     while i < len(measures):
         if not measures[i].repeat_forward:
@@ -308,8 +346,38 @@ def expand_form(measures: list[MXLMeasure]) -> list[MXLMeasure]:
 
             i = len(measures)  # consumed everything
         else:
-            # No ending 3: continue from after ending 2
-            i = after_e2
+            # Check for D.C. (da capo) in remaining measures after ending 2
+            # This handles AABA forms like Cherokee:
+            #   A1+e1, A2+e2, B(→D.C.), A3+e2(→Fine)
+            remaining_mnums = {measures[j].number for j in range(after_e2, len(measures))}
+            dacapo_mnum = _scan_dacapo(xml_root, remaining_mnums)
+
+            if dacapo_mnum is not None:
+                # B section: from after ending 2 to end of measures
+                b_section = measures[after_e2:]
+                result.extend(b_section)
+
+                # D.C.: main body + ending 2 (Fine ending)
+                # Find Fine measure to determine the end point
+                fine_mnum = _scan_fine(xml_root)
+                if fine_mnum is not None:
+                    # ending 2 up to and including Fine measure
+                    fine_idx = next(
+                        (j for j in range(e2_start, len(measures))
+                         if measures[j].number == fine_mnum),
+                        e2_start + e1_len - 1,
+                    )
+                    e2_fine = measures[e2_start:fine_idx + 1]
+                else:
+                    e2_fine = e2_measures
+
+                result.extend(main_body)
+                result.extend(e2_fine)
+
+                i = len(measures)  # consumed everything
+            else:
+                # No ending 3, no D.C.: continue from after ending 2
+                i = after_e2
 
     return result
 
@@ -684,8 +752,8 @@ def process_song(name: str) -> list[ChordPattern]:
     style = extract_style(mxml_path)
 
     # 1. Parse MusicXML → expanded chord progression
-    measures = parse_musicxml(mxml_path)
-    expanded = expand_form(measures)
+    measures, xml_root = parse_musicxml(mxml_path)
+    expanded = expand_form(measures, xml_root)
     chord_timeline = build_chord_timeline(expanded)
 
     chorus_beats = sum(m.beats for m in expanded)
