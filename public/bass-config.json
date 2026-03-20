@@ -1,7 +1,34 @@
 {
-  "midiRange": { "low": 28, "high": 55 },
-  "bassRootBase": 40,
-  "velocity": 90,
+  "midiRange": { "low": 28, "high": 60 },
+  "bassRootBase": 36,
+  "velocity": 106,
+  "prng": { "multiplier": 7919, "constant": 17 },
+  "defaultDuration": 0.90,
+  "velocityHumanize": 8,
+  "tripletGrace": { "probability": 0.50, "velocity": 91, "offset": 0.667 },
+  "patterns": {
+    "swing": {
+      "approachWeights": { "chromatic": 0.40, "diatonic": 0.20, "dominant": 0.20, "arpeggio": 0.20 },
+      "contourAlternateEvery": 2
+    }
+  },
+  "styleOverrides": {
+    "medium-swing": {
+      "defaultDuration": 0.90,
+      "tripletGrace": { "probability": 0.50 },
+      "approachWeights": { "chromatic": 0.45, "diatonic": 0.25, "dominant": 0.20, "arpeggio": 0.10 }
+    },
+    "medium-up-swing": {
+      "defaultDuration": 0.90,
+      "tripletGrace": { "probability": 0.55 },
+      "approachWeights": { "chromatic": 0.40, "diatonic": 0.25, "dominant": 0.20, "arpeggio": 0.15 }
+    },
+    "up-tempo-swing": {
+      "defaultDuration": 0.99,
+      "tripletGrace": { "probability": 0.05 },
+      "approachWeights": { "chromatic": 0.30, "diatonic": 0.15, "dominant": 0.15, "arpeggio": 0.40 }
+    }
+  },
   "kitGains": {},
   "customWAV": { "detune": 0, "decayTime": 0.8, "volume": 127 }
 }

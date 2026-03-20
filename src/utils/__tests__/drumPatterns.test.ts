@@ -235,7 +235,7 @@ describe('generateDrumPattern', () => {
   });
 
   it('全スタイル velocity 範囲 0-127', () => {
-    for (const style of ['medium-swing', 'medium-up-swing', 'medium-up-swing-2', 'up-tempo-swing', 'bossa', 'ballad', 'latin'] as const) {
+    for (const style of ['medium-swing', 'medium-up-swing', 'up-tempo-swing', 'bossa', 'ballad', 'latin'] as const) {
       const hits = generateDrumPattern(4, 0, 0.2, 120, style);
       for (const h of hits) {
         expect(h.velocity).toBeGreaterThanOrEqual(0);

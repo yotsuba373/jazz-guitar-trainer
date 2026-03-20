@@ -127,18 +127,47 @@ export const clearCompConfigCache = compConfig.clear;
 // Bass config
 // ---------------------------------------------------------------------------
 
+export interface SwingBassParams {
+  approachWeights: { chromatic: number; diatonic: number; dominant: number; arpeggio: number };
+  contourAlternateEvery: number;
+}
+
+/** Per-swing-style overrides for bass generation parameters */
+export interface SwingStyleOverrides {
+  defaultDuration?: number;
+  tripletGrace?: { probability?: number; velocity?: number; offset?: number };
+  approachWeights?: { chromatic?: number; diatonic?: number; dominant?: number; arpeggio?: number };
+}
+
 export interface BassConfig {
   midiRange: { low: number; high: number };
   bassRootBase: number;
   velocity: number;
+  prng: { multiplier: number; constant: number };
+  defaultDuration: number;
+  velocityHumanize: number;
+  tripletGrace: { probability: number; velocity: number; offset: number };
+  patterns: { swing: SwingBassParams };
+  /** Per-swing-style overrides (merged on top of base config at runtime) */
+  styleOverrides?: Partial<Record<string, SwingStyleOverrides>>;
   kitGains: Record<string, number>;
   customWAV: { detune: number; decayTime: number; volume: number };
 }
 
 export const DEFAULT_BASS_CONFIG: BassConfig = {
-  midiRange: { low: 28, high: 55 },
-  bassRootBase: 40,
-  velocity: 90,
+  midiRange: { low: 28, high: 60 },
+  bassRootBase: 36,
+  velocity: 83,
+  prng: { multiplier: 7919, constant: 17 },
+  defaultDuration: 0.86,
+  velocityHumanize: 15,
+  tripletGrace: { probability: 0.10, velocity: 91, offset: 0.667 },
+  patterns: {
+    swing: {
+      approachWeights: { chromatic: 0.50, diatonic: 0.20, dominant: 0.20, arpeggio: 0.10 },
+      contourAlternateEvery: 2,
+    },
+  },
   kitGains: {},
   customWAV: { detune: 0, decayTime: 0.8, volume: 127 },
 };

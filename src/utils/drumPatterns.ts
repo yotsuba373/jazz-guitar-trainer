@@ -465,7 +465,6 @@ export function generateDrumPattern(
     case 'latin':  return generateLatinDrumPattern(beats);
     case 'medium-swing':
     case 'medium-up-swing':
-    case 'medium-up-swing-2':
     case 'up-tempo-swing':
     default:       return generateSwingDrumPattern(beats, globalBeatOffset, swingAmount, bpm);
   }

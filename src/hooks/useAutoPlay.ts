@@ -159,7 +159,7 @@ export function useAutoPlay(params: AutoPlayParams) {
           bassHandle = playSmplrBassLine(
             ctx, bassSamplers, chord.rootName, chord.quality,
             chordBeats, nextChord?.rootName ?? null, startAt, bpm,
-            audio.backingStyleRef.current,
+            audio.backingStyleRef.current, globalBeatOffset,
           );
         }
       }

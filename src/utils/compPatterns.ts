@@ -29,7 +29,6 @@ export function generateCompPattern(
 
   switch (style) {
     case 'medium-up-swing':
-    case 'medium-up-swing-2':
     case 'up-tempo-swing':
     case 'medium-swing': {
       const measureIdx = Math.floor(globalBeatOffset / 4);

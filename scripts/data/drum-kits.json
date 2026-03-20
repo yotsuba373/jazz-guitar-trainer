@@ -2,6 +2,5 @@
   "_comment": "スタイル → ドラムキット (WAV フォルダ名) のマッピング。同じキットを複数スタイルで共有可能。ゲイン設定は public/drum-config.json の kitGains で管理。",
   "medium-swing": "bop-sticks-dry",
   "medium-up-swing": "bop-sticks-dry",
-  "medium-up-swing-2": "bop-sticks-dry",
   "up-tempo-swing": "bop-sticks-dry"
 }

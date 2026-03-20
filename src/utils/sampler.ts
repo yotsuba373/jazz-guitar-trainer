@@ -1,7 +1,7 @@
 import { Soundfont } from 'smplr';
 import type { AudioHandle } from '../hooks/useAudioContext';
 import { loadDrumSampler } from './drumPatterns';
-import { loadBassSampler } from './bassPatterns';
+import { loadBassSampler, loadBassPhraseDB } from './bassPatterns';
 import { getPianoConfig } from './configLoader';
 
 export type SamplerStatus = 'idle' | 'loading' | 'ready' | 'error';
@@ -34,9 +34,10 @@ export async function loadSamplers(
     const bass = new Soundfont(ctx, { instrument: 'acoustic_bass' });
     await Promise.all([piano.load, bass.load]);
     cached = { piano, bass };
-    // ドラム・ベースサンプラーは非同期で並行ロード (再生要求時に利用可能)
+    // ドラム・ベースサンプラー + ベースフレーズDBは非同期で並行ロード
     loadDrumSampler(ctx).catch(() => { /* silent */ });
     loadBassSampler(ctx, bass).catch(() => { /* silent */ });
+    loadBassPhraseDB().catch(() => { /* silent */ });
     setStatus('ready');
   } catch {
     setStatus('error');

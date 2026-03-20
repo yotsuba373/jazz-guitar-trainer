@@ -8,7 +8,7 @@ export type InstrumentType = 'guitar' | 'saxophone';
 export type RhythmMode = 'metronome' | 'drums';
 
 /** Backing style for comping, bass, and drums */
-export type BackingStyle = 'medium-swing' | 'medium-up-swing' | 'medium-up-swing-2' | 'up-tempo-swing' | 'bossa' | 'ballad' | 'latin';
+export type BackingStyle = 'medium-swing' | 'medium-up-swing' | 'up-tempo-swing' | 'bossa' | 'ballad' | 'latin';
 
 /** A single note on the fretboard: [noteName, fretNumber, semitoneValue] */
 export type FretNote = [string, number, number];

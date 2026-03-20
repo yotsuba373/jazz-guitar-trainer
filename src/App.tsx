@@ -25,8 +25,13 @@ import { ProgressionEditor, ProgressionPlayer } from './components/Progression';
 import { Footer } from './components/Footer';
 
 const SWING_STYLES: Set<BackingStyle> = new Set([
-  'medium-swing', 'medium-up-swing', 'medium-up-swing-2', 'up-tempo-swing', 'ballad',
+  'medium-swing', 'medium-up-swing', 'up-tempo-swing', 'ballad',
 ]);
+
+const VALID_STYLES = new Set(BACKING_STYLES.map(s => s.key));
+/** Validate a stored backingStyle (handles removed 'medium-up-swing-2' etc.) */
+const validStyle = (s: string | undefined): BackingStyle =>
+  s && VALID_STYLES.has(s as BackingStyle) ? s as BackingStyle : 'medium-swing';
 
 export default function App() {
   const [rootName, setRootName] = useState<RootName>(() => {
@@ -117,7 +122,7 @@ export default function App() {
     (localStorage.getItem('rhythmMode') as RhythmMode) || 'metronome'
   );
   const [backingStyle, setBackingStyle] = useState<BackingStyle>(() =>
-    progressions[activeProgIdx]?.backingStyle ?? 'medium-swing'
+    validStyle(progressions[activeProgIdx]?.backingStyle)
   );
   const swingEnabled = SWING_STYLES.has(backingStyle);
   // Lick practice state
@@ -965,7 +970,7 @@ export default function App() {
                 chordPrefs={chordPrefs}
                 activeChordIdx={activeChordIdx}
                 onSave={handleSaveProgressions}
-                onSelectProg={(idx) => { setActiveProgIdx(idx); localStorage.setItem('activeProgIdx', String(idx)); setActiveChordIdx(0); setIsPlaying(false); setBpm(progressions[idx]?.bpm ?? 120); setLoopRange(progressions[idx]?.loopRange ?? null); setBackingStyle(progressions[idx]?.backingStyle ?? 'medium-swing'); }}
+                onSelectProg={(idx) => { setActiveProgIdx(idx); localStorage.setItem('activeProgIdx', String(idx)); setActiveChordIdx(0); setIsPlaying(false); setBpm(progressions[idx]?.bpm ?? 120); setLoopRange(progressions[idx]?.loopRange ?? null); setBackingStyle(validStyle(progressions[idx]?.backingStyle)); }}
                 onClose={() => setEditing(false)}
                 backingStyle={backingStyle}
                 onBackingStyleChange={handleBackingStyleChange}
