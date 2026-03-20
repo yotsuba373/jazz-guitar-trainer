@@ -14,7 +14,7 @@ npm install
 npm run dev       # 開発サーバー起動 → http://localhost:5173
 npm run build     # tsc + vite build
 npm run lint      # ESLint
-npm test          # vitest run (833 テスト)
+npm test          # vitest run (830 テスト)
 ```
 
 Node.js が未インストールの場合は fnm を使用:
@@ -66,10 +66,10 @@ src/
 │   ├── chartLayout.ts               — deriveChartLayout(), getChartLayout(), buildChordRows(), removeChordFromLayout(), insertChordAtBeat(), computeInsertFlatIndex(), insertEmptyMeasure(), splitSection(), mergeSections(), splitEndings(), removeEndings(), findChordMeasure()
 │   ├── chordForms.ts                — findVoicingsInPosition(), VOICING_TEMPLATES, formatVoicingLabel()
 │   ├── sampler.ts                   — loadSamplers(), getSamplers(), buildJazzPianoVoicing(), playSmplrPianoComp() — smplr SoundFont サンプラー + ジャズピアノボイシング
-│   ├── bassPatterns.ts              — generateBassLine(), playSmplrBassLine(), BassSamplerSet, loadBassSampler(), getBassSampler(), BassPhraseDB, loadBassPhraseDB(), BassPatternDB, loadBassPatternDB(), getBassPatternDB() — スタイル別ベースライン生成 (Swing系3種/Bossa/Ballad/Latin) + smplr acoustic_bass / カスタム WAV 再生 (voice stealing, letRing)。パターンDB: iReal Pro 17曲からスタイル別 (medium-swing/medium-up-swing/up-tempo-swing) に分離、フォールバックチェーン付き。DB パターンは [beat, semitone, duration] 3要素 (iReal Pro MIDI 実測 duration)。APPROACH_BONUS 廃止 (iReal Pro 分析でコンテキスト非依存と判明)。スタイル別パラメータ (defaultDuration/tripletGrace/approachWeights/altOctaveProb/octaveAdjustThreshold) は bass-config.json の styleOverrides で外部化。コード間オクターブ近接調整 (prevLastMidi) でスタイル別閾値に基づく大跳躍抑制
+│   ├── bassPatterns.ts              — generateBassLine(), playSmplrBassLine(), BassSamplerSet, loadBassSampler(), getBassSampler(), BassPhraseDB, loadBassPhraseDB(), BassPatternDB, loadBassPatternDB(), getBassPatternDB() — スタイル別ベースライン生成 (Swing系3種/Bossa/Ballad/Latin) + smplr acoustic_bass / カスタム WAV 再生 (voice stealing, letRing)。パターンDB: iReal Pro 17曲からスタイル別 (medium-swing/medium-up-swing/up-tempo-swing) に分離、フォールバックチェーン付き。DB パターンは [beat, semitone, duration] 3要素 (iReal Pro MIDI 実測 duration)。DB 100% カバーのためテンプレートフォールバック廃止 (フェイルセーフ: ルート連打)。オクターブ選択はルート PC ごとの固定確率 (前音非依存、iReal Pro 分析で証明)。スタイル別パラメータ (defaultDuration/tripletGrace/approachWeights/altOctaveProb) は bass-config.json の styleOverrides で外部化
 │   ├── drumPatterns.ts              — generateSwingDrumPattern(), generateDrumPattern(), playDrumPattern(), loadDrumSampler() — スタイル別ドラムパターン生成 (Swing/Bossa/Ballad/Latin) + Hydrogen GM / カスタム WAV ドラム再生。設定フィールド: prng (シード), drumSwingAmount, ghost.tripletGrid, comping.slots。DrumAudioHandle: stop() (全停止) + letRing() (自然減衰) + voice stealing (lastHitByPitch)
 │   ├── drumPatternDB.ts             — loadDrumPatternDB(), getDrumPatternDB(), loadDrumConfig(), getDrumConfig() — MIDI ドラムパターン DB ロード (public/drum-patterns.generated.json) + ドラム設定 JSON ロード (configLoader.ts 経由)。DrumConfig に prng, drumSwingAmount, ghost.tripletGrid, comping.slots フィールド追加
-│   ├── configLoader.ts              — 汎用 JSON コンフィグローダー factory (deepMerge, createConfigLoader) + 全設定型定義 (DrumConfig/CompConfig/BassConfig(kitGains/customWAV/prng/defaultDuration/velocityHumanize/tripletGrace/patterns.swing(SwingBassParams)/altOctaveProb/styleOverrides(SwingStyleOverrides: altOctaveProb/octaveAdjustThreshold))/PianoConfig/AudioConfig)
+│   ├── configLoader.ts              — 汎用 JSON コンフィグローダー factory (deepMerge, createConfigLoader) + 全設定型定義 (DrumConfig/CompConfig/BassConfig(kitGains/customWAV/prng/defaultDuration/velocityHumanize/tripletGrace/patterns.swing(SwingBassParams)/altOctaveProb/styleOverrides(SwingStyleOverrides: altOctaveProb))/PianoConfig/AudioConfig)
 │   ├── compPatterns.ts              — generateCompPattern() — スタイル別コンピングリズムパターン生成 (Charleston, Bossa, Ballad, Latin)
 │   ├── backingStyles.ts             — BACKING_STYLES, BackingStyleDef — バッキングスタイル定義 (6種: swing系3種/bossa/ballad/latin)
 │   ├── lickEngine.ts                — absolutePitch(), buildNotePool(), loadLickDB(), transposeLick(), mapLickToFretboard(), lickToGeneratedPhrase(), inferModeFromLick(), inferModeCandidates(), findBestPositionForLick(), selectBestInstance(), buildLickContext(), detectIiVPattern(), isIiVLickId(), buildIiVLickContext(), sliceLick()
@@ -87,7 +87,7 @@ src/
 │       ├── audioEngine.test.ts      — 14 tests (Karplus-Strong, サクソフォン, エレピ, コードストラム)
 │       ├── swing.test.ts            — 25 tests (タイミング/ダイナミクス/アーティキュレーション/テンポ補正)
 │       ├── lickEngine.test.ts       — 61 tests (リックDB読込・移調・指板マッピング・モード推定・ポジション選択・インスタンス選択・8音スケール・GeneratedPhrase変換・ii-V検出・sliceLick汎用分割)
-│       ├── bassPatterns.test.ts     — 32 tests (ベースライン生成、音域検証、拍数別、アプローチノート多様化、スタイル別、カスタムWAV設定、BassPatternDB、パターンテンプレート選択、ベロシティヒューマナイゼーション、三連グレースノート、コンター交替、デュレーション)
+│       ├── bassPatterns.test.ts     — 29 tests (ベースライン生成、音域検証、拍数別、スタイル別、カスタムWAV設定、BassPatternDB、DBパターン多様性、ベロシティヒューマナイゼーション、デュレーション、フェイルセーフ)
 │       ├── drumPatterns.test.ts    — 29 tests (ドラムパターン生成、フェザリング、ゴーストノート、コンピング、スウィング、スタイル別、DrumConfig)
 │       ├── compPatterns.test.ts    — 10 tests (コンピングパターン生成、Swing Charleston/Bossa/Ballad/Latin)
 │       ├── backingStyles.test.ts   — 17 tests (バッキングスタイル定数構造、スタイル別統合テスト)

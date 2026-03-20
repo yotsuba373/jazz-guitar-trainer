@@ -127,49 +127,6 @@ function clampMidi(n: number, cfg: BassConfig): number {
 // Approach note generation
 // ---------------------------------------------------------------------------
 
-/**
- * 次ルートへのアプローチノートを返す (種類は rng で選択)。
- *
- * 教育的コンセンサスに基づく5種類:
- *   chromatic: 半音下(35%) + 半音上(15%) = 50%
- *   diatonic:  全音上/下 (前ノートに近い方) = 20%
- *   dominant:  5度上 (V→I モーション) = 20%
- *   arpeggio:  3度/4度コードトーン跳躍 = 10%
- *
- * Sources: Ed Friedland, Learn Jazz Standards, FiloBass (ISMIR 2023),
- *          Chris Fitzgerald (U of Louisville)
- */
-function resolveApproach(
-  rng: () => number,
-  prevMidi: number,
-  nextRootSemi: number | null,
-  rootMidi: number,
-  cfg: BassConfig,
-): number {
-  if (nextRootSemi == null) return rootMidi;
-  const nextMidi = rootToBassMidi(nextRootSemi).midi;
-  const clamp = (n: number) => clampMidi(n, cfg);
-  const closer = (a: number, b: number) =>
-    Math.abs(clamp(a) - prevMidi) <= Math.abs(clamp(b) - prevMidi) ? clamp(a) : clamp(b);
-
-  const r = rng();
-  const { chromatic, diatonic, dominant } = cfg.patterns.swing.approachWeights;
-
-  if (r < chromatic) {
-    // 半音アプローチ: 下から 70% / 上から 30% (leading tone bias)
-    return rng() < 0.7 ? clamp(nextMidi - 1) : clamp(nextMidi + 1);
-  } else if (r < chromatic + diatonic) {
-    // ダイアトニック全音アプローチ (前ノートに近い方)
-    return closer(nextMidi - 2, nextMidi + 2);
-  } else if (r < chromatic + diatonic + dominant) {
-    // ドミナントアプローチ: 5度上 (V→I モーション)
-    return clamp(nextMidi + 7);
-  } else {
-    // アルペジオ跳躍: 3度上 or 4度下 (コードトーン的接続)
-    return closer(nextMidi + 4, nextMidi - 5);
-  }
-}
-
 /** 半音アプローチのみ (Bossa/Ballad/Latin 用、既存互換) */
 function chromaticApproach(currentRootMidi: number, nextRootSemi: number, cfg: BassConfig): number {
   const nextMidi = rootToBassMidi(nextRootSemi).midi;
@@ -283,108 +240,6 @@ function selectDBPattern(
 }
 
 // ---------------------------------------------------------------------------
-// Walking bass pattern templates (度数ベース, DB フォールバック用)
-// ---------------------------------------------------------------------------
-
-/**
- * 度数インデックス:
- *   0=root, 1=3rd, 2=5th, 3=7th, 4=octave
- *   -1=approach (次コードへ)
- *   -2=scale step up from root (2nd)
- *   -3=scale step down from root (7th below)
- *
- * 各パターンは 4拍分: [deg0, deg1, deg2, deg3]
- * beat 0 は常にルート (パターン適用時に強制)
- */
-type DegreePattern = number[];
-
-const SWING_4BEAT_PATTERNS: Record<string, DegreePattern[]> = {
-  maj7: [
-    [0, 1, 2, -1],  // R-3-5-approach
-    [0, 2, 1, -1],  // R-5-3-approach
-    [0, -2, 1, -1], // R-2nd-3-approach
-    [0, 2, 4, -1],  // R-5-oct-approach
-    [0, -3, 2, -1], // R-7th(below)-5-approach
-    [0, 1, -2, -1], // R-3-2nd(passing)-approach
-  ],
-  m7: [
-    [0, 1, 2, -1],  // R-b3-5-approach
-    [0, 2, 1, -1],  // R-5-b3-approach
-    [0, -2, 1, -1], // R-2nd-b3-approach
-    [0, 3, 2, -1],  // R-b7-5-approach
-    [0, 1, 4, -1],  // R-b3-oct-approach
-  ],
-  dom7: [
-    [0, 1, 2, -1],  // R-3-5-approach
-    [0, 2, 1, -1],  // R-5-3-approach
-    [0, -2, 1, -1], // R-2nd-3-approach
-    [0, 2, 3, -1],  // R-5-b7-approach
-    [0, -3, 2, -1], // R-b7(below)-5-approach
-    [0, 1, 2, 3],   // R-3-5-b7 (arpeggio, no approach)
-  ],
-  m7b5: [
-    [0, 1, 2, -1],  // R-b3-b5-approach
-    [0, 2, 1, -1],  // R-b5-b3-approach
-    [0, -2, 1, -1], // R-2nd-b3-approach
-  ],
-  dim7: [
-    [0, 1, 2, -1],  // R-b3-b5-approach
-    [0, 2, 1, -1],  // R-b5-b3-approach
-    [0, 1, 3, -1],  // R-b3-bb7-approach
-  ],
-};
-
-/** 3拍用パターン */
-const SWING_3BEAT_PATTERNS: Record<string, DegreePattern[]> = {
-  maj7: [[0, 1, -1], [0, 2, -1], [0, -2, -1]],
-  m7:   [[0, 1, -1], [0, 2, -1], [0, -2, -1]],
-  dom7: [[0, 1, -1], [0, 2, -1], [0, 3, -1]],
-  m7b5: [[0, 1, -1], [0, 2, -1]],
-  dim7: [[0, 1, -1], [0, 2, -1]],
-};
-
-/**
- * 度数インデックス → MIDI ノート変換
- * @param degIdx 度数インデックス (0-4, -1, -2, -3)
- * @param rootMidi ルートの MIDI ノート
- * @param offsets コードトーン半音オフセット [R, 3rd, 5th, 7th]
- * @param prevMidi 前ノートの MIDI (approach 方向判定用)
- * @param nextRootSemi 次コードルート半音値
- * @param rng seeded PRNG
- * @param cfg BassConfig
- */
-function degreeToMidi(
-  degIdx: number,
-  rootMidi: number,
-  offsets: number[],
-  prevMidi: number,
-  nextRootSemi: number | null,
-  rng: () => number,
-  cfg: BassConfig,
-): number {
-  if (degIdx === -1) {
-    // approach note
-    return resolveApproach(rng, prevMidi, nextRootSemi, rootMidi, cfg);
-  }
-  if (degIdx === -2) {
-    // scale step up from root (major 2nd = +2 semitones)
-    return clampMidi(rootMidi + 2, cfg);
-  }
-  if (degIdx === -3) {
-    // scale step down from root (7th below = root - offsets interval)
-    // 7th below root: root - (12 - 7th_offset)
-    const seventh = offsets[3];
-    return clampMidi(rootMidi - (12 - seventh), cfg);
-  }
-  if (degIdx === 4) {
-    // octave
-    return clampMidi(rootMidi + 12, cfg);
-  }
-  // chord tone (0=R, 1=3rd, 2=5th, 3=7th)
-  return clampMidi(rootMidi + offsets[degIdx], cfg);
-}
-
-// ---------------------------------------------------------------------------
 // Style-specific config resolution
 // ---------------------------------------------------------------------------
 
@@ -440,36 +295,6 @@ function _dbPatternToNotes(
 }
 
 // ---------------------------------------------------------------------------
-// Grace note helper
-// ---------------------------------------------------------------------------
-
-/** 三連符グレースノート: 最終拍前に装飾音を追加 (確率的) */
-function _maybeAddGraceNote(
-  notes: BassNote[],
-  beats: number,
-  rng: () => number,
-  cfg: BassConfig,
-): void {
-  if (beats < 4 || rng() >= cfg.tripletGrace.probability) return;
-  const lastNote = notes[notes.length - 1];
-  const graceTarget = lastNote.midi;
-  const graceMidi = clampMidi(graceTarget - 1, cfg);
-  const gracePos = lastNote.beatStart - (1 - cfg.tripletGrace.offset);
-  if (gracePos > 0) {
-    const prevNote = notes[notes.length - 2];
-    if (prevNote) {
-      prevNote.duration = Math.min(prevNote.duration, gracePos - prevNote.beatStart);
-    }
-    notes.splice(notes.length - 1, 0, {
-      midi: graceMidi,
-      beatStart: gracePos,
-      duration: 1 - cfg.tripletGrace.offset,
-      velocity: cfg.tripletGrace.velocity,
-    });
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Main generation function
 // ---------------------------------------------------------------------------
 
@@ -482,7 +307,7 @@ function _maybeAddGraceNote(
  * @param nextRootSemi    次コードのルート半音値 (null = 曲末)
  * @param style           バッキングスタイル
  * @param globalBeatOffset 累積ビートオフセット (PRNG シード用)
- * @param prevLastMidi    前コード最終音の MIDI (オクターブ近接選択用、null = 曲頭)
+ * @param _prevLastMidi   (未使用: iReal Pro 分析で前音非依存と証明済み)
  */
 export function generateBassLine(
   rootSemi: number,
@@ -491,7 +316,7 @@ export function generateBassLine(
   nextRootSemi: number | null,
   style: BackingStyle = 'medium-swing',
   globalBeatOffset: number = 0,
-  prevLastMidi: number | null = null,
+  _prevLastMidi: number | null = null,
 ): BassNote[] {
   const baseCfg = getBassConfig();
   const cfg = resolveStyleConfig(baseCfg, style);
@@ -503,21 +328,6 @@ export function generateBassLine(
   // Root octave selection (rng consumed first for deterministic octave choice)
   let { midi: rootMidi, isAlt: rootIsAlt } = rootToBassMidi(rootSemi, rng, cfg.altOctaveProb);
 
-  // 前コード末尾音との距離が閾値超の場合のみオクターブ修正。
-  // 閾値はスタイル別に bass-config.json で設定 (iReal Pro VL mean に合わせて調整)。
-  const threshold = cfg.styleOverrides?.[style]?.octaveAdjustThreshold ?? 99;
-  if (prevLastMidi != null && Math.abs(prevLastMidi - rootMidi) > threshold) {
-    const hi = rootMidi + 12;
-    const lo = rootMidi - 12;
-    if (hi <= cfg.midiRange.high && Math.abs(prevLastMidi - hi) < Math.abs(prevLastMidi - rootMidi)) {
-      rootMidi = hi;
-      rootIsAlt = true;
-    }
-    if (lo >= cfg.midiRange.low && Math.abs(prevLastMidi - lo) < Math.abs(prevLastMidi - rootMidi)) {
-      rootMidi = lo;
-      rootIsAlt = false;
-    }
-  }
   const offsets = chordToneOffsets(quality);
   const fifth = clampMidi(rootMidi + offsets[2], cfg);
 
@@ -558,66 +368,15 @@ export function generateBassLine(
 
   // --- Swing (all swing styles): 4-feel walking bass ---
 
-  // Try DB pattern first ([[beat, semitone], ...] from iReal Pro)
+  // DB pattern from iReal Pro (100% coverage expected)
   const dbPat = selectDBPattern(rng, quality, beats, style, rootSemi, nextRootSemi, rootIsAlt);
   if (dbPat && dbPat.length >= beats) {
     return _dbPatternToNotes(dbPat, rootMidi, beats, rng, cfg);
   }
 
-  // --- Fallback: degree-based templates ---
-  return _buildFromTemplate(quality, beats, rootMidi, offsets, nextRootSemi, measureIdx, rng, cfg);
-}
-
-/** Degree-based template fallback (DB パターンなし時) */
-function _buildFromTemplate(
-  quality: string, beats: number, rootMidi: number, offsets: number[],
-  nextRootSemi: number | null, measureIdx: number,
-  rng: () => number, cfg: BassConfig,
-): BassNote[] {
-  const patKey = qualityToPatternKey(quality);
+  // Failsafe: root repeat (DB should always have patterns for swing)
   const dur = cfg.defaultDuration;
-
-  if (beats === 3) {
-    const pool = SWING_3BEAT_PATTERNS[patKey] ?? SWING_3BEAT_PATTERNS['maj7'];
-    const pat = pool[Math.floor(rng() * pool.length)];
-    const notes: BassNote[] = [];
-    let prev = rootMidi;
-    for (let i = 0; i < pat.length; i++) {
-      const midi = degreeToMidi(pat[i], rootMidi, offsets, prev, nextRootSemi, rng, cfg);
-      notes.push(mkNote(midi, i, dur, rng, cfg));
-      prev = midi;
-    }
-    return notes;
-  }
-
-  // 4+ beats
-  const pool = SWING_4BEAT_PATTERNS[patKey] ?? SWING_4BEAT_PATTERNS['maj7'];
-  const pat = pool[Math.floor(rng() * pool.length)];
-
-  const altEvery = cfg.patterns.swing.contourAlternateEvery;
-  const descending = altEvery > 0 && Math.floor(measureIdx / altEvery) % 2 === 1;
-
-  const notes: BassNote[] = [];
-  let prev = rootMidi;
-
-  for (let i = 0; i < Math.min(pat.length, beats); i++) {
-    let midi = degreeToMidi(pat[i], rootMidi, offsets, prev, nextRootSemi, rng, cfg);
-    if (descending && i >= 1 && i <= 2 && pat[i] >= 0) {
-      const lowered = midi - 12;
-      if (lowered >= cfg.midiRange.low) midi = lowered;
-    }
-    notes.push(mkNote(midi, i, dur, rng, cfg));
-    prev = midi;
-  }
-
-  for (let i = pat.length; i < beats; i++) {
-    const appMidi = resolveApproach(rng, prev, nextRootSemi, rootMidi, cfg);
-    notes.push(mkNote(appMidi, i, dur, rng, cfg));
-    prev = appMidi;
-  }
-
-  _maybeAddGraceNote(notes, beats, rng, cfg);
-  return notes;
+  return Array.from({ length: beats }, (_, i) => mkNote(rootMidi, i, dur, rng, cfg));
 }
 
 // ---------------------------------------------------------------------------

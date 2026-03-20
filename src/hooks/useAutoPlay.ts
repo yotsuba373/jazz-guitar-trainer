@@ -114,7 +114,7 @@ export function useAutoPlay(params: AutoPlayParams) {
   function scheduleChordAudio(chordIdx: number, prog: Progression, startAt: number, globalBeatOffset: number) {
     const ctx = audio.getCtx();
     let strumHandle: AudioHandle | null = null;
-    let bassHandle: AudioHandle | null = null;
+    let bassHandle: (AudioHandle & { lastMidi?: number | null }) | null = null;
     let drumsHandle: AudioHandle | null = null;
     let phraseHandle: AudioHandle | null = null;
     let phrase: GeneratedPhrase | null = null;
@@ -164,7 +164,7 @@ export function useAutoPlay(params: AutoPlayParams) {
             audio.backingStyleRef.current, globalBeatOffset,
             prevBassLastMidiRef.current,
           );
-          prevBassLastMidiRef.current = bassHandle.lastMidi;
+          prevBassLastMidiRef.current = bassHandle.lastMidi ?? null;
         }
       }
     }

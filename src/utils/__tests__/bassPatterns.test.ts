@@ -81,12 +81,10 @@ describe('generateBassLine', () => {
     }
   });
 
-  it('Swing 4拍の duration は ~0.86', () => {
+  it('Swing 4拍の duration > 0', () => {
     const notes = generateBassLine(5, '7', 4, 0); // F7 → C
-    // Main beat notes (not grace notes)
-    const mainNotes = notes.filter(n => Number.isInteger(n.beatStart));
-    for (const n of mainNotes) {
-      expect(n.duration).toBeCloseTo(0.86, 1);
+    for (const n of notes) {
+      expect(n.duration).toBeGreaterThan(0);
     }
   });
 
@@ -157,12 +155,12 @@ describe('generateBassLine', () => {
     expect(a).toEqual(b);
   });
 
-  it('異なる globalBeatOffset → 異なるパターン (高確率)', () => {
-    // 10種類の offset で生成し、全て同一ではないことを確認
+  it('異なる globalBeatOffset → 異なる velocity (PRNG 多様性)', () => {
+    // DB 未ロード時はフェイルセーフ (ルート連打) だが velocity は PRNG で変動
     const results = new Set<string>();
     for (let offset = 0; offset < 40; offset += 4) {
       const notes = generateBassLine(0, 'dom7', 4, 5, 'medium-swing', offset);
-      results.add(notes.map(n => n.midi).join(','));
+      results.add(notes.map(n => n.velocity).join(','));
     }
     expect(results.size).toBeGreaterThan(1);
   });
@@ -178,67 +176,15 @@ describe('generateBassLine', () => {
     }
   });
 
-  it('approach note の多様性 (chromatic/diatonic/leap が全て出現)', () => {
-    const approachIntervals = new Set<number>();
-    // 次ルート C (midi=48), 多数の offset でアプローチ音を収集
-    for (let offset = 0; offset < 200; offset += 4) {
-      const notes = generateBassLine(7, '7', 4, 0, 'medium-swing', offset); // G7 → C
-      // 最終拍付近のノート (approach候補)
-      const lastMainBeat = notes.filter(n => n.beatStart >= 3 && Number.isInteger(n.beatStart));
-      if (lastMainBeat.length > 0) {
-        const appMidi = lastMainBeat[0].midi;
-        const nextRoot = 48; // C in bass register
-        approachIntervals.add(Math.abs(appMidi - nextRoot));
-      }
+  it('DB 未ロード時はフェイルセーフ (ルート連打)', () => {
+    // DB なしの場合、swing 4拍は全てルート
+    clearBassPatternDBCache();
+    const notes = generateBassLine(7, '7', 4, 0, 'medium-swing', 0);
+    expect(notes).toHaveLength(4);
+    const rootMidi = notes[0].midi;
+    for (const n of notes) {
+      expect(n.midi).toBe(rootMidi);
     }
-    // 半音(1), 全音(2), リープ(5 or 7) のいずれかが含まれるべき
-    expect(approachIntervals.size).toBeGreaterThan(1);
-  });
-
-  it('三連符グレースノートが出現しうる (多数回実行)', () => {
-    let hasGrace = false;
-    for (let offset = 0; offset < 400; offset += 4) {
-      const notes = generateBassLine(0, 'maj7', 4, 5, 'medium-swing', offset);
-      // グレースノート: beatStart が非整数
-      if (notes.some(n => n.beatStart % 1 !== 0)) {
-        hasGrace = true;
-        break;
-      }
-    }
-    expect(hasGrace).toBe(true);
-  });
-
-  it('三連符グレースノートの位置が b.67 付近', () => {
-    for (let offset = 0; offset < 400; offset += 4) {
-      const notes = generateBassLine(0, 'maj7', 4, 5, 'medium-swing', offset);
-      const graceNotes = notes.filter(n => n.beatStart % 1 !== 0);
-      for (const g of graceNotes) {
-        const frac = g.beatStart % 1;
-        expect(frac).toBeCloseTo(0.667, 1);
-      }
-    }
-  });
-
-  // --- Contour tests ---
-  it('コンターが交互に切り替わる (ascending/descending)', () => {
-    // measureIdx 0,1 → ascending, 2,3 → descending (contourAlternateEvery=2)
-    const asc = generateBassLine(0, 'maj7', 4, 5, 'medium-swing', 0);
-    const desc = generateBassLine(0, 'maj7', 4, 5, 'medium-swing', 8); // measureIdx=2
-    // descending 版は beat1-2 がオクターブ下になりうる
-    // 完全一致しないことを確認 (同一パターンでもコンターが変わる)
-    const ascMidis = asc.filter(n => Number.isInteger(n.beatStart)).map(n => n.midi).join(',');
-    const descMidis = desc.filter(n => Number.isInteger(n.beatStart)).map(n => n.midi).join(',');
-    // 全く同じ場合もありうる (パターン次第) ので、複数 offset で確認
-    let differs = false;
-    for (let i = 0; i < 10; i++) {
-      const a = generateBassLine(0, 'dom7', 4, 5, 'medium-swing', i * 4);
-      const d = generateBassLine(0, 'dom7', 4, 5, 'medium-swing', i * 4 + 8);
-      if (a.map(n => n.midi).join(',') !== d.map(n => n.midi).join(',')) {
-        differs = true;
-        break;
-      }
-    }
-    expect(differs).toBe(true);
   });
 
   // --- Backward compatibility ---
@@ -286,6 +232,7 @@ describe('BassConfig 新フィールド', () => {
     expect(cfg.defaultDuration).toBe(0.86);
     expect(cfg.velocityHumanize).toBe(15);
     expect(cfg.tripletGrace).toEqual({ probability: 0.10, velocity: 91, offset: 0.667 });
+    expect(cfg.altOctaveProb).toEqual({});
     expect(cfg.patterns.swing.approachWeights).toEqual({ chromatic: 0.50, diatonic: 0.20, dominant: 0.20, arpeggio: 0.10 });
     expect(cfg.patterns.swing.contourAlternateEvery).toBe(2);
   });
