@@ -86,27 +86,18 @@ function qualityToPatternKey(quality: string): string {
   return 'maj7';
 }
 
-/**
- * ルートごとの上オクターブ使用確率。
- * iReal Pro 5曲×30コーラスの MIDI 分析に基づく。
- */
-const ALT_OCTAVE_PROB: Record<number, number> = {
-  3: 0.07,  // Eb
-  7: 0.34,  // G
-  8: 0.30,  // Ab
-  9: 0.22,  // A
-  10: 0.18, // Bb
-  11: 0.22, // B
-};
+// ALT_OCTAVE_PROB は bass-config.json の altOctaveProb / styleOverrides.*.altOctaveProb から読み込み。
+// iReal Pro 17曲 beat-1 MIDI 分析に基づくスタイル別確率。
 
 /**
  * ルートの半音値 (0-11) からベースレジスター内の MIDI ノートを返す。
- * rng が渡された場合、iReal Pro 分析に基づく確率でオクターブを切替。
- * isAlt 出力: 上オクターブが選択されたかどうかを返す。
+ * rng が渡された場合、altOctaveProb に基づく確率でオクターブを切替。
+ * altOctaveProb はスタイル別に bass-config.json から読み込み。
  */
 function rootToBassMidi(
   rootSemi: number,
   rng?: () => number,
+  altOctaveProb?: Record<string, number>,
 ): { midi: number; isAlt: boolean } {
   const cfg = getBassConfig();
   const base = cfg.bassRootBase;
@@ -114,8 +105,8 @@ function rootToBassMidi(
   let midi = base + ((rootSemi - basePc + 12) % 12);
   if (midi > base + 6) midi -= 12;
 
-  const altProb = ALT_OCTAVE_PROB[rootSemi] ?? 0;
-  if (altProb > 0 && rng && rng() < altProb) {
+  const prob = altOctaveProb?.[String(rootSemi)] ?? 0;
+  if (prob > 0 && rng && rng() < prob) {
     const alt = midi + 12;
     if (alt <= cfg.midiRange.high) {
       return { midi: alt, isAlt: true };
@@ -193,11 +184,11 @@ function chromaticApproach(currentRootMidi: number, nextRootSemi: number, cfg: B
 // Bass Phrase DB (iReal Pro から抽出したパターン)
 // ---------------------------------------------------------------------------
 
-/** DB pattern note: [beatPosition, semitoneOffset] */
-type DBNote = [number, number];
+/** DB pattern note: [beatPosition, semitoneOffset, duration] */
+type DBNote = [number, number, number];
 
 export interface BassPhraseDB {
-  patterns: Record<string, Record<string, Record<string, DBNote[][]>>>;  // style → quality → beats → [[beat, semi], ...][]
+  patterns: Record<string, Record<string, Record<string, DBNote[][]>>>;  // style → quality → beats → [[beat, semi, dur], ...][]
   weights: Record<string, Record<string, Record<string, number[]>>>;     // style → quality → beats → occurrence counts
 }
 
@@ -230,21 +221,6 @@ export function clearBassPhraseDBCache(): void {
   phraseDBLoadAttempted = false;
 }
 
-/**
- * パターンの最終音と次コードルートの距離に基づくアプローチボーナス。
- * TS 実コード (generateBassLine + mulberry32 PRNG) でグリッドサーチ最適化。
- * iReal Pro 5曲×30コーラスの approach 分布と全距離 ±0.3% で一致。
- */
-const APPROACH_BONUS: Record<number, number> = {
-  0: 0.776,  // unison
-  1: 1.410,  // half step
-  2: 0.361,  // whole step
-  3: 0.744,  // minor 3rd
-  4: 1.883,  // major 3rd
-  5: 0.455,  // perfect 4th/5th
-  6: 0.663,  // tritone
-};
-
 /** Style fallback chains: try exact style first, then progressively simpler */
 const STYLE_FALLBACK: Partial<Record<BackingStyle, BackingStyle[]>> = {
   'up-tempo-swing': ['medium-up-swing', 'medium-swing'],
@@ -253,16 +229,19 @@ const STYLE_FALLBACK: Partial<Record<BackingStyle, BackingStyle[]>> = {
 
 /**
  * DB パターンから重み付きランダム選択。
- * 次コードが既知の場合、最終音のアプローチ品質で重みを調整。
- * @returns [[beat, semitone], ...] 配列、または null (DB パターンなし)
+ * iReal Pro の出現頻度 (weights) をそのまま選択確率として使用。
+ * ジャズの和声構造 (4度進行が支配的) により、コードトーン (特に5th/3rd) で
+ * 終わるパターンは次コードルートから自然に全音以内に着地するため、
+ * アプローチボーナスによる重み調整は不要。
+ * @returns [[beat, semitone, duration], ...] 配列、または null (DB パターンなし)
  */
 function selectDBPattern(
   rng: () => number,
   quality: string,
   beats: number,
   style: BackingStyle = 'medium-swing',
-  rootSemi?: number,
-  nextRootSemi?: number | null,
+  _rootSemi?: number,
+  _nextRootSemi?: number | null,
   isAlt?: boolean,
 ): DBNote[] | null {
   const db = cachedPhraseDB;
@@ -293,25 +272,11 @@ function selectDBPattern(
 
   if (!patterns || !weights || patterns.length === 0) return null;
 
-  // Compute effective weights: base weight × approach bonus
-  const effectiveWeights = weights.map((w, i) => {
-    if (nextRootSemi == null || rootSemi == null) return w;
-    const pat = patterns[i];
-    const lastOffset = pat[pat.length - 1][1]; // signed offset from root
-    // Absolute pitch class of last note (handle negative offsets)
-    const lastPC = ((rootSemi + lastOffset) % 12 + 12) % 12;
-    // Min distance to next root (0-6)
-    let dist = Math.abs(lastPC - nextRootSemi) % 12;
-    if (dist > 6) dist = 12 - dist;
-    const bonus = APPROACH_BONUS[dist] ?? 1.0;
-    return w * bonus;
-  });
-
-  // Weighted random selection
-  const totalWeight = effectiveWeights.reduce((a, b) => a + b, 0);
+  // Weighted random selection using raw iReal Pro frequency weights
+  const totalWeight = weights.reduce((a, b) => a + b, 0);
   let r = rng() * totalWeight;
-  for (let i = 0; i < effectiveWeights.length; i++) {
-    r -= effectiveWeights[i];
+  for (let i = 0; i < weights.length; i++) {
+    r -= weights[i];
     if (r <= 0) return patterns[i];
   }
   return patterns[0];
@@ -430,6 +395,9 @@ function resolveStyleConfig(cfg: BassConfig, style: BackingStyle): BassConfig {
   return {
     ...cfg,
     defaultDuration: overrides.defaultDuration ?? cfg.defaultDuration,
+    altOctaveProb: overrides.altOctaveProb
+      ? { ...cfg.altOctaveProb, ...overrides.altOctaveProb }
+      : cfg.altOctaveProb,
     tripletGrace: {
       ...cfg.tripletGrace,
       ...overrides.tripletGrace,
@@ -451,9 +419,10 @@ function resolveStyleConfig(cfg: BassConfig, style: BackingStyle): BassConfig {
 // ---------------------------------------------------------------------------
 
 /**
- * DB パターン [[beat, signedOffset], ...] を BassNote[] に変換。
+ * DB パターン [[beat, signedOffset, duration], ...] を BassNote[] に変換。
  * 符号付きオフセット: 正=ルート上方, 負=ルート下方 (iReal Pro MIDI から直接計算)。
- * beat position と方向情報をそのまま使用し、duration は次ノートとの間隔から自動計算。
+ * duration は iReal Pro MIDI の実測値を使用 (note-on → note-off)。
+ * duration が DB に含まれない旧フォーマット (2要素) の場合は従来の計算にフォールバック。
  */
 function _dbPatternToNotes(
   dbPat: DBNote[],
@@ -462,9 +431,10 @@ function _dbPatternToNotes(
   rng: () => number,
   cfg: BassConfig,
 ): BassNote[] {
-  return dbPat.map(([beat, offset], i) => {
-    const nextBeat = i + 1 < dbPat.length ? dbPat[i + 1][0] : chordBeats;
-    const duration = Math.min(nextBeat - beat, cfg.defaultDuration);
+  return dbPat.map(([beat, offset, dbDur], i) => {
+    const duration = dbDur != null
+      ? dbDur
+      : Math.min((i + 1 < dbPat.length ? dbPat[i + 1][0] : chordBeats) - beat, cfg.defaultDuration);
     return mkNote(clampMidi(rootMidi + offset, cfg), beat, duration, rng, cfg);
   });
 }
@@ -512,6 +482,7 @@ function _maybeAddGraceNote(
  * @param nextRootSemi    次コードのルート半音値 (null = 曲末)
  * @param style           バッキングスタイル
  * @param globalBeatOffset 累積ビートオフセット (PRNG シード用)
+ * @param prevLastMidi    前コード最終音の MIDI (オクターブ近接選択用、null = 曲頭)
  */
 export function generateBassLine(
   rootSemi: number,
@@ -520,6 +491,7 @@ export function generateBassLine(
   nextRootSemi: number | null,
   style: BackingStyle = 'medium-swing',
   globalBeatOffset: number = 0,
+  prevLastMidi: number | null = null,
 ): BassNote[] {
   const baseCfg = getBassConfig();
   const cfg = resolveStyleConfig(baseCfg, style);
@@ -529,7 +501,23 @@ export function generateBassLine(
   const rng = mulberry32(measureIdx * cfg.prng.multiplier + cfg.prng.constant);
 
   // Root octave selection (rng consumed first for deterministic octave choice)
-  const { midi: rootMidi, isAlt: rootIsAlt } = rootToBassMidi(rootSemi, rng);
+  let { midi: rootMidi, isAlt: rootIsAlt } = rootToBassMidi(rootSemi, rng, cfg.altOctaveProb);
+
+  // 前コード末尾音との距離が閾値超の場合のみオクターブ修正。
+  // 閾値はスタイル別に bass-config.json で設定 (iReal Pro VL mean に合わせて調整)。
+  const threshold = cfg.styleOverrides?.[style]?.octaveAdjustThreshold ?? 99;
+  if (prevLastMidi != null && Math.abs(prevLastMidi - rootMidi) > threshold) {
+    const hi = rootMidi + 12;
+    const lo = rootMidi - 12;
+    if (hi <= cfg.midiRange.high && Math.abs(prevLastMidi - hi) < Math.abs(prevLastMidi - rootMidi)) {
+      rootMidi = hi;
+      rootIsAlt = true;
+    }
+    if (lo >= cfg.midiRange.low && Math.abs(prevLastMidi - lo) < Math.abs(prevLastMidi - rootMidi)) {
+      rootMidi = lo;
+      rootIsAlt = false;
+    }
+  }
   const offsets = chordToneOffsets(quality);
   const fifth = clampMidi(rootMidi + offsets[2], cfg);
 
@@ -818,10 +806,11 @@ export function playSmplrBassLine(
   bpm: number,
   style: BackingStyle = 'medium-swing',
   globalBeatOffset: number = 0,
-): DrumAudioHandle {
+  prevLastMidi: number | null = null,
+): DrumAudioHandle & { lastMidi: number | null } {
   const rootSemi = ROOT_PC[rootName] ?? 0;
   const nextRootSemi = nextRootName != null ? (ROOT_PC[nextRootName] ?? null) : null;
-  const bassLine = generateBassLine(rootSemi, quality, beats, nextRootSemi, style, globalBeatOffset);
+  const bassLine = generateBassLine(rootSemi, quality, beats, nextRootSemi, style, globalBeatOffset, prevLastMidi);
   const beatSec = 60 / bpm;
   const cfg = getBassConfig();
 
@@ -874,6 +863,8 @@ export function playSmplrBassLine(
     }
   }
 
+  const lastMidi = bassLine.length > 0 ? bassLine[bassLine.length - 1].midi : null;
+
   return {
     stop: () => {
       for (const h of scheduledHits) {
@@ -888,6 +879,7 @@ export function playSmplrBassLine(
         }
       }
     },
+    lastMidi,
   };
 }
 

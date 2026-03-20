@@ -137,6 +137,9 @@ export interface SwingStyleOverrides {
   defaultDuration?: number;
   tripletGrace?: { probability?: number; velocity?: number; offset?: number };
   approachWeights?: { chromatic?: number; diatonic?: number; dominant?: number; arpeggio?: number };
+  altOctaveProb?: Record<string, number>;
+  /** ルートオクターブ調整の発動閾値 (半音数)。prevLastMidi との距離がこれを超えた場合のみ修正 */
+  octaveAdjustThreshold?: number;
 }
 
 export interface BassConfig {
@@ -148,6 +151,8 @@ export interface BassConfig {
   velocityHumanize: number;
   tripletGrace: { probability: number; velocity: number; offset: number };
   patterns: { swing: SwingBassParams };
+  /** ルートごとの上オクターブ使用確率 (デフォルト、スタイル別で上書き可) */
+  altOctaveProb: Record<string, number>;
   /** Per-swing-style overrides (merged on top of base config at runtime) */
   styleOverrides?: Partial<Record<string, SwingStyleOverrides>>;
   kitGains: Record<string, number>;
@@ -168,6 +173,7 @@ export const DEFAULT_BASS_CONFIG: BassConfig = {
       contourAlternateEvery: 2,
     },
   },
+  altOctaveProb: { '7': 0.35, '8': 0.35, '9': 0.23, '10': 0.12 },
   kitGains: {},
   customWAV: { detune: 0, decayTime: 0.8, volume: 127 },
 };

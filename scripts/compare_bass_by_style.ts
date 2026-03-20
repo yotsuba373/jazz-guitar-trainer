@@ -67,7 +67,7 @@ function simulate(timelines: Record<string, ChordSpan[]>, filterStyle?: BackingS
         const nextRefSemi = nextSpan ? (nextSpan.bassSemi ?? nextSpan.rootSemi) : null;
         const globalBeatOffset = ci * chorusBeats + timeline.slice(0, si).reduce((s, c) => s + c.beats, 0);
 
-        const notes = generateBassLine(refSemi, span.quality, span.beats, nextRefSemi, style, globalBeatOffset);
+        const notes = generateBassLine(refSemi, span.quality, span.beats, nextRefSemi, style, globalBeatOffset, prevLastMidi);
         if (notes.length === 0) continue;
 
         const firstMidi = notes[0].midi;

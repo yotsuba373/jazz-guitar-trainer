@@ -567,7 +567,7 @@ def encode_pattern(pattern: ChordPattern) -> tuple[str, ...]:
     """
     parts = [pattern.quality, str(pattern.beats)]
     for n in sorted(pattern.notes, key=lambda x: x.beat_offset):
-        parts.append(f"{n.beat_offset:.3f}:{n.semitone}")
+        parts.append(f"{n.beat_offset:.3f}:{n.semitone}:{n.duration:.3f}")
     return tuple(parts)
 
 
@@ -577,8 +577,8 @@ def pattern_to_degree_list(pattern: ChordPattern) -> list[int]:
 
 
 def pattern_to_note_list(pattern: ChordPattern) -> list[list[float]]:
-    """Convert pattern notes to [[beat, semitone], ...] sorted by beat."""
-    return [[round(n.beat_offset, 3), n.semitone]
+    """Convert pattern notes to [[beat, semitone, duration], ...] sorted by beat."""
+    return [[round(n.beat_offset, 3), n.semitone, round(n.duration, 3)]
             for n in sorted(pattern.notes, key=lambda x: x.beat_offset)]
 
 
@@ -755,7 +755,7 @@ def main():
                 total_w = sum(weights)
                 print(f"\n  {quality} ({beats}-beat): {len(pats)} unique ({nc_info}), {total_w} raw")
                 for p, w in list(zip(pats, weights))[:5]:
-                    degs = [f"{b:.2f}:{classify_degree(s, quality)}" for b, s in p]
+                    degs = [f"{b:.2f}:{classify_degree(s, quality)}({d:.2f})" for b, s, d in p]
                     print(f"    {degs} (x{w})")
 
     # Write output

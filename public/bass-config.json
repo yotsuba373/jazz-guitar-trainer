@@ -12,21 +12,28 @@
       "contourAlternateEvery": 2
     }
   },
+  "altOctaveProb": { "7": 0.35, "8": 0.35, "9": 0.23, "10": 0.12 },
   "styleOverrides": {
     "medium-swing": {
       "defaultDuration": 0.90,
       "tripletGrace": { "probability": 0.50 },
-      "approachWeights": { "chromatic": 0.45, "diatonic": 0.25, "dominant": 0.20, "arpeggio": 0.10 }
+      "approachWeights": { "chromatic": 0.45, "diatonic": 0.25, "dominant": 0.20, "arpeggio": 0.10 },
+      "altOctaveProb": { "5": 0.01, "7": 0.35, "8": 1.00, "9": 0.23, "10": 0.11 },
+      "octaveAdjustThreshold": 13
     },
     "medium-up-swing": {
       "defaultDuration": 0.90,
       "tripletGrace": { "probability": 0.55 },
-      "approachWeights": { "chromatic": 0.40, "diatonic": 0.25, "dominant": 0.20, "arpeggio": 0.15 }
+      "approachWeights": { "chromatic": 0.40, "diatonic": 0.25, "dominant": 0.20, "arpeggio": 0.15 },
+      "altOctaveProb": { "7": 0.35, "8": 0.35, "9": 0.21, "10": 0.12, "11": 0.11 },
+      "octaveAdjustThreshold": 99
     },
     "up-tempo-swing": {
       "defaultDuration": 0.99,
       "tripletGrace": { "probability": 0.05 },
-      "approachWeights": { "chromatic": 0.30, "diatonic": 0.15, "dominant": 0.15, "arpeggio": 0.40 }
+      "approachWeights": { "chromatic": 0.30, "diatonic": 0.15, "dominant": 0.15, "arpeggio": 0.40 },
+      "altOctaveProb": { "3": 0.05, "7": 0.43, "8": 0.60, "9": 0.51, "10": 0.28, "11": 0.08 },
+      "octaveAdjustThreshold": 99
     }
   },
   "kitGains": {},

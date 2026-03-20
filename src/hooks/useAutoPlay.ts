@@ -49,6 +49,7 @@ export function useAutoPlay(params: AutoPlayParams) {
   const advanceOriginRef = useRef<'stopped' | 'start' | 'user-nav' | 'auto'>('stopped');
   const chordStartRef = useRef(0);
   const playPosRef = useRef(0);
+  const prevBassLastMidiRef = useRef<number | null>(null);
   const activeStrumRef = useRef<AudioHandle | null>(null);
   const activeBassRef = useRef<AudioHandle | null>(null);
   const activeDrumsRef = useRef<AudioHandle | null>(null);
@@ -97,6 +98,7 @@ export function useAutoPlay(params: AutoPlayParams) {
   function cleanup() {
     advanceOriginRef.current = 'stopped';
     chordStartRef.current = 0;
+    prevBassLastMidiRef.current = null;
     stopHandle(activeStrumRef);
     stopHandle(activeBassRef);
     stopHandle(activeDrumsRef);
@@ -160,7 +162,9 @@ export function useAutoPlay(params: AutoPlayParams) {
             ctx, bassSamplers, chord.rootName, chord.quality,
             chordBeats, nextChord?.rootName ?? null, startAt, bpm,
             audio.backingStyleRef.current, globalBeatOffset,
+            prevBassLastMidiRef.current,
           );
+          prevBassLastMidiRef.current = bassHandle.lastMidi;
         }
       }
     }
