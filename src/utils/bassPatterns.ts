@@ -278,6 +278,10 @@ function resolveStyleConfig(cfg: BassConfig, style: BackingStyle): BassConfig {
  * 符号付きオフセット: 正=ルート上方, 負=ルート下方 (iReal Pro MIDI から直接計算)。
  * duration は iReal Pro MIDI の実測値を使用 (note-on → note-off)。
  * duration が DB に含まれない旧フォーマット (2要素) の場合は従来の計算にフォールバック。
+ *
+ * rootMidi をオクターブ単位でシフトしてパターン全体を音域内に収める。
+ * 個別ノートの clampMidi による wrap は旋律線 (コンター) を破壊するため、
+ * パターン丸ごとのシフトで対処する。
  */
 function _dbPatternToNotes(
   dbPat: DBNote[],
@@ -286,11 +290,26 @@ function _dbPatternToNotes(
   rng: () => number,
   cfg: BassConfig,
 ): BassNote[] {
+  // パターン全体のオフセット範囲を事前計算
+  let minOff = 0, maxOff = 0;
+  for (const [, offset] of dbPat) {
+    if (offset < minOff) minOff = offset;
+    if (offset > maxOff) maxOff = offset;
+  }
+
+  // rootMidi をオクターブ単位でシフトして全ノートが音域内に収まるようにする
+  let root = rootMidi;
+  if (root + minOff < cfg.midiRange.low && root + 12 + maxOff <= cfg.midiRange.high) {
+    root += 12;
+  } else if (root + maxOff > cfg.midiRange.high && root - 12 + minOff >= cfg.midiRange.low) {
+    root -= 12;
+  }
+
   return dbPat.map(([beat, offset, dbDur], i) => {
     const duration = dbDur != null
       ? dbDur
       : Math.min((i + 1 < dbPat.length ? dbPat[i + 1][0] : chordBeats) - beat, cfg.defaultDuration);
-    return mkNote(clampMidi(rootMidi + offset, cfg), beat, duration, rng, cfg);
+    return mkNote(clampMidi(root + offset, cfg), beat, duration, rng, cfg);
   });
 }
 
