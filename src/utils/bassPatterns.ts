@@ -448,6 +448,8 @@ export interface BassSamplerSet {
   soundfont: Soundfont;
   customByStyle: Record<string, Sampler>;
   keyMapByStyle: Record<string, Map<string, string>>;
+  releaseByStyle: Record<string, Sampler>;
+  releaseKeyMapByStyle: Record<string, Map<string, string>>;
 }
 
 let cachedBassSampler: BassSamplerSet | null = null;
@@ -465,6 +467,7 @@ function midiToSmplrNote(midi: number): string {
 function buildBassBuffers(
   kitFolder: string,
   sampleMap: SampleMap,
+  suffix: string = '',
 ): { buffers: Record<string, string>; keyMap: Map<string, string> } {
   const buffers: Record<string, string> = {};
   const keyMap = new Map<string, string>();
@@ -475,7 +478,7 @@ function buildBassBuffers(
     const fileName = midiToFileName(pitch);
     for (const v of velocities) {
       const smplrKey = midiToSmplrNote(slotIdx);
-      buffers[smplrKey] = `/bass/${kitFolder}/${fileName}_v${v}.wav`;
+      buffers[smplrKey] = `/bass/${kitFolder}/${fileName}_v${v}${suffix}.wav`;
       keyMap.set(`${pitch}_${v}`, smplrKey);
       slotIdx++;
     }
@@ -494,6 +497,8 @@ export async function loadBassSampler(ctx: AudioContext, soundfont: Soundfont): 
   bassLoadPromise = (async () => {
     const customByStyle: Record<string, Sampler> = {};
     const keyMapByStyle: Record<string, Map<string, string>> = {};
+    const releaseByStyle: Record<string, Sampler> = {};
+    const releaseKeyMapByStyle: Record<string, Map<string, string>> = {};
 
     try {
       // bass-patterns.generated.json をロード
@@ -503,6 +508,8 @@ export async function loadBassSampler(ctx: AudioContext, soundfont: Soundfont): 
       if (db?.samples && Object.keys(db.samples).length > 0) {
         const samplerByKit: Record<string, Sampler> = {};
         const keyMapByKit: Record<string, Map<string, string>> = {};
+        const relSamplerByKit: Record<string, Sampler> = {};
+        const relKeyMapByKit: Record<string, Map<string, string>> = {};
         const loadTasks: Promise<void>[] = [];
 
         // キットごとに1つの Sampler をロード (samples はキット軸)
@@ -513,9 +520,11 @@ export async function loadBassSampler(ctx: AudioContext, soundfont: Soundfont): 
           samplerByKit[kitFolder] = null!;
           keyMapByKit[kitFolder] = keyMap;
           const kitGain = cfg.kitGains[kitFolder] ?? 1.0;
+          const cwCfg = cfg.customWAV;
+
+          // メイン Sampler ロード
           loadTasks.push(
             (async () => {
-              const cwCfg = cfg.customWAV;
               const sampler = new Sampler(ctx, { buffers, detune: cwCfg.detune, decayTime: cwCfg.decayTime });
               await sampler.load;
               sampler.output.setVolume(cwCfg.volume);
@@ -526,6 +535,23 @@ export async function loadBassSampler(ctx: AudioContext, soundfont: Soundfont): 
               }
               samplerByKit[kitFolder] = sampler;
             })().catch(() => { delete samplerByKit[kitFolder]; }),
+          );
+
+          // リリース Sampler ロード (失敗は無視)
+          const { buffers: relBuffers, keyMap: relKeyMap } = buildBassBuffers(kitFolder, sampleMap, '_rel');
+          relKeyMapByKit[kitFolder] = relKeyMap;
+          loadTasks.push(
+            (async () => {
+              const relSampler = new Sampler(ctx, { buffers: relBuffers, detune: cwCfg.detune, decayTime: cwCfg.decayTime });
+              await relSampler.load;
+              relSampler.output.setVolume(cwCfg.volume);
+              if (kitGain !== 1.0) {
+                const boost = ctx.createGain();
+                boost.gain.value = kitGain;
+                relSampler.output.addInsert(boost);
+              }
+              relSamplerByKit[kitFolder] = relSampler;
+            })().catch(() => { /* リリース WAV なし → リリースなし */ }),
           );
         }
         await Promise.all(loadTasks);
@@ -539,6 +565,11 @@ export async function loadBassSampler(ctx: AudioContext, soundfont: Soundfont): 
           } else {
             console.warn(`[bass] ${style} → fallback (kit "${kitFolder}" WAV not found)`);
           }
+          if (relSamplerByKit[kitFolder]) {
+            releaseByStyle[style] = relSamplerByKit[kitFolder];
+            releaseKeyMapByStyle[style] = relKeyMapByKit[kitFolder];
+            console.log(`[bass] ${style} → release samples loaded`);
+          }
         }
       }
     } catch { /* カスタム WAV なし → SoundFont フォールバック */ }
@@ -547,7 +578,7 @@ export async function loadBassSampler(ctx: AudioContext, soundfont: Soundfont): 
       console.log('[bass] No custom kits loaded, using SoundFont for all styles');
     }
 
-    cachedBassSampler = { soundfont, customByStyle, keyMapByStyle };
+    cachedBassSampler = { soundfont, customByStyle, keyMapByStyle, releaseByStyle, releaseKeyMapByStyle };
     return cachedBassSampler;
   })();
   return bassLoadPromise;
@@ -565,7 +596,10 @@ export function getBassSampler(): BassSamplerSet | null {
 let bassIdCounter = 0;
 
 // ベースは単音楽器 → 前ノートを常に停止 (voice stealing)
-let lastBassHit: { stopId: string; sampler: Sampler | Soundfont; endTime: number } | null = null;
+let lastBassHit: {
+  stopId: string; sampler: Sampler | Soundfont; endTime: number;
+  midi: number; velocity: number; style: string;
+} | null = null;
 
 /**
  * smplr ベースでウォーキングベースライン再生。
@@ -606,10 +640,33 @@ export function playSmplrBassLine(
     const noteDur = bn.duration * beatSec;
     const hitStopId = `bass-${++bassIdCounter}`;
 
-    // voice stealing: 前ノートを duration 考慮して停止
+    // voice stealing: 前ノートを duration 考慮して停止 + リリースサンプル再生
     if (lastBassHit) {
       const stopTime = Math.min(noteTime, lastBassHit.endTime);
       try { (lastBassHit.sampler as Sampler).stop({ stopId: lastBassHit.stopId, time: stopTime }); } catch { /* ignore */ }
+
+      // リリースサンプル再生
+      const relSampler = bassSamplers.releaseByStyle[lastBassHit.style];
+      const relKeyMap = bassSamplers.releaseKeyMapByStyle[lastBassHit.style];
+      if (relSampler && relKeyMap) {
+        const prevKitFolder = db?.kits?.[lastBassHit.style] ?? lastBassHit.style;
+        const prevSampleMap = db?.samples?.[prevKitFolder];
+        const prevVelocities = prevSampleMap?.[String(lastBassHit.midi)];
+        if (prevVelocities) {
+          const prevNearestVel = findNearestVelocity(prevVelocities, lastBassHit.velocity);
+          const relSmplrKey = relKeyMap.get(`${lastBassHit.midi}_${prevNearestVel}`);
+          if (relSmplrKey) {
+            const relStopId = `bass-rel-${++bassIdCounter}`;
+            relSampler.start({
+              note: relSmplrKey,
+              velocity: 127,
+              time: stopTime,
+              stopId: relStopId,
+            });
+            scheduledHits.push({ stopId: relStopId, sampler: relSampler, time: stopTime });
+          }
+        }
+      }
     }
 
     if (customSampler && sampleMap && keyMap) {
@@ -617,13 +674,13 @@ export function playSmplrBassLine(
       const velocities = sampleMap[String(bn.midi)];
       if (!velocities || velocities.length === 0) {
         // このピッチの WAV がない → SoundFont フォールバック
-        _playSoundfontNote(bassSamplers.soundfont, bn, noteTime, hitStopId, noteVel, noteDur, scheduledHits);
+        _playSoundfontNote(bassSamplers.soundfont, bn, noteTime, hitStopId, noteVel, noteDur, scheduledHits, style);
         continue;
       }
       const nearestVel = findNearestVelocity(velocities, noteVel);
       const smplrKey = keyMap.get(`${bn.midi}_${nearestVel}`);
       if (!smplrKey) {
-        _playSoundfontNote(bassSamplers.soundfont, bn, noteTime, hitStopId, noteVel, noteDur, scheduledHits);
+        _playSoundfontNote(bassSamplers.soundfont, bn, noteTime, hitStopId, noteVel, noteDur, scheduledHits, style);
         continue;
       }
 
@@ -634,10 +691,10 @@ export function playSmplrBassLine(
         stopId: hitStopId,
       });
       scheduledHits.push({ stopId: hitStopId, sampler: customSampler, time: noteTime });
-      lastBassHit = { stopId: hitStopId, sampler: customSampler, endTime: noteTime + noteDur };
+      lastBassHit = { stopId: hitStopId, sampler: customSampler, endTime: noteTime + noteDur, midi: bn.midi, velocity: noteVel, style };
     } else {
       // SoundFont フォールバック
-      _playSoundfontNote(bassSamplers.soundfont, bn, noteTime, hitStopId, noteVel, noteDur, scheduledHits);
+      _playSoundfontNote(bassSamplers.soundfont, bn, noteTime, hitStopId, noteVel, noteDur, scheduledHits, style);
     }
   }
 
@@ -670,6 +727,7 @@ function _playSoundfontNote(
   velocity: number,
   durationSec: number,
   scheduledHits: { stopId: string; sampler: Sampler | Soundfont; time: number }[],
+  style: string = '',
 ): void {
   sf.start({
     note: bn.midi,
@@ -679,5 +737,5 @@ function _playSoundfontNote(
     stopId: hitStopId,
   });
   scheduledHits.push({ stopId: hitStopId, sampler: sf, time: noteTime });
-  lastBassHit = { stopId: hitStopId, sampler: sf, endTime: noteTime + durationSec };
+  lastBassHit = { stopId: hitStopId, sampler: sf, endTime: noteTime + durationSec, midi: bn.midi, velocity, style };
 }

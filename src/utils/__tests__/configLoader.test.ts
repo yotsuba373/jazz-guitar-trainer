@@ -60,6 +60,10 @@ describe('getBassConfig', () => {
     const cfg = getBassConfig();
     expect(cfg.midiRange.low).toBeLessThan(cfg.midiRange.high);
   });
+
+  it('customWAV.releaseFadeMs のデフォルト値は 20', () => {
+    expect(getBassConfig().customWAV.releaseFadeMs).toBe(20);
+  });
 });
 
 describe('getPianoConfig', () => {

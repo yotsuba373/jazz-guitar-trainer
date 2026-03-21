@@ -36,5 +36,5 @@
   "kitGains": {
     "upright": 2.0
   },
-  "customWAV": { "detune": 0, "decayTime": 0.8, "volume": 127 }
+  "customWAV": { "detune": 0, "decayTime": 0.8, "volume": 127, "releaseFadeMs": 20 }
 }

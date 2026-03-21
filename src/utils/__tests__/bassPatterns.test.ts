@@ -209,7 +209,7 @@ describe('BassConfig 新フィールド', () => {
     clearBassConfigCache();
     const cfg = getBassConfig();
     expect(cfg.kitGains).toEqual({});
-    expect(cfg.customWAV).toEqual({ detune: 0, decayTime: 0.8, volume: 127 });
+    expect(cfg.customWAV).toEqual({ detune: 0, decayTime: 0.8, volume: 127, releaseFadeMs: 20 });
   });
 
   it('デフォルト BassConfig に samples/kits が含まれない', () => {

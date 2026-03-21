@@ -154,7 +154,7 @@ export interface BassConfig {
   /** Per-swing-style overrides (merged on top of base config at runtime) */
   styleOverrides?: Partial<Record<string, SwingStyleOverrides>>;
   kitGains: Record<string, number>;
-  customWAV: { detune: number; decayTime: number; volume: number };
+  customWAV: { detune: number; decayTime: number; volume: number; releaseFadeMs: number };
 }
 
 export const DEFAULT_BASS_CONFIG: BassConfig = {
@@ -173,7 +173,7 @@ export const DEFAULT_BASS_CONFIG: BassConfig = {
   },
   altOctaveProb: {},
   kitGains: {},
-  customWAV: { detune: 0, decayTime: 0.8, volume: 127 },
+  customWAV: { detune: 0, decayTime: 0.8, volume: 127, releaseFadeMs: 20 },
 };
 
 const bassConfig = createConfigLoader<BassConfig>('/bass-config.json', DEFAULT_BASS_CONFIG);
