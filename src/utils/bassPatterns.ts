@@ -788,9 +788,9 @@ export function playSmplrBassLine(
       Math.random() < cfg.customWAV.legatoProbability;
     const isHammerOn = isLegato && interval > 0;
 
-    // voice stealing: 前ノートを duration 考慮して停止 + リリースサンプル再生
+    // voice stealing: 次ノート発音時に前ノートを停止 + リリースサンプル再生
     if (lastBassHit) {
-      const stopTime = Math.min(noteTime, lastBassHit.endTime);
+      const stopTime = noteTime;
       try { (lastBassHit.sampler as Sampler).stop({ stopId: lastBassHit.stopId, time: stopTime }); } catch { /* ignore */ }
 
       // リリースサンプル再生: レガートなら方向別リリース、通常ならピチカートリリース
@@ -863,6 +863,8 @@ export function playSmplrBassLine(
             note: legSmplrKey,
             velocity: 127,
             time: noteTime,
+            duration: noteDur,
+            ampRelease: 0.01,
             stopId: hitStopId,
           });
           scheduledHits.push({ stopId: hitStopId, sampler: legSampler, time: noteTime });
@@ -889,6 +891,8 @@ export function playSmplrBassLine(
         note: smplrKey,
         velocity: 127,
         time: noteTime,
+        duration: noteDur,
+        ampRelease: 0.01,
         stopId: hitStopId,
       });
       scheduledHits.push({ stopId: hitStopId, sampler: customSampler, time: noteTime });
