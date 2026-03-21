@@ -772,12 +772,14 @@ export function playSmplrBassLine(
   const keyMap = bassSamplers.keyMapByStyle[style];
 
   const scheduledHits: { stopId: string; sampler: Sampler | Soundfont; time: number }[] = [];
+  const octShift = cfg.customWAV.octaveShift;
 
   for (const bn of bassLine) {
     const noteTime = startAt + bn.beatStart * beatSec;
     const noteVel = bn.velocity ?? cfg.velocity;
     const noteDur = bn.duration * beatSec;
     const hitStopId = `bass-${++bassIdCounter}`;
+    const wavMidi = bn.midi + octShift; // WAV ルックアップ用 MIDI (EZBass はオクターブ高い表記)
 
     // レガート判定: 音程差が閾値以下 & 確率判定 & interval≠0 → レガート
     // direction: interval > 0 → hammerOn (h80), interval < 0 → pulloff (p80)
@@ -816,17 +818,17 @@ export function playSmplrBassLine(
             ? bassSamplers.hammerOnRelByStyle[lastBassHit.style]
             : bassSamplers.legatoRelByStyle[lastBassHit.style];
           if (dirRelSampler) {
-            relSmplrKey = relKeyMap.get(`${lastBassHit.midi}_80`);
+            relSmplrKey = relKeyMap.get(`${lastBassHit.midi + octShift}_80`);
           }
         }
         if (!relSmplrKey) {
           // ピチカートリリースにフォールバック
           const prevKitFolder = db?.kits?.[lastBassHit.style] ?? lastBassHit.style;
           const prevSampleMap = db?.samples?.[prevKitFolder];
-          const prevVelocities = prevSampleMap?.[String(lastBassHit.midi)];
+          const prevVelocities = prevSampleMap?.[String(lastBassHit.midi + octShift)];
           if (prevVelocities) {
             const prevNearestVel = findNearestVelocity(prevVelocities, lastBassHit.velocity);
-            relSmplrKey = bassSamplers.releaseKeyMapByStyle[lastBassHit.style]?.get(`${lastBassHit.midi}_${prevNearestVel}`);
+            relSmplrKey = bassSamplers.releaseKeyMapByStyle[lastBassHit.style]?.get(`${lastBassHit.midi + octShift}_${prevNearestVel}`);
             relSampler = bassSamplers.releaseByStyle[lastBassHit.style];
           }
         }
@@ -857,7 +859,7 @@ export function playSmplrBassLine(
         }
       }
       if (legSampler && legKeyMap) {
-        const legSmplrKey = legKeyMap.get(`${bn.midi}_80`);
+        const legSmplrKey = legKeyMap.get(`${wavMidi}_80`);
         if (legSmplrKey) {
           legSampler.start({
             note: legSmplrKey,
@@ -875,13 +877,13 @@ export function playSmplrBassLine(
       }
 
       // ピチカート (通常)
-      const velocities = sampleMap[String(bn.midi)];
+      const velocities = sampleMap[String(wavMidi)];
       if (!velocities || velocities.length === 0) {
         _playSoundfontNote(bassSamplers.soundfont, bn, noteTime, hitStopId, noteVel, noteDur, scheduledHits, style);
         continue;
       }
       const nearestVel = findNearestVelocity(velocities, noteVel);
-      const smplrKey = keyMap.get(`${bn.midi}_${nearestVel}`);
+      const smplrKey = keyMap.get(`${wavMidi}_${nearestVel}`);
       if (!smplrKey) {
         _playSoundfontNote(bassSamplers.soundfont, bn, noteTime, hitStopId, noteVel, noteDur, scheduledHits, style);
         continue;

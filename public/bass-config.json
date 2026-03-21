@@ -1,10 +1,10 @@
 {
   "midiRange": { "low": 28, "high": 60 },
   "bassRootBase": 36,
-  "velocity": 106,
+  "velocity": 82,
   "prng": { "multiplier": 7919, "constant": 17 },
   "defaultDuration": 0.90,
-  "velocityHumanize": 8,
+  "velocityHumanize": 7,
   "tripletGrace": { "probability": 0.50, "velocity": 91, "offset": 0.667 },
   "patterns": {
     "swing": {
@@ -34,7 +34,7 @@
     }
   },
   "kitGains": {
-    "upright": 2.0
+    "upright": 1.6
   },
-  "customWAV": { "detune": 0, "decayTime": 0.8, "volume": 127, "releaseFadeMs": 20, "legatoMaxInterval": 2, "legatoProbability": 0.11 }
+  "customWAV": { "detune": 0, "decayTime": 0.8, "volume": 127, "releaseFadeMs": 20, "legatoMaxInterval": 2, "legatoProbability": 0.11, "octaveShift": 12 }
 }
