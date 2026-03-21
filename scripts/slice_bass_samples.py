@@ -2,8 +2,10 @@
 """バウンス済みベース WAV を個別サンプルにスライスし、マニフェストを生成するスクリプト.
 
 各ノートを メインサンプル + リリースサンプル に分割:
-  - メインサンプル (d0_v80.wav):     アタック〜サステイン (note-on 〜 note-off)
+  - メインサンプル (d0_v80.wav):      アタック〜サステイン (note-on 〜 note-off)
   - リリースサンプル (d0_v80_rel.wav): note-off 後のリリースノイズ
+  - プリングオフ (d0_p80.wav):        半音上→下行レガート
+  - ハンマリングオン (d0_h80.wav):    半音下→上行レガート
 
 再生時の流れ:
   note-on  → メインサンプル再生
@@ -114,7 +116,9 @@ def slice_and_save(data: np.ndarray, sr: int, kit_name: str, output_dir: str,
     for vel in PIZZ_VELOCITIES:
         sections.append((vel, 'v', False))
     for vel in LEGATO_VELOCITIES:
-        sections.append((vel, 'l', True))
+        sections.append((vel, 'p', True))   # Pull-off (半音上→下行)
+    for vel in LEGATO_VELOCITIES:
+        sections.append((vel, 'h', True))   # Hammer-on (半音下→上行)
     for vel in GHOST_VELOCITIES:
         sections.append((vel, 'g', False))
 
@@ -156,11 +160,13 @@ def slice_and_save(data: np.ndarray, sr: int, kit_name: str, output_dir: str,
                 write_16bit(os.path.join(kit_dir, wav_name), main, sr)
                 main_count += 1
 
-                pitch_str = str(pitch)
-                if pitch_str not in sample_map:
-                    sample_map[pitch_str] = []
-                if vel not in sample_map[pitch_str]:
-                    sample_map[pitch_str].append(vel)
+                # sample_map はピチカートのベロシティレイヤーのみ
+                if prefix == 'v':
+                    pitch_str = str(pitch)
+                    if pitch_str not in sample_map:
+                        sample_map[pitch_str] = []
+                    if vel not in sample_map[pitch_str]:
+                        sample_map[pitch_str].append(vel)
 
             # === リリースサンプル ===
             # ゴーストノートはリリースが無音なのでスキップ
@@ -172,9 +178,8 @@ def slice_and_save(data: np.ndarray, sr: int, kit_name: str, output_dir: str,
             if len(rel) > 0:
                 rel = trim_silence(rel, sr, threshold=0.003, margin_sec=0.05)
                 if len(rel) > int(sr * 0.02):  # 20ms 以上あれば保存
-                    # レガートはnote-off時に波形がゼロから離れているのでフェードイン必要
-                    if is_legato:
-                        fade(rel, sr, 1, 'in')  # 1ms フェードイン
+                    # note-off 直後の波形がゼロから離れている場合のクリックノイズ防止
+                    fade(rel, sr, 1, 'in')  # 1ms フェードイン
                     if rel_fade_out_ms > 0:
                         fade(rel, sr, rel_fade_out_ms, 'out')
 
@@ -254,7 +259,7 @@ def main():
     duration = len(data) / sr
     print(f'  {sr}Hz, {channels}ch, {duration:.1f}s ({duration/60:.1f}min)')
 
-    expected = 376.0  # 379.0 - trailing gap
+    expected = 460.0  # pull-off + hammer-on セクション追加分
     if duration < expected * 0.9:
         print(f'  WARNING: WAV shorter than expected ({duration:.1f}s < {expected:.1f}s)')
     print()
@@ -282,11 +287,12 @@ def main():
     print()
     print('File naming:')
     print('  d0_v80.wav      main (pizzicato)')
-    print('  d0_v80_rel.wav  release noise')
-    print('  d0_l80.wav      main (legato)')
-    print('  d0_l80_rel.wav  release noise')
+    print('  d0_v80_rel.wav  release noise (pizzicato)')
+    print('  d0_p80.wav      main (pull-off / legato down)')
+    print('  d0_p80_rel.wav  release noise (pull-off)')
+    print('  d0_h80.wav      main (hammer-on / legato up)')
+    print('  d0_h80_rel.wav  release noise (hammer-on)')
     print('  d0_g80.wav      main (ghost)')
-    print('  d0_g80_rel.wav  release noise')
 
     return 0
 

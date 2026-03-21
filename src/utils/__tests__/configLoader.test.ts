@@ -64,6 +64,14 @@ describe('getBassConfig', () => {
   it('customWAV.releaseFadeMs のデフォルト値は 20', () => {
     expect(getBassConfig().customWAV.releaseFadeMs).toBe(20);
   });
+
+  it('customWAV.legatoMaxInterval のデフォルト値は 2', () => {
+    expect(getBassConfig().customWAV.legatoMaxInterval).toBe(2);
+  });
+
+  it('customWAV.legatoProbability のデフォルト値は 0.11', () => {
+    expect(getBassConfig().customWAV.legatoProbability).toBe(0.11);
+  });
 });
 
 describe('getPianoConfig', () => {

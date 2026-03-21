@@ -450,6 +450,14 @@ export interface BassSamplerSet {
   keyMapByStyle: Record<string, Map<string, string>>;
   releaseByStyle: Record<string, Sampler>;
   releaseKeyMapByStyle: Record<string, Map<string, string>>;
+  legatoByStyle: Record<string, Sampler>;
+  legatoKeyMapByStyle: Record<string, Map<string, string>>;
+  legatoRelByStyle: Record<string, Sampler>;
+  legatoRelKeyMapByStyle: Record<string, Map<string, string>>;
+  hammerOnByStyle: Record<string, Sampler>;
+  hammerOnKeyMapByStyle: Record<string, Map<string, string>>;
+  hammerOnRelByStyle: Record<string, Sampler>;
+  hammerOnRelKeyMapByStyle: Record<string, Map<string, string>>;
 }
 
 let cachedBassSampler: BassSamplerSet | null = null;
@@ -486,6 +494,27 @@ function buildBassBuffers(
   return { buffers, keyMap };
 }
 
+/** レガートサンプル用 buffers マップを構築 (固定ベロシティ80) */
+function buildLegatoBuffers(
+  kitFolder: string,
+  pitches: number[],
+  prefix: string = 'p80',
+  suffix: string = '',
+): { buffers: Record<string, string>; keyMap: Map<string, string> } {
+  const buffers: Record<string, string> = {};
+  const keyMap = new Map<string, string>();
+  let slotIdx = 0;
+
+  for (const pitch of pitches) {
+    const fileName = midiToFileName(pitch);
+    const smplrKey = midiToSmplrNote(slotIdx);
+    buffers[smplrKey] = `/bass/${kitFolder}/${fileName}_${prefix}${suffix}.wav`;
+    keyMap.set(`${pitch}_80`, smplrKey);
+    slotIdx++;
+  }
+  return { buffers, keyMap };
+}
+
 /**
  * カスタム WAV ベースサンプラーをロード (キャッシュ)。
  * bass-patterns.generated.json の samples/kits からスタイル別に Sampler を構築。
@@ -499,6 +528,14 @@ export async function loadBassSampler(ctx: AudioContext, soundfont: Soundfont): 
     const keyMapByStyle: Record<string, Map<string, string>> = {};
     const releaseByStyle: Record<string, Sampler> = {};
     const releaseKeyMapByStyle: Record<string, Map<string, string>> = {};
+    const legatoByStyle: Record<string, Sampler> = {};
+    const legatoKeyMapByStyle: Record<string, Map<string, string>> = {};
+    const legatoRelByStyle: Record<string, Sampler> = {};
+    const legatoRelKeyMapByStyle: Record<string, Map<string, string>> = {};
+    const hammerOnByStyle: Record<string, Sampler> = {};
+    const hammerOnKeyMapByStyle: Record<string, Map<string, string>> = {};
+    const hammerOnRelByStyle: Record<string, Sampler> = {};
+    const hammerOnRelKeyMapByStyle: Record<string, Map<string, string>> = {};
 
     try {
       // bass-patterns.generated.json をロード
@@ -510,6 +547,14 @@ export async function loadBassSampler(ctx: AudioContext, soundfont: Soundfont): 
         const keyMapByKit: Record<string, Map<string, string>> = {};
         const relSamplerByKit: Record<string, Sampler> = {};
         const relKeyMapByKit: Record<string, Map<string, string>> = {};
+        const legSamplerByKit: Record<string, Sampler> = {};
+        const legKeyMapByKit: Record<string, Map<string, string>> = {};
+        const legRelSamplerByKit: Record<string, Sampler> = {};
+        const legRelKeyMapByKit: Record<string, Map<string, string>> = {};
+        const hoSamplerByKit: Record<string, Sampler> = {};
+        const hoKeyMapByKit: Record<string, Map<string, string>> = {};
+        const hoRelSamplerByKit: Record<string, Sampler> = {};
+        const hoRelKeyMapByKit: Record<string, Map<string, string>> = {};
         const loadTasks: Promise<void>[] = [];
 
         // キットごとに1つの Sampler をロード (samples はキット軸)
@@ -553,6 +598,75 @@ export async function loadBassSampler(ctx: AudioContext, soundfont: Soundfont): 
               relSamplerByKit[kitFolder] = relSampler;
             })().catch(() => { /* リリース WAV なし → リリースなし */ }),
           );
+
+          // レガート Sampler ロード (失敗は無視 → ピチカートにフォールバック)
+          const pitches = Object.keys(sampleMap).map(Number);
+          const { buffers: legBuffers, keyMap: legKeyMap } = buildLegatoBuffers(kitFolder, pitches);
+          legKeyMapByKit[kitFolder] = legKeyMap;
+          loadTasks.push(
+            (async () => {
+              const legSampler = new Sampler(ctx, { buffers: legBuffers, detune: cwCfg.detune, decayTime: cwCfg.decayTime });
+              await legSampler.load;
+              legSampler.output.setVolume(cwCfg.volume);
+              if (kitGain !== 1.0) {
+                const boost = ctx.createGain();
+                boost.gain.value = kitGain;
+                legSampler.output.addInsert(boost);
+              }
+              legSamplerByKit[kitFolder] = legSampler;
+            })().catch(() => { /* レガート WAV なし → ピチカートにフォールバック */ }),
+          );
+
+          // レガートリリース Sampler ロード (失敗は無視)
+          const { buffers: legRelBuffers, keyMap: legRelKeyMap } = buildLegatoBuffers(kitFolder, pitches, 'p80', '_rel');
+          legRelKeyMapByKit[kitFolder] = legRelKeyMap;
+          loadTasks.push(
+            (async () => {
+              const legRelSampler = new Sampler(ctx, { buffers: legRelBuffers, detune: cwCfg.detune, decayTime: cwCfg.decayTime });
+              await legRelSampler.load;
+              legRelSampler.output.setVolume(cwCfg.volume);
+              if (kitGain !== 1.0) {
+                const boost = ctx.createGain();
+                boost.gain.value = kitGain;
+                legRelSampler.output.addInsert(boost);
+              }
+              legRelSamplerByKit[kitFolder] = legRelSampler;
+            })().catch(() => { /* レガートリリース WAV なし */ }),
+          );
+
+          // ハンマリングオン Sampler ロード (失敗は無視 → ピチカートにフォールバック)
+          const { buffers: hoBuffers, keyMap: hoKeyMap } = buildLegatoBuffers(kitFolder, pitches, 'h80');
+          hoKeyMapByKit[kitFolder] = hoKeyMap;
+          loadTasks.push(
+            (async () => {
+              const hoSampler = new Sampler(ctx, { buffers: hoBuffers, detune: cwCfg.detune, decayTime: cwCfg.decayTime });
+              await hoSampler.load;
+              hoSampler.output.setVolume(cwCfg.volume);
+              if (kitGain !== 1.0) {
+                const boost = ctx.createGain();
+                boost.gain.value = kitGain;
+                hoSampler.output.addInsert(boost);
+              }
+              hoSamplerByKit[kitFolder] = hoSampler;
+            })().catch(() => { /* ハンマリングオン WAV なし → ピチカートにフォールバック */ }),
+          );
+
+          // ハンマリングオンリリース Sampler ロード (失敗は無視)
+          const { buffers: hoRelBuffers, keyMap: hoRelKeyMap } = buildLegatoBuffers(kitFolder, pitches, 'h80', '_rel');
+          hoRelKeyMapByKit[kitFolder] = hoRelKeyMap;
+          loadTasks.push(
+            (async () => {
+              const hoRelSampler = new Sampler(ctx, { buffers: hoRelBuffers, detune: cwCfg.detune, decayTime: cwCfg.decayTime });
+              await hoRelSampler.load;
+              hoRelSampler.output.setVolume(cwCfg.volume);
+              if (kitGain !== 1.0) {
+                const boost = ctx.createGain();
+                boost.gain.value = kitGain;
+                hoRelSampler.output.addInsert(boost);
+              }
+              hoRelSamplerByKit[kitFolder] = hoRelSampler;
+            })().catch(() => { /* ハンマリングオンリリース WAV なし */ }),
+          );
         }
         await Promise.all(loadTasks);
 
@@ -570,6 +684,24 @@ export async function loadBassSampler(ctx: AudioContext, soundfont: Soundfont): 
             releaseKeyMapByStyle[style] = relKeyMapByKit[kitFolder];
             console.log(`[bass] ${style} → release samples loaded`);
           }
+          if (legSamplerByKit[kitFolder]) {
+            legatoByStyle[style] = legSamplerByKit[kitFolder];
+            legatoKeyMapByStyle[style] = legKeyMapByKit[kitFolder];
+            console.log(`[bass] ${style} → legato samples loaded`);
+          }
+          if (legRelSamplerByKit[kitFolder]) {
+            legatoRelByStyle[style] = legRelSamplerByKit[kitFolder];
+            legatoRelKeyMapByStyle[style] = legRelKeyMapByKit[kitFolder];
+          }
+          if (hoSamplerByKit[kitFolder]) {
+            hammerOnByStyle[style] = hoSamplerByKit[kitFolder];
+            hammerOnKeyMapByStyle[style] = hoKeyMapByKit[kitFolder];
+            console.log(`[bass] ${style} → hammer-on samples loaded`);
+          }
+          if (hoRelSamplerByKit[kitFolder]) {
+            hammerOnRelByStyle[style] = hoRelSamplerByKit[kitFolder];
+            hammerOnRelKeyMapByStyle[style] = hoRelKeyMapByKit[kitFolder];
+          }
         }
       }
     } catch { /* カスタム WAV なし → SoundFont フォールバック */ }
@@ -578,7 +710,14 @@ export async function loadBassSampler(ctx: AudioContext, soundfont: Soundfont): 
       console.log('[bass] No custom kits loaded, using SoundFont for all styles');
     }
 
-    cachedBassSampler = { soundfont, customByStyle, keyMapByStyle, releaseByStyle, releaseKeyMapByStyle };
+    cachedBassSampler = {
+      soundfont, customByStyle, keyMapByStyle,
+      releaseByStyle, releaseKeyMapByStyle,
+      legatoByStyle, legatoKeyMapByStyle,
+      legatoRelByStyle, legatoRelKeyMapByStyle,
+      hammerOnByStyle, hammerOnKeyMapByStyle,
+      hammerOnRelByStyle, hammerOnRelKeyMapByStyle,
+    };
     return cachedBassSampler;
   })();
   return bassLoadPromise;
@@ -640,40 +779,102 @@ export function playSmplrBassLine(
     const noteDur = bn.duration * beatSec;
     const hitStopId = `bass-${++bassIdCounter}`;
 
+    // レガート判定: 音程差が閾値以下 & 確率判定 & interval≠0 → レガート
+    // direction: interval > 0 → hammerOn (h80), interval < 0 → pulloff (p80)
+    const interval = lastBassHit != null ? bn.midi - lastBassHit.midi : 0;
+    const absInterval = Math.abs(interval);
+    const isLegato = lastBassHit != null && absInterval > 0 &&
+      absInterval <= cfg.customWAV.legatoMaxInterval &&
+      Math.random() < cfg.customWAV.legatoProbability;
+    const isHammerOn = isLegato && interval > 0;
+
     // voice stealing: 前ノートを duration 考慮して停止 + リリースサンプル再生
     if (lastBassHit) {
       const stopTime = Math.min(noteTime, lastBassHit.endTime);
       try { (lastBassHit.sampler as Sampler).stop({ stopId: lastBassHit.stopId, time: stopTime }); } catch { /* ignore */ }
 
-      // リリースサンプル再生
-      const relSampler = bassSamplers.releaseByStyle[lastBassHit.style];
-      const relKeyMap = bassSamplers.releaseKeyMapByStyle[lastBassHit.style];
+      // リリースサンプル再生: レガートなら方向別リリース、通常ならピチカートリリース
+      let relSampler: Sampler | undefined;
+      let relKeyMap: Map<string, string> | undefined;
+      if (isLegato) {
+        if (isHammerOn) {
+          relSampler = bassSamplers.hammerOnRelByStyle[lastBassHit.style] ?? bassSamplers.releaseByStyle[lastBassHit.style];
+          relKeyMap = bassSamplers.hammerOnRelKeyMapByStyle[lastBassHit.style] ?? bassSamplers.releaseKeyMapByStyle[lastBassHit.style];
+        } else {
+          relSampler = bassSamplers.legatoRelByStyle[lastBassHit.style] ?? bassSamplers.releaseByStyle[lastBassHit.style];
+          relKeyMap = bassSamplers.legatoRelKeyMapByStyle[lastBassHit.style] ?? bassSamplers.releaseKeyMapByStyle[lastBassHit.style];
+        }
+      } else {
+        relSampler = bassSamplers.releaseByStyle[lastBassHit.style];
+        relKeyMap = bassSamplers.releaseKeyMapByStyle[lastBassHit.style];
+      }
       if (relSampler && relKeyMap) {
-        const prevKitFolder = db?.kits?.[lastBassHit.style] ?? lastBassHit.style;
-        const prevSampleMap = db?.samples?.[prevKitFolder];
-        const prevVelocities = prevSampleMap?.[String(lastBassHit.midi)];
-        if (prevVelocities) {
-          const prevNearestVel = findNearestVelocity(prevVelocities, lastBassHit.velocity);
-          const relSmplrKey = relKeyMap.get(`${lastBassHit.midi}_${prevNearestVel}`);
-          if (relSmplrKey) {
-            const relStopId = `bass-rel-${++bassIdCounter}`;
-            relSampler.start({
-              note: relSmplrKey,
-              velocity: 127,
-              time: stopTime,
-              stopId: relStopId,
-            });
-            scheduledHits.push({ stopId: relStopId, sampler: relSampler, time: stopTime });
+        let relSmplrKey: string | undefined;
+        if (isLegato) {
+          // 方向別リリース WAV を試行
+          const dirRelSampler = isHammerOn
+            ? bassSamplers.hammerOnRelByStyle[lastBassHit.style]
+            : bassSamplers.legatoRelByStyle[lastBassHit.style];
+          if (dirRelSampler) {
+            relSmplrKey = relKeyMap.get(`${lastBassHit.midi}_80`);
           }
+        }
+        if (!relSmplrKey) {
+          // ピチカートリリースにフォールバック
+          const prevKitFolder = db?.kits?.[lastBassHit.style] ?? lastBassHit.style;
+          const prevSampleMap = db?.samples?.[prevKitFolder];
+          const prevVelocities = prevSampleMap?.[String(lastBassHit.midi)];
+          if (prevVelocities) {
+            const prevNearestVel = findNearestVelocity(prevVelocities, lastBassHit.velocity);
+            relSmplrKey = bassSamplers.releaseKeyMapByStyle[lastBassHit.style]?.get(`${lastBassHit.midi}_${prevNearestVel}`);
+            relSampler = bassSamplers.releaseByStyle[lastBassHit.style];
+          }
+        }
+        if (relSmplrKey && relSampler) {
+          const relStopId = `bass-rel-${++bassIdCounter}`;
+          relSampler.start({
+            note: relSmplrKey,
+            velocity: 127,
+            time: stopTime,
+            stopId: relStopId,
+          });
+          scheduledHits.push({ stopId: relStopId, sampler: relSampler, time: stopTime });
         }
       }
     }
 
     if (customSampler && sampleMap && keyMap) {
-      // カスタム WAV Sampler
+      // レガート判定: 方向に応じて hammerOn / pulloff Sampler を選択
+      let legSampler: Sampler | undefined;
+      let legKeyMap: Map<string, string> | undefined;
+      if (isLegato) {
+        if (isHammerOn) {
+          legSampler = bassSamplers.hammerOnByStyle[style];
+          legKeyMap = bassSamplers.hammerOnKeyMapByStyle[style];
+        } else {
+          legSampler = bassSamplers.legatoByStyle[style];
+          legKeyMap = bassSamplers.legatoKeyMapByStyle[style];
+        }
+      }
+      if (legSampler && legKeyMap) {
+        const legSmplrKey = legKeyMap.get(`${bn.midi}_80`);
+        if (legSmplrKey) {
+          legSampler.start({
+            note: legSmplrKey,
+            velocity: 127,
+            time: noteTime,
+            stopId: hitStopId,
+          });
+          scheduledHits.push({ stopId: hitStopId, sampler: legSampler, time: noteTime });
+          lastBassHit = { stopId: hitStopId, sampler: legSampler, endTime: noteTime + noteDur, midi: bn.midi, velocity: noteVel, style };
+          continue;
+        }
+        // レガート WAV がこのピッチにない → ピチカートにフォールバック
+      }
+
+      // ピチカート (通常)
       const velocities = sampleMap[String(bn.midi)];
       if (!velocities || velocities.length === 0) {
-        // このピッチの WAV がない → SoundFont フォールバック
         _playSoundfontNote(bassSamplers.soundfont, bn, noteTime, hitStopId, noteVel, noteDur, scheduledHits, style);
         continue;
       }
@@ -686,7 +887,7 @@ export function playSmplrBassLine(
 
       customSampler.start({
         note: smplrKey,
-        velocity: 127, // ベロシティレイヤーに既にダイナミクスが焼き込み済み
+        velocity: 127,
         time: noteTime,
         stopId: hitStopId,
       });

@@ -447,7 +447,7 @@ Utils Layer (pure functions):
 │   ├── phraseAnalysis.ts         — analyzePhrase(), computeSummary()
 │   ├── swing.ts                  — swingBeatStart(), swingVolumeMult(), swingDurMult()
 │   ├── configLoader.ts           — deepMerge(), createConfigLoader() — 汎用設定ローダーファクトリ (全設定JSONで共用)
-│   └── __tests__/                — 831 テスト
+│   └── __tests__/                — 832 テスト
 ├── components/
 │   ├── Fretboard/                — SVG指板 (Fretboard, FretboardNote, GhostNote, PhrasePath)
 │   ├── Controls/                 — 全コントロールUI
@@ -935,27 +935,40 @@ npm run dev</code></pre>
   <tr><td>検出</td><td><code>bass-patterns.generated.json</code> の <code>samples</code> セクションからスタイル別に自動検出。WAV がなければ SoundFont (<code>acoustic_bass</code>) にフォールバック</td></tr>
   <tr><td>音声加工</td><td><code>bass-config.json</code> の <code>customWAV</code> で detune / decayTime / volume / releaseFadeMs を設定可能</td></tr>
   <tr><td>リリースサンプル</td><td><code>{noteName}_v{velocity}_rel.wav</code> (例: <code>e1_v80_rel.wav</code>) — voice stealing 時に自動再生。弦リリースノイズを再現。リリース WAV がなければハードカットにフォールバック。リリース専用 Sampler で再生 (メインと同じ音量・設定)</td></tr>
+  <tr><td>プリングオフサンプル</td><td><code>{noteName}_p80.wav</code> (例: <code>e2_p80.wav</code>) — レガート判定時、下行 (interval &lt; 0) で使用。リリース: <code>_p80_rel.wav</code></td></tr>
+  <tr><td>ハンマリングオンサンプル</td><td><code>{noteName}_h80.wav</code> (例: <code>e2_h80.wav</code>) — レガート判定時、上行 (interval &gt; 0) で使用。リリース: <code>_h80_rel.wav</code></td></tr>
+  <tr><td>レガート判定</td><td>確率ベース: <code>|interval| &gt; 0 &amp;&amp; |interval| &le; legatoMaxInterval &amp;&amp; random &lt; legatoProbability</code>。<code>legatoProbability</code> デフォルト 0.11 (11%, EZBass 実測に基づく)。同音 (interval=0) は除外</td></tr>
 </table>
 
 <p><strong>サンプラー構成 (<code>BassSamplerSet</code>)</strong>:</p>
 <pre><code>BassSamplerSet = {
   soundfont: SplendidGrandPiano  // SoundFont acoustic_bass (常時ロード、フォールバック用)
-  customByStyle: Map&lt;string, Sampler&gt;  // スタイル別カスタム WAV サンプラー (メイン)
+  customByStyle: Map&lt;string, Sampler&gt;  // スタイル別カスタム WAV サンプラー (メイン/ピチカート)
   releaseByStyle: Map&lt;string, Sampler&gt;  // スタイル別リリースサンプル専用サンプラー
+  legatoByStyle: Map&lt;string, Sampler&gt;   // スタイル別プリングオフサンプル専用サンプラー
+  legatoRelByStyle: Map&lt;string, Sampler&gt; // スタイル別プリングオフリリース専用サンプラー
+  hammerOnByStyle: Map&lt;string, Sampler&gt;  // スタイル別ハンマリングオンサンプル専用サンプラー
+  hammerOnRelByStyle: Map&lt;string, Sampler&gt; // スタイル別ハンマリングオンリリース専用サンプラー
 }
 
 loadBassSampler():
   1. SoundFont (acoustic_bass) をロード — 従来と同じ
   2. bass-patterns.generated.json の samples からスタイル別 WAV マッピングを取得
-  3. メイン + リリース WAV サンプラーをキットごとに並列ロード
+  3. メイン + リリース + プリングオフ + プリングオフリリース + ハンマリングオン + ハンマリングオンリリース WAV サンプラーをキットごとに並列ロード
   → 再生時: カスタム WAV があるスタイルはカスタム、なければ SoundFont
-  → リリース Sampler のロード失敗は無視 (リリースなしにフォールバック)</code></pre>
+  → レガート/リリース Sampler のロード失敗は無視 (ピチカートにフォールバック)</code></pre>
 
 <p><strong>モノフォニック再生 &amp; voice stealing</strong>: ベースは単音楽器のため、新しいノートの発音時に前のノートを自動停止。
 voice stealing 時にリリースサンプル (<code>{noteName}_v{velocity}_rel.wav</code>) が存在すれば自動再生し、
 弦を放す際のリリースノイズを再現する。リリース WAV がなければ従来通りハードカット。
 コード遷移時は <code>letRing()</code> で未来にスケジュール済みのノートのみキャンセルし、再生中のノートは自然に減衰させる
 (ドラムの <code>letRing</code> と同じ設計)。停止ボタン・モード切替時は全音を即座に停止 (リリースも鳴らない)。</p>
+
+<p><strong>レガートアーティキュレーション</strong>: 確率ベースの判定 (<code>legatoProbability</code>, デフォルト11%) で、音程差が <code>legatoMaxInterval</code> (デフォルト2半音) 以下かつ同音でない場合にレガートサンプルを使用。
+方向に応じてサンプルを自動選択: 上行 (interval &gt; 0) → ハンマリングオン (<code>_h80.wav</code>)、下行 (interval &lt; 0) → プリングオフ (<code>_p80.wav</code>)。
+EZBass MIDI 実測 (|interval|≤2 の 63 ノート中 7 ノートがレガート KS = 11.1%) に基づく確率設計。
+voice stealing 時のリリースサンプルも方向別 (<code>_h80_rel.wav</code> / <code>_p80_rel.wav</code>) を使用。
+レガート WAV がないピッチ・キットではピチカートに自動フォールバック。</p>
 
 <h4>ベースパターン JSON (<code>public/bass-patterns.generated.json</code>)</h4>
 
@@ -986,7 +999,7 @@ voice stealing 時にリリースサンプル (<code>{noteName}_v{velocity}_rel.
   <tr><td><code>patterns.swing</code></td><td>Swing ウォーキングベスパターン設定 (SwingBassParams): <code>contourAlternateEvery</code> (コンター切替小節数), <code>approachWeights</code> (半音/全音/跳躍の重み)</td></tr>
   <tr><td><code>styleOverrides</code></td><td>スウィングスタイル別パラメータオーバーライド (<code>SwingStyleOverrides</code>)。各スタイルごとに <code>defaultDuration</code>, <code>tripletGrace</code>, <code>approachWeights</code>, <code>altOctaveProb</code> を個別設定。iReal Pro 17曲分析データに基づく: Medium=grace50%/G alt34%, Med-Up=grace55%/G alt36%, Up-Tempo=デュレーション0.99/grace5%/G alt31%</td></tr>
   <tr><td><code>kitGains</code></td><td>キットフォルダ名 → ゲイン倍率 (デフォルト 1.0)。SoundFont との音量差を補正</td></tr>
-  <tr><td><code>customWAV</code></td><td>カスタム WAV サンプラー設定: detune, decayTime, volume (setVolume値), releaseFadeMs (リリースサンプルフェード, デフォルト20ms)</td></tr>
+  <tr><td><code>customWAV</code></td><td>カスタム WAV サンプラー設定: detune, decayTime, volume (setVolume値), releaseFadeMs (リリースサンプルフェード, デフォルト20ms), legatoMaxInterval (レガート判定の最大半音数, デフォルト2), legatoProbability (レガート使用確率, デフォルト0.11)</td></tr>
 </table>
 
 <h4>ピアノ設定ファイル (<code>public/piano-config.json</code>)</h4>
@@ -1716,7 +1729,7 @@ GeneratedPhrase
 
 <!-- ==================== TESTING ==================== -->
 <h2 id="testing">Test Suite</h2>
-<p><code>npm test</code> — Vitest による <strong>831テスト</strong>。</p>
+<p><code>npm test</code> — Vitest による <strong>832テスト</strong>。</p>
 
 <table>
   <tr><th>Test File</th><th>Tests</th><th>Coverage</th></tr>

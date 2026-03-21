@@ -12,7 +12,7 @@
   h2 { color: #3498db; margin-top: 30px; }
   .note-row { display: flex; align-items: center; gap: 10px; margin: 5px 0; }
   .label { width: 120px; }
-  .status { color: #f1c40f; min-height: 20px; margin: 10px 0; }
+  .status { color: #f1c40f; min-height: 20px; margin: 10px 0; white-space: pre-wrap; }
   select, input { font-size: 14px; padding: 4px; }
   .section { background: #16213e; padding: 15px; border-radius: 8px; margin: 15px 0; }
 </style>
@@ -29,7 +29,8 @@
       <option value="v80">Pizz v80</option>
       <option value="v65">Pizz v65</option>
       <option value="v95">Pizz v95</option>
-      <option value="l80">Legato</option>
+      <option value="p80">Legato (Pull-off)</option>
+      <option value="h80">Legato (Hammer-on)</option>
       <option value="g80">Ghost</option>
     </select>
     <button class="play" onclick="playSingle()">Play</button>
@@ -50,6 +51,17 @@
     <label>Fade ms: <input type="number" id="fadeMs" value="20" min="0" max="200" style="width:50px"></label>
   </div>
   <div class="note-row">
+    <label>Legato (≤2半音):
+      <select id="legatoMode">
+        <option value="off">OFF (all pizz)</option>
+        <option value="p80">Pull-off only (下行 _p80)</option>
+        <option value="h80">Hammer-on only (上行 _h80)</option>
+        <option value="both">Both (下行=_p80, 上行=_h80)</option>
+        <option value="p80-all">Pull-off for all (上下とも _p80)</option>
+      </select>
+    </label>
+  </div>
+  <div class="note-row">
     <button class="play" onclick="playWalking()">Play Walking Line</button>
     <button class="stop" onclick="stopWalking()">Stop</button>
   </div>
@@ -59,6 +71,9 @@
         <option value="fm7">Fm7 (F walking)</option>
         <option value="cmaj">Cmaj7 (C walking)</option>
         <option value="blues">Bb Blues (mixed)</option>
+        <option value="chromatic-desc">Chromatic descent (半音下行)</option>
+        <option value="chromatic-asc">Chromatic ascent (半音上行)</option>
+        <option value="chromatic-mix">Chromatic mixed (上下交互)</option>
       </select>
     </label>
   </div>
@@ -91,6 +106,9 @@ const LINES = {
   fm7: [41,43,44,45, 48,47,45,44, 41,45,48,52, 53,52,48,45],
   cmaj: [48,50,52,55, 57,55,52,50, 48,43,45,47, 48,52,55,53],
   blues: [46,45,43,42, 41,43,45,48, 46,50,48,45, 41,42,43,44],
+  'chromatic-desc': [52,51,50,49, 48,47,46,45, 44,43,42,41, 40,41,42,43],
+  'chromatic-asc': [40,41,42,43, 44,45,46,47, 48,49,50,51, 52,51,50,49],
+  'chromatic-mix': [45,44,45,44, 48,47,48,47, 43,44,43,44, 50,49,50,49],
 };
 
 let ctx = null;
@@ -118,7 +136,7 @@ async function loadBuffer(url) {
 // Preload common samples
 async function preload() {
   const pitches = [38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57];
-  const types = ['v80', 'v65', 'v95', 'l80', 'g80'];
+  const types = ['v80', 'v65', 'v95', 'p80', 'h80', 'g80'];
   for (const p of pitches) {
     for (const t of types) {
       const f = midiToFile(p);
@@ -184,28 +202,64 @@ async function stopSingle(noRelease) {
 // --- Walking line ---
 let walkingHandle = null;
 
-async function playWalkingLine(line, bpm, useRelease, fadeMs, statusEl) {
+/**
+ * Determine articulation type for a note in a walking line.
+ * @returns 'v80' (pizz), 'p80' (pull-off), or 'h80' (hammer-on)
+ */
+function getArticulation(line, i, legatoMode) {
+  if (legatoMode === 'off' || i === 0) return 'v80';
+  const interval = line[i] - line[i - 1];
+  const absInt = Math.abs(interval);
+  if (absInt === 0 || absInt > 2) return 'v80';  // same note or too far
+
+  if (interval < 0) {
+    // Descending = pull-off
+    if (legatoMode === 'p80' || legatoMode === 'both' || legatoMode === 'p80-all') return 'p80';
+  } else {
+    // Ascending = hammer-on
+    if (legatoMode === 'h80' || legatoMode === 'both') return 'h80';
+    if (legatoMode === 'p80-all') return 'p80';  // use pull-off sample for ascending too
+  }
+  return 'v80';
+}
+
+async function playWalkingLine(line, bpm, useRelease, fadeMs, statusEl, legatoMode) {
   const ac = getCtx();
   const beatSec = 60 / bpm;
   const startAt = ac.currentTime + 0.1;
   const sources = [];
-  const type = 'v80';
+
+  // Determine articulation for each note
+  const artTypes = line.map((_, i) => getArticulation(line, i, legatoMode));
 
   // Preload all
   const buffers = [];
   const relBuffers = [];
-  for (const pitch of line) {
-    const f = midiToFile(pitch);
-    buffers.push(await loadBuffer(`${BASE}${f}_${type}.wav`));
-    relBuffers.push(await loadBuffer(`${BASE}${f}_${type}_rel.wav`));
+  for (let i = 0; i < line.length; i++) {
+    const f = midiToFile(line[i]);
+    const art = artTypes[i];
+    buffers.push(await loadBuffer(`${BASE}${f}_${art}.wav`));
+    relBuffers.push(await loadBuffer(`${BASE}${f}_${art}_rel.wav`));
   }
 
+  const artLabels = [];
   for (let i = 0; i < line.length; i++) {
     const noteStart = startAt + i * beatSec;
     const noteEnd = startAt + (i + 1) * beatSec;
     const fadeSec = fadeMs / 1000;
 
-    if (!buffers[i]) continue;
+    // Fallback to pizz if legato buffer failed to load
+    let buf = buffers[i];
+    let relBuf = relBuffers[i];
+    let usedArt = artTypes[i];
+    if (!buf && usedArt !== 'v80') {
+      const f = midiToFile(line[i]);
+      buf = await loadBuffer(`${BASE}${f}_v80.wav`);
+      relBuf = await loadBuffer(`${BASE}${f}_v80_rel.wav`);
+      usedArt = 'v80(fb)';
+    }
+    artLabels.push(usedArt);
+    if (!buf) continue;
 
     // Main note
     const gain = ac.createGain();
@@ -215,16 +269,16 @@ async function playWalkingLine(line, bpm, useRelease, fadeMs, statusEl) {
     gain.gain.linearRampToValueAtTime(0, noteEnd);
 
     const src = ac.createBufferSource();
-    src.buffer = buffers[i];
+    src.buffer = buf;
     src.connect(gain);
     src.start(noteStart);
     src.stop(noteEnd + 0.01);
     sources.push(src);
 
     // Release noise
-    if (useRelease && relBuffers[i]) {
+    if (useRelease && relBuf) {
       const relSrc = ac.createBufferSource();
-      relSrc.buffer = relBuffers[i];
+      relSrc.buffer = relBuf;
       relSrc.connect(ac.destination);
       relSrc.start(noteEnd - fadeSec);
       sources.push(relSrc);
@@ -233,7 +287,8 @@ async function playWalkingLine(line, bpm, useRelease, fadeMs, statusEl) {
 
   const totalDur = line.length * beatSec;
   if (statusEl) {
-    statusEl.textContent = `Playing ${line.length} notes, ${bpm} BPM, release=${useRelease}`;
+    const artSummary = artLabels.join(' ');
+    statusEl.textContent = `Playing ${line.length} notes, ${bpm} BPM, release=${useRelease}, legato=${legatoMode}\n[${artSummary}]`;
     setTimeout(() => { statusEl.textContent = 'Done'; }, totalDur * 1000 + 200);
   }
 
@@ -250,9 +305,10 @@ async function playWalking() {
   const useRelease = document.getElementById('releaseOn').checked;
   const fadeMs = parseInt(document.getElementById('fadeMs').value);
   const lineKey = document.getElementById('lineSelect').value;
+  const legatoMode = document.getElementById('legatoMode').value;
   const line = LINES[lineKey];
   walkingHandle = await playWalkingLine(line, bpm, useRelease, fadeMs,
-    document.getElementById('walkStatus'));
+    document.getElementById('walkStatus'), legatoMode);
 }
 
 function stopWalking() {
@@ -264,9 +320,10 @@ async function playAB(withRelease) {
   const bpm = parseInt(document.getElementById('bpm').value);
   const fadeMs = parseInt(document.getElementById('fadeMs').value);
   const lineKey = document.getElementById('lineSelect').value;
+  const legatoMode = document.getElementById('legatoMode').value;
   const line = LINES[lineKey];
   walkingHandle = await playWalkingLine(line, bpm, withRelease, fadeMs,
-    document.getElementById('abStatus'));
+    document.getElementById('abStatus'), legatoMode);
 }
 
 // Populate pitch selector: E (lowest, MIDI 40) to E+1 octave (MIDI 52)

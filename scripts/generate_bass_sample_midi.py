@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """EZBass (EBX-UPRIGHT) カスタム WAV 書き出し用 MIDI 生成スクリプト.
 
-通常ピチカート (3ベロシティ) + レガート (1ベロシティ) + ゴーストノート (1ベロシティ)
-の全音域を1本の MIDI に書き出す。DAW で EZBass に通してオーディオバウンス後、
+通常ピチカート (3ベロシティ) + プリングオフ (1ベロシティ) + ハンマリングオン (1ベロシティ)
++ ゴーストノート (1ベロシティ) の全音域を1本の MIDI に書き出す。
+DAW で EZBass に通してオーディオバウンス後、
 スライススクリプト (slice_bass_samples.py) で個別 WAV に分割する。
 
 出力: scripts/output/bass_samples.mid
@@ -12,9 +13,10 @@
   ※ MIDI 33~37 (A0~C#1): 音は鳴るが A1~C#2 と同一音 (1oct上にリダイレクト)
   ※ MIDI 38 (D1) が EBX-UPRIGHT の実際の最低音
 
-ピチカート: v65 / v80 / v95 (3 レイヤー)
-レガート:   v80 (1 レイヤー, KS 32 = G#0, 前音オーバーラップ方式)
-ゴースト:   v80 (1 レイヤー, KS 16 = E-1)
+ピチカート:       v65 / v80 / v95 (3 レイヤー)
+プリングオフ:     v80 (1 レイヤー, KS 32, セットアップ=半音上→下行レガート)
+ハンマリングオン: v80 (1 レイヤー, KS 32, セットアップ=半音下→上行レガート)
+ゴースト:         v80 (1 レイヤー, KS 16 = E-1)
 
 EZBass キースイッチ:
   MIDI 16 (E-1)  = Ghost note
@@ -33,9 +35,10 @@ EZBass EBX-UPRIGHT 演奏可能範囲:
   → EZBass が前の音からのプルオフ/ハンマーオンとして処理
 
 配置:
-  [ピチカート v65 × 33音] [v80 × 33音] [v95 × 33音]
-  [レガート v80 × 33音]   ← 半音上セットアップ音をオーバーラップ
-  [ゴースト v80 × 33音]
+  [ピチカート v65 × 28音] [v80 × 28音] [v95 × 28音]
+  [プリングオフ v80 × 28音]   ← 半音上セットアップ音をオーバーラップ→下行レガート
+  [ハンマリングオン v80 × 28音] ← 半音下セットアップ音をオーバーラップ→上行レガート
+  [ゴースト v80 × 28音]
 """
 
 import pretty_midi
@@ -86,33 +89,56 @@ def generate():
             t += NOTE_INTERVAL
         t += SECTION_GAP
 
-    # --- レガート (KS 32, 前音オーバーラップ方式) ---
-    # 参考 MIDI のパターン:
-    #   前の音が鳴っている → KS 32 + 新ノート同時発音
-    #   前の音は新ノート発音直後 (0.002s後) に note-off
+    # --- プリングオフ (KS 32, 半音上からの下行レガート) ---
+    # 前の音 (半音上) が鳴っている → KS 32 + 目標音を同時発音
+    # → EZBass がプルオフとして処理
     for vel in LEGATO_VELOCITIES:
         for pitch in pitches:
             setup_pitch = pitch + 1  # 半音上 (プルオフ元)
             if setup_pitch > 127:
                 setup_pitch = pitch - 1
 
-            # セットアップ音 (半音上、目標音発音後まで微小オーバーラップ)
             setup_start = t
             target_start = t + LEGATO_SETUP_DUR
-            setup_end = target_start + LEGATO_OVERLAP  # 目標音と 0.002s オーバーラップ
+            setup_end = target_start + LEGATO_OVERLAP
 
             inst.notes.append(pretty_midi.Note(
                 velocity=vel, pitch=setup_pitch,
                 start=setup_start, end=setup_end,
             ))
-
-            # レガート KS (目標音と同時)
             inst.notes.append(pretty_midi.Note(
                 velocity=vel, pitch=LEGATO_KS_PITCH,
                 start=target_start, end=target_start + KS_DUR,
             ))
+            inst.notes.append(pretty_midi.Note(
+                velocity=vel, pitch=pitch,
+                start=target_start, end=target_start + NOTE_DUR,
+            ))
 
-            # 目標音 (プルオフで鳴る音 = 録りたいサンプル)
+            t += NOTE_INTERVAL + LEGATO_SETUP_DUR
+        t += SECTION_GAP
+
+    # --- ハンマリングオン (KS 32, 半音下からの上行レガート) ---
+    # 前の音 (半音下) が鳴っている → KS 32 + 目標音を同時発音
+    # → EZBass がハンマーオンとして処理
+    for vel in LEGATO_VELOCITIES:
+        for pitch in pitches:
+            setup_pitch = pitch - 1  # 半音下 (ハンマーオン元)
+            if setup_pitch < MIDI_LOW:
+                setup_pitch = pitch + 1
+
+            setup_start = t
+            target_start = t + LEGATO_SETUP_DUR
+            setup_end = target_start + LEGATO_OVERLAP
+
+            inst.notes.append(pretty_midi.Note(
+                velocity=vel, pitch=setup_pitch,
+                start=setup_start, end=setup_end,
+            ))
+            inst.notes.append(pretty_midi.Note(
+                velocity=vel, pitch=LEGATO_KS_PITCH,
+                start=target_start, end=target_start + KS_DUR,
+            ))
             inst.notes.append(pretty_midi.Note(
                 velocity=vel, pitch=pitch,
                 start=target_start, end=target_start + NOTE_DUR,
@@ -143,34 +169,46 @@ def generate():
     # --- レポート ---
     n_pitches = len(pitches)
     n_pizz = n_pitches * len(PIZZ_VELOCITIES)
-    n_legato = n_pitches * len(LEGATO_VELOCITIES)
+    n_pulloff = n_pitches * len(LEGATO_VELOCITIES)
+    n_hammeron = n_pitches * len(LEGATO_VELOCITIES)
     n_ghost = n_pitches * len(GHOST_VELOCITIES)
-    total = n_pizz + n_legato + n_ghost
+    total = n_pizz + n_pulloff + n_hammeron + n_ghost
 
     print(f'Generated: {OUTPUT_FILE}')
-    print(f'  Pitches:    {n_pitches} (MIDI {MIDI_LOW}~{MIDI_HIGH})')
-    print(f'  Pizzicato:  {n_pitches} x {len(PIZZ_VELOCITIES)} vel = {n_pizz} samples')
-    print(f'  Legato:     {n_pitches} x {len(LEGATO_VELOCITIES)} vel = {n_legato} samples')
-    print(f'  Ghost:      {n_pitches} x {len(GHOST_VELOCITIES)} vel = {n_ghost} samples')
-    print(f'  Total:      {total} samples')
-    print(f'  Duration:   {t:.1f}s ({t/60:.1f}min)')
-    print(f'  BPM:        {BPM}')
+    print(f'  Pitches:      {n_pitches} (MIDI {MIDI_LOW}~{MIDI_HIGH})')
+    print(f'  Pizzicato:    {n_pitches} x {len(PIZZ_VELOCITIES)} vel = {n_pizz} samples')
+    print(f'  Pull-off:     {n_pitches} x {len(LEGATO_VELOCITIES)} vel = {n_pulloff} samples')
+    print(f'  Hammer-on:    {n_pitches} x {len(LEGATO_VELOCITIES)} vel = {n_hammeron} samples')
+    print(f'  Ghost:        {n_pitches} x {len(GHOST_VELOCITIES)} vel = {n_ghost} samples')
+    print(f'  Total:        {total} samples')
+    print(f'  Duration:     {t:.1f}s ({t/60:.1f}min)')
+    print(f'  BPM:          {BPM}')
     print()
     print('Sections:')
     sec_t = 0.0
     for vel in PIZZ_VELOCITIES:
         sec_end = sec_t + n_pitches * NOTE_INTERVAL
-        print(f'  Pizz   v{vel:3d}: {sec_t:6.1f}s ~ {sec_end:6.1f}s')
+        print(f'  Pizz      v{vel:3d}: {sec_t:6.1f}s ~ {sec_end:6.1f}s')
         sec_t = sec_end + SECTION_GAP
     for vel in LEGATO_VELOCITIES:
         sec_end = sec_t + n_pitches * (NOTE_INTERVAL + LEGATO_SETUP_DUR)
-        print(f'  Legato v{vel:3d}: {sec_t:6.1f}s ~ {sec_end:6.1f}s  (setup+overlap)')
+        print(f'  Pull-off  v{vel:3d}: {sec_t:6.1f}s ~ {sec_end:6.1f}s  (setup=半音上→下行)')
+        sec_t = sec_end + SECTION_GAP
+    for vel in LEGATO_VELOCITIES:
+        sec_end = sec_t + n_pitches * (NOTE_INTERVAL + LEGATO_SETUP_DUR)
+        print(f'  Hammer-on v{vel:3d}: {sec_t:6.1f}s ~ {sec_end:6.1f}s  (setup=半音下→上行)')
         sec_t = sec_end + SECTION_GAP
     for vel in GHOST_VELOCITIES:
         sec_end = sec_t + n_pitches * NOTE_INTERVAL
-        print(f'  Ghost  v{vel:3d}: {sec_t:6.1f}s ~ {sec_end:6.1f}s')
+        print(f'  Ghost     v{vel:3d}: {sec_t:6.1f}s ~ {sec_end:6.1f}s')
         sec_t = sec_end + SECTION_GAP
 
+    print()
+    print('WAV naming after slice:')
+    print('  Pizzicato:    {noteName}_v{vel}.wav      (e.g. e2_v80.wav)')
+    print('  Pull-off:     {noteName}_p80.wav         (e.g. e2_p80.wav)')
+    print('  Hammer-on:    {noteName}_h80.wav         (e.g. e2_h80.wav)')
+    print('  Ghost:        {noteName}_g80.wav         (e.g. e2_g80.wav)')
     print()
     print('Note: MIDI 28~37 excluded (EZBass EBX-UPRIGHT: KS zone + redirected)')
     print('      SoundFont fallback will cover MIDI 28~37 at runtime')
