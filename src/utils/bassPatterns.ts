@@ -805,12 +805,13 @@ export function playSmplrBassLine(
 
     // voice stealing: 前ノートを停止
     // レガート → ぎりぎりまで伸ばし、リリースノイズなし
-    // 非レガート → 少し早めに止めてリリースノイズ再生 (duration スケール済み)
+    // 非レガート → duration 終了時に停止+リリースノイズ再生、次の音まで余白あり
     if (lastBassHit) {
-      const stopTime = noteTime;
-      try { (lastBassHit.sampler as Sampler).stop({ stopId: lastBassHit.stopId, time: stopTime }); } catch { /* ignore */ }
+      // 停止タイミング: duration 終了時 or 次の音の発音時の早い方
+      const relTime = Math.min(lastBassHit.endTime, noteTime);
+      try { (lastBassHit.sampler as Sampler).stop({ stopId: lastBassHit.stopId, time: relTime }); } catch { /* ignore */ }
 
-      // 非レガート時のみリリースサンプル再生
+      // 非レガート時のみリリースサンプル再生 (duration 終了時に発音)
       if (!isLegato) {
         const relSampler = bassSamplers.releaseByStyle[lastBassHit.style];
         const relKeyMap = bassSamplers.releaseKeyMapByStyle[lastBassHit.style];
@@ -826,10 +827,10 @@ export function playSmplrBassLine(
               relSampler.start({
                 note: relSmplrKey,
                 velocity: 127,
-                time: stopTime,
+                time: relTime,
                 stopId: relStopId,
               });
-              scheduledHits.push({ stopId: relStopId, sampler: relSampler, time: stopTime });
+              scheduledHits.push({ stopId: relStopId, sampler: relSampler, time: relTime });
             }
           }
         }

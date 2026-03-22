@@ -943,7 +943,7 @@ npm run dev</code></pre>
   <tr><td>検出</td><td><code>bass-patterns.generated.json</code> の <code>samples</code> セクションからスタイル別に自動検出。WAV がなければ SoundFont (<code>acoustic_bass</code>) にフォールバック</td></tr>
   <tr><td>音声加工</td><td><code>bass-config.json</code> の <code>customWAV</code> で detune / decayTime / volume / octaveShift を設定可能。<code>ampRelease</code> は 0.01秒にハードコード</td></tr>
   <tr><td>octaveShift</td><td>WAV ファイルルックアップ時の MIDI ノート番号オフセット (デフォルト 0)。EZBass 等の VSTi がオクターブ高い表記で WAV を書き出す場合に <code>12</code> を設定。実際のピッチには影響しない</td></tr>
-  <tr><td>リリースサンプル</td><td><code>{noteName}_v{velocity}_rel.wav</code> (例: <code>e1_v80_rel.wav</code>) — <strong>非レガート</strong>の voice stealing 時に自動再生。弦リリースノイズを再現。レガートノート (ハンマリングオン/プリングオフ) では再生されない。リリース WAV がなければハードカットにフォールバック。リリース専用 Sampler で再生 (メインと同じ音量・設定)</td></tr>
+  <tr><td>リリースサンプル</td><td><code>{noteName}_v{velocity}_rel.wav</code> (例: <code>e1_v80_rel.wav</code>) — <strong>非レガート</strong>時、前ノートの duration 終了タイミングで自動再生。弦リリースノイズを再現 (duration 終了〜次の音発音の余白に挿入)。レガートノート (ハンマリングオン/プリングオフ) では再生されない。リリース WAV がなければハードカットにフォールバック。リリース専用 Sampler で再生 (メインと同じ音量・設定)。スライサーが末尾無音を自動トリム (閾値 -46dB, マージン 20ms)</td></tr>
   <tr><td>プリングオフサンプル</td><td><code>{noteName}_p80.wav</code> (例: <code>e2_p80.wav</code>) — レガート判定時、下行 (interval &lt; 0) で使用。リリース: <code>_p80_rel.wav</code></td></tr>
   <tr><td>ハンマリングオンサンプル</td><td><code>{noteName}_h80.wav</code> (例: <code>e2_h80.wav</code>) — レガート判定時、上行 (interval &gt; 0) で使用。リリース: <code>_h80_rel.wav</code></td></tr>
   <tr><td>レガート判定</td><td>確率ベース: <code>|interval| &gt; 0 &amp;&amp; |interval| &le; legatoMaxInterval &amp;&amp; random &lt; legatoProbability</code>。<code>legatoProbability</code> デフォルト 0.11 (11%, EZBass 実測に基づく)。同音 (interval=0) は除外</td></tr>
@@ -969,7 +969,7 @@ loadBassSampler():
 
 <p><strong>モノフォニック再生 &amp; voice stealing</strong>: ベースは単音楽器のため、新しいノートの発音時に前のノートを自動停止。</p>
 <ul>
-  <li><strong>非レガート時</strong>: 前ノートを停止し、リリースサンプル (<code>_rel.wav</code>) が存在すれば同タイミングで再生 → 弦リリースノイズを再現。リリース WAV がなければハードカット</li>
+  <li><strong>非レガート時</strong>: 前ノートの duration 終了時 (または次の音の発音時の早い方) に停止し、リリースサンプル (<code>_rel.wav</code>) を同タイミングで再生 → duration 終了〜次の音発音の余白にリリースノイズが入る自然な発音を実現。リリース WAV がなければハードカット</li>
   <li><strong>レガート時</strong>: 前ノートを停止するが、リリースサンプルは再生しない → ハンマリングオン/プリングオフの自然な接続を表現</li>
   <li><strong><code>letRing()</code></strong>: コード遷移時に未来 (現在時刻 + 30ms 以降) にスケジュール済みのノートのみキャンセルし、再生中のノートは自然に減衰させる (ドラムの <code>letRing</code> と同じ設計)</li>
   <li><strong>停止ボタン・モード切替時</strong>: 全音を即座に停止 (リリースも鳴らない)</li>
@@ -1813,7 +1813,7 @@ GeneratedPhrase
 <ul>
   <li><code>generate_drum_sample_midi.py</code> — カスタム WAV ドラムサンプル録音用 MIDI 生成</li>
   <li><code>generate_bass_sample_midi.py</code> — カスタム WAV ベースサンプル録音用 MIDI 生成</li>
-  <li><code>slice_bass_samples.py</code> — ベースサンプル WAV スライス</li>
+  <li><code>slice_bass_samples.py</code> — ベースサンプル WAV スライス (末尾無音自動トリム、クリーンスライス対応)</li>
   <li><code>split_drum_samples.py</code> — ドラムサンプル WAV 分割</li>
   <li><code>analyze_ireal_bass.py</code> — iReal Pro ベースパターン分析</li>
   <li><code>compare_bass.py</code> / <code>compare_bass_final.py</code> — ベースライン比較分析</li>

@@ -111,6 +111,14 @@ def slice_and_save(data: np.ndarray, sr: int, kit_name: str, output_dir: str,
 
     kit_dir = os.path.join(output_dir, kit_name)
 
+    # 古いサンプルを全削除してクリーンスライス
+    if os.path.isdir(kit_dir):
+        stale = [f for f in os.listdir(kit_dir) if f.endswith('.wav')]
+        for f in stale:
+            os.remove(os.path.join(kit_dir, f))
+        if stale:
+            print(f'  Cleaned {len(stale)} old files from {kit_dir}')
+
     # セクション定義: (vel, prefix, is_legato)
     sections = []
     for vel in PIZZ_VELOCITIES:
@@ -176,16 +184,15 @@ def slice_and_save(data: np.ndarray, sr: int, kit_name: str, output_dir: str,
 
             rel = extract(data, sr, note_off, slot_end)
             if len(rel) > 0:
-                rel = trim_silence(rel, sr, threshold=0.003, margin_sec=0.05)
-                if len(rel) > int(sr * 0.02):  # 20ms 以上あれば保存
-                    # note-off 直後の波形がゼロから離れている場合のクリックノイズ防止
-                    fade(rel, sr, 1, 'in')  # 1ms フェードイン
-                    if rel_fade_out_ms > 0:
-                        fade(rel, sr, rel_fade_out_ms, 'out')
+                rel = trim_silence(rel, sr, threshold=0.005, margin_sec=0.02)
+                # note-off 直後の波形がゼロから離れている場合のクリックノイズ防止
+                fade(rel, sr, 1, 'in')  # 1ms フェードイン
+                if rel_fade_out_ms > 0:
+                    fade(rel, sr, rel_fade_out_ms, 'out')
 
-                    wav_name = f'{fname}_{prefix}{vel}_rel.wav'
-                    write_16bit(os.path.join(kit_dir, wav_name), rel, sr)
-                    rel_count += 1
+                wav_name = f'{fname}_{prefix}{vel}_rel.wav'
+                write_16bit(os.path.join(kit_dir, wav_name), rel, sr)
+                rel_count += 1
 
             t += (NOTE_INTERVAL + LEGATO_SETUP_DUR) if is_legato else NOTE_INTERVAL
         t += SECTION_GAP
