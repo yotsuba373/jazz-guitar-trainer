@@ -516,10 +516,16 @@ export function playDrumPattern(
     if (hit.pitch != null && customSampler && sampleMap && keyMap) {
       // ピッチベース: スタイル別カスタム WAV Sampler (最寄りベロシティ)
       const velocities = sampleMap[String(hit.pitch)];
-      if (!velocities || velocities.length === 0) continue;
+      if (!velocities || velocities.length === 0) {
+        console.warn(`[drums] Hydrogen GM fallback: no WAV for pitch=${hit.pitch} style=${style}`);
+        continue;
+      }
       const nearestVel = findNearestVelocity(velocities, hit.velocity);
       const smplrKey = keyMap.get(`${hit.pitch}_${nearestVel}`);
-      if (!smplrKey) continue;
+      if (!smplrKey) {
+        console.warn(`[drums] Hydrogen GM fallback: no keyMap for pitch=${hit.pitch} vel=${nearestVel} style=${style}`);
+        continue;
+      }
       sampler = customSampler;
       noteName = smplrKey;
       pitchKey = `custom_${hit.pitch}`;

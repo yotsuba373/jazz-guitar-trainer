@@ -12,6 +12,7 @@ export interface BassNote {
   beatStart: number;  // beat offset within chord (0-based)
   duration: number;   // beats
   velocity?: number;  // 0-127, undefined → config default
+  legato?: boolean;   // true → レガート奏法 (hammer-on/pull-off)
 }
 
 /** Root name → pitch class (0-11) */
@@ -306,10 +307,12 @@ function _dbPatternToNotes(
   }
 
   return dbPat.map(([beat, offset, dbDur], i) => {
-    const duration = dbDur != null
+    const rawDur = dbDur != null
       ? dbDur
       : Math.min((i + 1 < dbPat.length ? dbPat[i + 1][0] : chordBeats) - beat, cfg.defaultDuration);
-    return mkNote(clampMidi(root + offset, cfg), beat, duration, rng, cfg);
+    // 譜面 duration にランダムスケール適用 (0.90-0.95, EZBass 実測ベース)
+    const scale = 0.90 + rng() * 0.05;
+    return mkNote(clampMidi(root + offset, cfg), beat, rawDur * scale, rng, cfg);
   });
 }
 
@@ -355,47 +358,60 @@ export function generateBassLine(
     ? chromaticApproach(rootMidi, nextRootSemi, cfg)
     : rootMidi;
 
+  let notes: BassNote[];
+
   // --- Short chords (1 beat): all styles ---
   if (beats <= 1) {
-    return [mkNote(rootMidi, 0, beats, rng, cfg)];
+    notes = [mkNote(rootMidi, 0, beats, rng, cfg)];
   }
-
   // --- 2-beat chords: DB pattern or simple approach ---
-  if (beats <= 2) {
+  else if (beats <= 2) {
     const dbPat = selectDBPattern(rng, quality, 2, style, rootSemi, nextRootSemi, rootIsAlt);
     if (dbPat && dbPat.length >= 2) {
-      return _dbPatternToNotes(dbPat, rootMidi, beats, rng, cfg);
+      notes = _dbPatternToNotes(dbPat, rootMidi, beats, rng, cfg);
+    } else {
+      notes = [mkNote(rootMidi, 0, 1, rng, cfg), mkNote(simpleApproach, 1, 1, rng, cfg)];
     }
-    return [mkNote(rootMidi, 0, 1, rng, cfg), mkNote(simpleApproach, 1, 1, rng, cfg)];
   }
-
   // --- Bossa / Ballad: 2-feel (Root + 5th or approach) ---
-  if ((style === 'bossa' || style === 'ballad') && beats >= 3) {
+  else if ((style === 'bossa' || style === 'ballad') && beats >= 3) {
     const secondMidi = style === 'bossa' ? fifth : simpleApproach;
-    return [mkNote(rootMidi, 0, 2, rng, cfg), mkNote(secondMidi, 2, beats - 2, rng, cfg)];
+    notes = [mkNote(rootMidi, 0, 2, rng, cfg), mkNote(secondMidi, 2, beats - 2, rng, cfg)];
   }
-
   // --- Latin: Tumbao ---
-  if (style === 'latin' && beats >= 3) {
+  else if (style === 'latin' && beats >= 3) {
     const oct = clampMidi(rootMidi + 12, cfg);
-    return [
+    notes = [
       mkNote(rootMidi, 0, 1, rng, cfg),
       mkNote(fifth, 1.5, 1, rng, cfg),
       mkNote(oct, 3, beats - 3 || 1, rng, cfg),
     ];
   }
-
   // --- Swing (all swing styles): 4-feel walking bass ---
-
-  // DB pattern from iReal Pro (100% coverage expected)
-  const dbPat = selectDBPattern(rng, quality, beats, style, rootSemi, nextRootSemi, rootIsAlt);
-  if (dbPat && dbPat.length >= beats) {
-    return _dbPatternToNotes(dbPat, rootMidi, beats, rng, cfg);
+  else {
+    const dbPat = selectDBPattern(rng, quality, beats, style, rootSemi, nextRootSemi, rootIsAlt);
+    if (dbPat && dbPat.length >= beats) {
+      notes = _dbPatternToNotes(dbPat, rootMidi, beats, rng, cfg);
+    } else {
+      // Failsafe: root repeat (DB should always have patterns for swing)
+      const dur = cfg.defaultDuration;
+      notes = Array.from({ length: beats }, (_, i) => mkNote(rootMidi, i, dur, rng, cfg));
+    }
   }
 
-  // Failsafe: root repeat (DB should always have patterns for swing)
-  const dur = cfg.defaultDuration;
-  return Array.from({ length: beats }, (_, i) => mkNote(rootMidi, i, dur, rng, cfg));
+  // レガート後処理: コード内の連続ノートで確率的にレガートをマーク
+  // レガートの前の音は次ノート開始までフル duration に延長
+  for (let i = 1; i < notes.length; i++) {
+    const interval = Math.abs(notes[i].midi - notes[i - 1].midi);
+    if (interval > 0 && interval <= cfg.customWAV.legatoMaxInterval &&
+        rng() < cfg.customWAV.legatoProbability) {
+      notes[i].legato = true;
+      // 前の音を次ノート開始まで延長 (隙間なし)
+      notes[i - 1].duration = notes[i].beatStart - notes[i - 1].beatStart;
+    }
+  }
+
+  return notes;
 }
 
 // ---------------------------------------------------------------------------
@@ -781,66 +797,41 @@ export function playSmplrBassLine(
     const hitStopId = `bass-${++bassIdCounter}`;
     const wavMidi = bn.midi + octShift; // WAV ルックアップ用 MIDI (EZBass はオクターブ高い表記)
 
-    // レガート判定: 音程差が閾値以下 & 確率判定 & interval≠0 → レガート
+    // レガート判定: generateBassLine() で設定済みの legato フラグを使用
     // direction: interval > 0 → hammerOn (h80), interval < 0 → pulloff (p80)
+    const isLegato = bn.legato === true;
     const interval = lastBassHit != null ? bn.midi - lastBassHit.midi : 0;
-    const absInterval = Math.abs(interval);
-    const isLegato = lastBassHit != null && absInterval > 0 &&
-      absInterval <= cfg.customWAV.legatoMaxInterval &&
-      Math.random() < cfg.customWAV.legatoProbability;
     const isHammerOn = isLegato && interval > 0;
 
-    // voice stealing: 次ノート発音時に前ノートを停止 + リリースサンプル再生
+    // voice stealing: 前ノートを停止
+    // レガート → ぎりぎりまで伸ばし、リリースノイズなし
+    // 非レガート → 少し早めに止めてリリースノイズ再生 (duration スケール済み)
     if (lastBassHit) {
       const stopTime = noteTime;
       try { (lastBassHit.sampler as Sampler).stop({ stopId: lastBassHit.stopId, time: stopTime }); } catch { /* ignore */ }
 
-      // リリースサンプル再生: レガートなら方向別リリース、通常ならピチカートリリース
-      let relSampler: Sampler | undefined;
-      let relKeyMap: Map<string, string> | undefined;
-      if (isLegato) {
-        if (isHammerOn) {
-          relSampler = bassSamplers.hammerOnRelByStyle[lastBassHit.style] ?? bassSamplers.releaseByStyle[lastBassHit.style];
-          relKeyMap = bassSamplers.hammerOnRelKeyMapByStyle[lastBassHit.style] ?? bassSamplers.releaseKeyMapByStyle[lastBassHit.style];
-        } else {
-          relSampler = bassSamplers.legatoRelByStyle[lastBassHit.style] ?? bassSamplers.releaseByStyle[lastBassHit.style];
-          relKeyMap = bassSamplers.legatoRelKeyMapByStyle[lastBassHit.style] ?? bassSamplers.releaseKeyMapByStyle[lastBassHit.style];
-        }
-      } else {
-        relSampler = bassSamplers.releaseByStyle[lastBassHit.style];
-        relKeyMap = bassSamplers.releaseKeyMapByStyle[lastBassHit.style];
-      }
-      if (relSampler && relKeyMap) {
-        let relSmplrKey: string | undefined;
-        if (isLegato) {
-          // 方向別リリース WAV を試行
-          const dirRelSampler = isHammerOn
-            ? bassSamplers.hammerOnRelByStyle[lastBassHit.style]
-            : bassSamplers.legatoRelByStyle[lastBassHit.style];
-          if (dirRelSampler) {
-            relSmplrKey = relKeyMap.get(`${lastBassHit.midi + octShift}_80`);
-          }
-        }
-        if (!relSmplrKey) {
-          // ピチカートリリースにフォールバック
+      // 非レガート時のみリリースサンプル再生
+      if (!isLegato) {
+        const relSampler = bassSamplers.releaseByStyle[lastBassHit.style];
+        const relKeyMap = bassSamplers.releaseKeyMapByStyle[lastBassHit.style];
+        if (relSampler && relKeyMap) {
           const prevKitFolder = db?.kits?.[lastBassHit.style] ?? lastBassHit.style;
           const prevSampleMap = db?.samples?.[prevKitFolder];
           const prevVelocities = prevSampleMap?.[String(lastBassHit.midi + octShift)];
           if (prevVelocities) {
             const prevNearestVel = findNearestVelocity(prevVelocities, lastBassHit.velocity);
-            relSmplrKey = bassSamplers.releaseKeyMapByStyle[lastBassHit.style]?.get(`${lastBassHit.midi + octShift}_${prevNearestVel}`);
-            relSampler = bassSamplers.releaseByStyle[lastBassHit.style];
+            const relSmplrKey = relKeyMap.get(`${lastBassHit.midi + octShift}_${prevNearestVel}`);
+            if (relSmplrKey) {
+              const relStopId = `bass-rel-${++bassIdCounter}`;
+              relSampler.start({
+                note: relSmplrKey,
+                velocity: 127,
+                time: stopTime,
+                stopId: relStopId,
+              });
+              scheduledHits.push({ stopId: relStopId, sampler: relSampler, time: stopTime });
+            }
           }
-        }
-        if (relSmplrKey && relSampler) {
-          const relStopId = `bass-rel-${++bassIdCounter}`;
-          relSampler.start({
-            note: relSmplrKey,
-            velocity: 127,
-            time: stopTime,
-            stopId: relStopId,
-          });
-          scheduledHits.push({ stopId: relStopId, sampler: relSampler, time: stopTime });
         }
       }
     }
@@ -874,17 +865,20 @@ export function playSmplrBassLine(
           continue;
         }
         // レガート WAV がこのピッチにない → ピチカートにフォールバック
+        console.warn(`[bass] legato WAV missing: midi=${bn.midi} wavMidi=${wavMidi} style=${style}`);
       }
 
       // ピチカート (通常)
       const velocities = sampleMap[String(wavMidi)];
       if (!velocities || velocities.length === 0) {
+        console.warn(`[bass] SoundFont fallback: no WAV for midi=${bn.midi} wavMidi=${wavMidi} style=${style}`);
         _playSoundfontNote(bassSamplers.soundfont, bn, noteTime, hitStopId, noteVel, noteDur, scheduledHits, style);
         continue;
       }
       const nearestVel = findNearestVelocity(velocities, noteVel);
       const smplrKey = keyMap.get(`${wavMidi}_${nearestVel}`);
       if (!smplrKey) {
+        console.warn(`[bass] SoundFont fallback: no keyMap for midi=${bn.midi} wavMidi=${wavMidi} vel=${nearestVel} style=${style}`);
         _playSoundfontNote(bassSamplers.soundfont, bn, noteTime, hitStopId, noteVel, noteDur, scheduledHits, style);
         continue;
       }
@@ -900,7 +894,8 @@ export function playSmplrBassLine(
       scheduledHits.push({ stopId: hitStopId, sampler: customSampler, time: noteTime });
       lastBassHit = { stopId: hitStopId, sampler: customSampler, endTime: noteTime + noteDur, midi: bn.midi, velocity: noteVel, style };
     } else {
-      // SoundFont フォールバック
+      // SoundFont フォールバック (カスタム WAV なし)
+      console.warn(`[bass] SoundFont fallback: no custom sampler for style=${style} midi=${bn.midi}`);
       _playSoundfontNote(bassSamplers.soundfont, bn, noteTime, hitStopId, noteVel, noteDur, scheduledHits, style);
     }
   }
